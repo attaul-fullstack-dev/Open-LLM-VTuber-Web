@@ -186,7 +186,8 @@ class WebSocketService {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(message));
     } else {
-      console.warn('WebSocket is not open. Unable to send message:', message);
+      const messageType = 'type' in message ? String(message.type) : 'unknown';
+      console.warn('WebSocket is not open. Unable to send message type:', messageType);
       toaster.create({
         title: getTranslation()('error.websocketNotOpen'),
         type: 'error',

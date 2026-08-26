@@ -51,7 +51,10 @@
     "agent": {
       "allowProactiveSpeak": "允许AI主动发言",
       "idleSecondsToSpeak": "空闲多少秒后AI可发言",
-      "allowButtonTrigger": "通过举手按钮提示AI发言"
+      "allowButtonTrigger": "通过举手按钮提示AI发言",
+      "resetRelationship": "重置与 Mili 的关系",
+      "resetRelationshipHelp": "仅重置当前对话中的关系连续性；聊天记录和摘要会保留。",
+      "resetRelationshipConfirm": "要重置当前对话中与 Mili 的关系吗？聊天记录不会被删除。"
     },
     "about": {
       "title": "Open LLM VTuber 前端",
@@ -102,7 +105,9 @@
     "newConversation": "新对话已开始",
     "newChatHistory": "新聊天历史已创建",
     "historyDeleteSuccess": "历史记录删除成功",
-    "historyDeleteFail": "删除历史记录失败"
+    "historyDeleteFail": "删除历史记录失败",
+    "relationshipResetSuccess": "与 Mili 的关系连续性已重置",
+    "relationshipResetFail": "无法重置与 Mili 的关系连续性"
   },
   "error": {
     "cameraApiNotSupported": "此设备不支持摄像头API",
@@ -133,4 +138,4 @@
     "connecting": "连接中",
     "clickToReconnect": "点击重新连接"
   }
-} 
+}

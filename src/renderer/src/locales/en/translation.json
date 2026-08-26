@@ -53,7 +53,10 @@
     "agent": {
       "allowProactiveSpeak": "Allow AI to Speak Proactively",
       "idleSecondsToSpeak": "Idle seconds allow AI to speak",
-      "allowButtonTrigger": "Prompt AI to Speak via Raise Hand Button"
+      "allowButtonTrigger": "Prompt AI to Speak via Raise Hand Button",
+      "resetRelationship": "Reset relationship with Mili",
+      "resetRelationshipHelp": "Reset only Mili's relationship continuity for this conversation. Messages and summary stay intact.",
+      "resetRelationshipConfirm": "Reset Mili's relationship for this conversation? Chat history will not be deleted."
     },
     "about": {
       "title": "Open LLM VTuber Frontend",
@@ -105,7 +108,9 @@
     "newConversation": "New Conversation Started",
     "newChatHistory": "New chat history created",
     "historyDeleteSuccess": "History deleted successfully",
-    "historyDeleteFail": "Failed to delete history"
+    "historyDeleteFail": "Failed to delete history",
+    "relationshipResetSuccess": "Mili's relationship continuity was reset",
+    "relationshipResetFail": "Could not reset Mili's relationship continuity"
   },
   "error": {
     "cameraApiNotSupported": "Camera API is not supported on this device",
@@ -136,4 +141,4 @@
     "connecting": "Connecting",
     "clickToReconnect": "Click to Reconnect"
   }
-} 
+}

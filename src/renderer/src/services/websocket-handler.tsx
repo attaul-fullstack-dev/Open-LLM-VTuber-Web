@@ -103,7 +103,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
   }, [setAiState, clearResponse, setForceNewMessage, startMic, stopMic, startSubtitleResponse]);
 
   const handleWebSocketMessage = useCallback((message: MessageEvent) => {
-    console.log('Received message from server:', message);
+    console.debug('WebSocket event received:', message.type);
     switch (message.type) {
       case 'control':
         if (message.text) {
@@ -223,6 +223,15 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
           duration: 2000,
         });
         break;
+      case 'relationship-reset':
+        toaster.create({
+          title: message.success
+            ? t('notification.relationshipResetSuccess')
+            : t('notification.relationshipResetFail'),
+          type: message.success ? 'success' : 'error',
+          duration: 2500,
+        });
+        break;
       case 'history-list':
         if (message.histories) {
           setHistoryList(message.histories);
@@ -247,7 +256,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
         }
         break;
       case 'user-input-transcription':
-        console.log('user-input-transcription: ', message.text);
+        console.debug('User transcription received', { length: message.text?.length || 0 });
         if (message.text) {
           appendHumanMessage(message.text);
         }
@@ -260,7 +269,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
         });
         break;
       case 'group-update':
-        console.log('Received group-update:', message.members);
+        console.debug('Group update received', { memberCount: message.members?.length || 0 });
         if (message.members) {
           setGroupMembers(message.members);
         }
@@ -299,7 +308,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
         if (message.tool_id && message.tool_name && message.status) {
           // If there's browser view data included, store it in the browser context
           if (message.browser_view) {
-            console.log('Browser view data received:', message.browser_view);
+            console.debug('Browser view data received');
             setBrowserViewData(message.browser_view);
           }
 
@@ -315,7 +324,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
             timestamp: message.timestamp || new Date().toISOString(),
           });
         } else {
-          console.warn('Received incomplete tool_call_status message:', message);
+          console.warn('Received incomplete tool_call_status message');
         }
         break;
       default:
