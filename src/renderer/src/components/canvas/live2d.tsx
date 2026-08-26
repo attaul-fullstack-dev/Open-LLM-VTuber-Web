@@ -1,7 +1,9 @@
 /* eslint-disable no-shadow */
 /* eslint-disable no-underscore-dangle */
 /* eslint-disable @typescript-eslint/ban-ts-comment */
-import { memo, useRef, useEffect } from "react";
+import { memo, useRef, useEffect, useState } from "react";
+import { VStack, IconButton } from "@chakra-ui/react";
+import { FiMinus, FiPlus, FiMaximize2 } from "react-icons/fi";
 import { useLive2DConfig } from "@/context/live2d-config-context";
 import { useIpcHandlers } from "@/hooks/utils/use-ipc-handlers";
 import { useInterrupt } from "@/hooks/utils/use-interrupt";
@@ -26,9 +28,12 @@ export const Live2D = memo(
     const { aiState } = useAiState();
     const { resetExpression } = useLive2DExpression();
     const isPet = mode === 'pet';
+    const [canvasStable, setCanvasStable] = useState(false);
 
     // Get canvasRef from useLive2DResize
-    const { canvasRef } = useLive2DResize({
+    const {
+      canvasRef, zoomIn, zoomOut, resetZoom,
+    } = useLive2DResize({
       containerRef: internalContainerRef,
       modelInfo,
       showSidebar,
@@ -54,6 +59,24 @@ export const Live2D = memo(
         }
       }
     }, [aiState, modelInfo, resetExpression]);
+
+    // Hide the WebGL surface while the model and mask framebuffers are being
+    // rebuilt. This prevents transient framebuffer clears from becoming a
+    // visible white flash on mobile Chrome.
+    useEffect(() => {
+      setCanvasStable(false);
+      let secondFrame = 0;
+      const readyTimer = window.setTimeout(() => {
+        requestAnimationFrame(() => {
+          secondFrame = requestAnimationFrame(() => setCanvasStable(true));
+        });
+      }, 1250);
+
+      return () => {
+        window.clearTimeout(readyTimer);
+        if (secondFrame) cancelAnimationFrame(secondFrame);
+      };
+    }, [modelInfo?.url]);
 
     // Expose setExpression for console testing
     // useEffect(() => {
@@ -104,6 +127,8 @@ export const Live2D = memo(
           overflow: "hidden",
           position: "relative",
           cursor: isDragging ? "grabbing" : "default",
+          touchAction: "none",
+          WebkitTapHighlightColor: "transparent",
         }}
         onPointerDown={handlePointerDown}
         onContextMenu={handleContextMenu}
@@ -117,9 +142,42 @@ export const Live2D = memo(
             height: "100%",
             pointerEvents: isPet && forceIgnoreMouse ? "none" : "auto",
             display: "block",
+            opacity: canvasStable ? 1 : 0,
+            transition: "opacity 180ms ease-out",
+            willChange: "opacity",
+            touchAction: "none",
+            WebkitTapHighlightColor: "transparent",
+            outline: "none",
             cursor: isDragging ? "grabbing" : "default",
           }}
         />
+        {!isPet && (
+          <VStack
+            display={{ base: "flex", lg: "none" }}
+            position="absolute"
+            right="14px"
+            top="76px"
+            zIndex="30"
+            gap="1"
+            p="5px"
+            borderRadius="20px"
+            bg="rgba(8, 15, 28, .84)"
+            border="1px solid rgba(255,255,255,.22)"
+            backdropFilter="blur(12px)"
+            boxShadow="0 8px 24px rgba(0,0,0,.28)"
+            onPointerDown={(event) => event.stopPropagation()}
+          >
+            <IconButton aria-label="Zoom in avatar" size="sm" borderRadius="15px" color="white" bg="#6d5dfc" _hover={{ bg: "#7c6dff" }} onClick={zoomIn}>
+              <FiPlus size="21" strokeWidth="2.6" />
+            </IconButton>
+            <IconButton aria-label="Reset avatar zoom" size="sm" borderRadius="15px" color="white" bg="whiteAlpha.160" _hover={{ bg: "whiteAlpha.260" }} onClick={resetZoom}>
+              <FiMaximize2 size="19" strokeWidth="2.4" />
+            </IconButton>
+            <IconButton aria-label="Zoom out avatar" size="sm" borderRadius="15px" color="white" bg="whiteAlpha.160" _hover={{ bg: "whiteAlpha.260" }} onClick={zoomOut}>
+              <FiMinus size="21" strokeWidth="2.6" />
+            </IconButton>
+          </VStack>
+        )}
       </div>
     );
   },

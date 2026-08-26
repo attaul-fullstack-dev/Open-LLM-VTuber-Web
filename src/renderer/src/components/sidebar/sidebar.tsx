@@ -128,7 +128,9 @@ const SidebarContent = memo(({
       />
     </Box>
     <ChatHistoryPanel />
-    <BottomTab />
+    <Box display={{ base: 'none', lg: 'block' }}>
+      <BottomTab />
+    </Box>
   </Box>
 ));
 

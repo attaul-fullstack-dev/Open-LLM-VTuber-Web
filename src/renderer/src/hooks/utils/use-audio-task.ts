@@ -33,15 +33,26 @@ interface AudioTaskOptions {
 export const useAudioTask = () => {
   const { t } = useTranslation();
   const { aiState, backendSynthComplete, setBackendSynthComplete } = useAiState();
-  const { setSubtitleText } = useSubtitle();
+  const { setSubtitleText, subtitleDismissed } = useSubtitle();
   const { appendResponse, appendAIMessage } = useChatHistory();
   const { sendMessage } = useWebSocket();
   const { setExpression } = useLive2DExpression();
+  const responseSubtitleRef = useRef('');
+
+  useEffect(() => {
+    const resetResponseSubtitle = () => {
+      responseSubtitleRef.current = '';
+    };
+
+    window.addEventListener('olv:subtitle-response-start', resetResponseSubtitle);
+    return () => window.removeEventListener('olv:subtitle-response-start', resetResponseSubtitle);
+  }, []);
 
   // State refs to avoid stale closures
   const stateRef = useRef({
     aiState,
     setSubtitleText,
+    subtitleDismissed,
     appendResponse,
     appendAIMessage,
   });
@@ -51,6 +62,7 @@ export const useAudioTask = () => {
   stateRef.current = {
     aiState,
     setSubtitleText,
+    subtitleDismissed,
     appendResponse,
     appendAIMessage,
   };
@@ -69,6 +81,7 @@ export const useAudioTask = () => {
     const {
       aiState: currentAiState,
       setSubtitleText: updateSubtitle,
+      subtitleDismissed: isSubtitleDismissed,
       appendResponse: appendText,
       appendAIMessage: appendAI,
     } = stateRef.current;
@@ -86,8 +99,11 @@ export const useAudioTask = () => {
     if (displayText) {
       appendText(displayText.text);
       appendAI(displayText.text, displayText.name, displayText.avatar);
-      if (audioBase64) {
-        updateSubtitle(displayText.text);
+      if (audioBase64 && !isSubtitleDismissed) {
+        responseSubtitleRef.current = responseSubtitleRef.current
+          ? `${responseSubtitleRef.current} ${displayText.text}`
+          : displayText.text;
+        updateSubtitle(responseSubtitleRef.current);
       }
       if (!forwarded) {
         sendMessage({
@@ -101,6 +117,12 @@ export const useAudioTask = () => {
     try {
       // Process audio if available
       if (audioBase64) {
+        if (audioManager.isMuted()) {
+          console.log('[AudioManager] Voice playback skipped because sound is muted');
+          resolve();
+          return;
+        }
+
         const audioDataUrl = `data:audio/wav;base64,${audioBase64}`;
 
         // Get Live2D manager and model
@@ -236,6 +258,7 @@ export const useAudioTask = () => {
         stopCurrentAudioAndLipSync();
         sendMessage({ type: "frontend-playback-complete" });
         setBackendSynthComplete(false);
+        responseSubtitleRef.current = '';
       }
     };
 

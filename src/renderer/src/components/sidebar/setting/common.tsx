@@ -163,21 +163,18 @@ export function NumberField({
 
 export function SwitchField({ label, checked, onChange, help }: SwitchFieldProps): JSX.Element {
   return (
-    <Field
-      {...settingStyles.common.field}
-      label={
-        <Flex align="center">
-          <Text {...settingStyles.common.fieldLabel}>{label}</Text>
-          {help && <HelpIcon content={help} />}
-        </Flex>
-      }
-    >
+    <Flex width="100%" align="center" justify="space-between" gap="4">
+      <Flex align="center" minW="0" flex="1">
+        <Text {...settingStyles.common.fieldLabel}>{label}</Text>
+        {help && <HelpIcon content={help} />}
+      </Flex>
       <Switch
         {...settingStyles.common.switch}
+        flexShrink="0"
         checked={checked}
         onCheckedChange={(details) => onChange(details.checked)}
       />
-    </Field>
+    </Flex>
   );
 }
 

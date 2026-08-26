@@ -21,6 +21,12 @@ import { useLocalStorage } from '@/hooks/utils/use-local-storage';
 import { useGroup } from '@/context/group-context';
 import { useInterrupt } from '@/hooks/utils/use-interrupt';
 import { useBrowser } from '@/context/browser-context';
+import {
+  clearLastHistoryUid,
+  decideHistoryResume,
+  getLastHistoryUid,
+  setLastHistoryUid,
+} from '@/utils/history-storage';
 
 function WebSocketHandler({ children }: { children: React.ReactNode }) {
   const { t } = useTranslation();
@@ -29,7 +35,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
   const [baseUrl, setBaseUrl] = useLocalStorage<string>('baseUrl', defaultBaseUrl);
   const { aiState, setAiState, backendSynthComplete, setBackendSynthComplete } = useAiState();
   const { setModelInfo } = useLive2DConfig();
-  const { setSubtitleText } = useSubtitle();
+  const { setSubtitleText, startSubtitleResponse } = useSubtitle();
   const { clearResponse, setForceNewMessage, appendHumanMessage, appendOrUpdateToolCallMessage } = useChatHistory();
   const { addAudioTask } = useAudioTask();
   const bgUrlContext = useBgUrl();
@@ -38,6 +44,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
   const { setSelfUid, setGroupMembers, setIsOwner } = useGroup();
   const { startMic, stopMic, autoStartMicOnConvEnd } = useVAD();
   const autoStartMicOnConvEndRef = useRef(autoStartMicOnConvEnd);
+  const activeConfUidRef = useRef('');
   const { interrupt } = useInterrupt();
   const { setBrowserViewData } = useBrowser();
 
@@ -69,6 +76,10 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
       case 'conversation-chain-start':
         setAiState('thinking-speaking');
         audioTaskQueue.clearQueue();
+        // A response may arrive in several audio chunks. Reset the previous
+        // response before accepting the first chunk of this new turn.
+        window.dispatchEvent(new Event('olv:subtitle-response-start'));
+        startSubtitleResponse();
         clearResponse();
         break;
       case 'conversation-chain-end':
@@ -89,7 +100,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
       default:
         console.warn('Unknown control command:', controlText);
     }
-  }, [setAiState, clearResponse, setForceNewMessage, startMic, stopMic]);
+  }, [setAiState, clearResponse, setForceNewMessage, startMic, stopMic, startSubtitleResponse]);
 
   const handleWebSocketMessage = useCallback((message: MessageEvent) => {
     console.log('Received message from server:', message);
@@ -105,6 +116,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
           setConfName(message.conf_name);
         }
         if (message.conf_uid) {
+          activeConfUidRef.current = message.conf_uid;
           setConfUid(message.conf_uid);
           console.log('confUid', message.conf_uid);
         }
@@ -145,7 +157,6 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
         // setModelInfo(undefined);
 
         wsService.sendMessage({ type: 'fetch-history-list' });
-        wsService.sendMessage({ type: 'create-new-history' });
         break;
       case 'background-files':
         if (message.files) {
@@ -180,8 +191,10 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
       case 'new-history-created':
         setAiState('idle');
         setSubtitleText(t('notification.newConversation'));
+        window.setTimeout(() => setSubtitleText(''), 1800);
         // No need to open mic here
         if (message.history_uid) {
+          setLastHistoryUid(activeConfUidRef.current, message.history_uid);
           setCurrentHistoryUid(message.history_uid);
           setMessages([]);
           const newHistory: HistoryInfo = {
@@ -198,6 +211,10 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
         }
         break;
       case 'history-deleted':
+        if (message.success && message.history_uid
+            && getLastHistoryUid(activeConfUidRef.current) === message.history_uid) {
+          clearLastHistoryUid(activeConfUidRef.current);
+        }
         toaster.create({
           title: message.success
             ? t('notification.historyDeleteSuccess')
@@ -209,8 +226,23 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
       case 'history-list':
         if (message.histories) {
           setHistoryList(message.histories);
-          if (message.histories.length > 0) {
-            setCurrentHistoryUid(message.histories[0].uid);
+          const confUidForHistory = activeConfUidRef.current;
+          const rememberedUid = getLastHistoryUid(confUidForHistory);
+          const decision = decideHistoryResume(
+            message.histories.map((history) => history.uid),
+            rememberedUid,
+          );
+
+          if (decision.type === 'resume') {
+            setLastHistoryUid(confUidForHistory, decision.uid);
+            setCurrentHistoryUid(decision.uid);
+            wsService.sendMessage({
+              type: 'fetch-and-set-history',
+              history_uid: decision.uid,
+            });
+          } else {
+            if (rememberedUid) clearLastHistoryUid(confUidForHistory);
+            wsService.sendMessage({ type: 'create-new-history' });
           }
         }
         break;

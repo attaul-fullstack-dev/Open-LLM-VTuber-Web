@@ -4,12 +4,11 @@
 import { useEffect, useCallback, RefObject, useRef } from 'react';
 import { ModelInfo } from '@/context/live2d-config-context';
 import { LAppDelegate } from '../../../WebSDK/src/lappdelegate';
-import { LAppLive2DManager } from '../../../WebSDK/src/lapplive2dmanager';
 import { useMode } from '@/context/mode-context';
 
 // Constants for model scaling behavior
-const MIN_SCALE = 0.1;
-const MAX_SCALE = 5.0;
+const MIN_SCALE = 0.8;
+const MAX_SCALE = 2.0;
 const EASING_FACTOR = 0.3; // Controls animation smoothness
 const WHEEL_SCALE_STEP = 0.03; // Scale change per wheel tick
 const DEFAULT_SCALE = 1.0; // Default scale if not specified
@@ -26,14 +25,9 @@ interface UseLive2DResizeProps {
  */
 export const applyScale = (scale: number) => {
   try {
-    const manager = LAppLive2DManager.getInstance();
-    if (!manager) return;
-
-    const model = manager.getModel(0);
-    if (!model) return;
-
-    // @ts-ignore
-    model._modelMatrix.scale(scale, scale);
+    const view = LAppDelegate.getInstance()?.getView();
+    if (!view) return;
+    view.setZoom(scale);
   } catch (error) {
     console.debug('Model not ready for scaling yet');
   }
@@ -55,7 +49,7 @@ export const useLive2DResize = ({
   const isResizingRef = useRef<boolean>(false);
 
   // Initialize scale references
-  const initialScale = modelInfo?.kScale || DEFAULT_SCALE;
+  const initialScale = DEFAULT_SCALE;
   const lastScaleRef = useRef<number>(initialScale);
   const targetScaleRef = useRef<number>(initialScale);
   const animationFrameRef = useRef<number>();
@@ -72,7 +66,7 @@ export const useLive2DResize = ({
    * Reset scale state when model changes
    */
   useEffect(() => {
-    const newInitialScale = modelInfo?.kScale || DEFAULT_SCALE;
+    const newInitialScale = DEFAULT_SCALE;
     lastScaleRef.current = newInitialScale;
     targetScaleRef.current = newInitialScale;
     hasAppliedInitialScale.current = false;
@@ -84,10 +78,11 @@ export const useLive2DResize = ({
 
     const resizeHandle = requestAnimationFrame(() => {
       handleResize();
+      applyScale(newInitialScale);
     });
 
     return () => cancelAnimationFrame(resizeHandle);
-  }, [modelInfo?.url, modelInfo?.kScale]);
+  }, [modelInfo?.url]);
 
   /**
    * Smooth animation loop for scaling
@@ -133,6 +128,23 @@ export const useLive2DResize = ({
       animationFrameRef.current = requestAnimationFrame(animateEase);
     }
   }, [modelInfo?.scrollToResize, animateEase]);
+
+  const setZoom = useCallback((scale: number) => {
+    const nextScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, scale));
+    targetScaleRef.current = nextScale;
+    lastScaleRef.current = nextScale;
+    applyScale(nextScale);
+  }, []);
+
+  const zoomIn = useCallback(() => {
+    setZoom(targetScaleRef.current + 0.2);
+  }, [setZoom]);
+
+  const zoomOut = useCallback(() => {
+    setZoom(targetScaleRef.current - 0.2);
+  }, [setZoom]);
+
+  const resetZoom = useCallback(() => setZoom(DEFAULT_SCALE), [setZoom]);
 
   /**
    * Pre-process container resize
@@ -306,7 +318,7 @@ export const useLive2DResize = ({
     };
   }, [handleResize]);
 
-  return { canvasRef, handleResize };
+  return { canvasRef, handleResize, zoomIn, zoomOut, resetZoom };
 };
 
 /**

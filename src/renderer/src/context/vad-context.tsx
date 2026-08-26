@@ -149,6 +149,7 @@ export function VADProvider({ children }: { children: React.ReactNode }) {
   const setAiStateRef = useRef(setAiState);
 
   const isProcessingRef = useRef(false);
+  const insecureMicWarningShownRef = useRef(false);
 
   // Update refs when dependencies change
   useEffect(() => {
@@ -299,6 +300,18 @@ export function VADProvider({ children }: { children: React.ReactNode }) {
    * Start microphone and VAD processing
    */
   const startMic = useCallback(async () => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setMicOn(false);
+      if (!insecureMicWarningShownRef.current) {
+        insecureMicWarningShownRef.current = true;
+        toaster.create({
+          title: 'Microphone needs HTTPS. Text chat is still available.',
+          type: 'warning',
+          duration: 3500,
+        });
+      }
+      return;
+    }
     try {
       if (!vadRef.current) {
         console.log('Initializing VAD');
@@ -309,6 +322,7 @@ export function VADProvider({ children }: { children: React.ReactNode }) {
       }
       setMicOn(true);
     } catch (error) {
+      setMicOn(false);
       console.error('Failed to start VAD:', error);
       toaster.create({
         title: `${t('error.failedStartVAD')}: ${error}`,

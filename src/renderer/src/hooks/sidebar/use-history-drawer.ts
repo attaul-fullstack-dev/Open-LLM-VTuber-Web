@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next';
 import { useChatHistory } from '@/context/chat-history-context';
 import { useWebSocket, HistoryInfo } from '@/context/websocket-context';
 import { toaster } from '@/components/ui/toaster';
+import { useConfig } from '@/context/character-config-context';
+import { setLastHistoryUid } from '@/utils/history-storage';
 
 export const useHistoryDrawer = () => {
   const { t } = useTranslation();
@@ -16,6 +18,7 @@ export const useHistoryDrawer = () => {
     updateHistoryList,
   } = useChatHistory();
   const { sendMessage } = useWebSocket();
+  const { confUid } = useConfig();
 
   const fetchAndSetHistory = (uid: string) => {
     if (!uid || uid === currentHistoryUid) return;
@@ -26,6 +29,7 @@ export const useHistoryDrawer = () => {
     }
 
     setCurrentHistoryUid(uid);
+    setLastHistoryUid(confUid, uid);
     sendMessage({
       type: 'fetch-and-set-history',
       history_uid: uid,

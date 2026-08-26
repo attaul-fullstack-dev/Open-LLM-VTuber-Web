@@ -1,5 +1,6 @@
-import { Box, Text } from '@chakra-ui/react';
+import { Box, IconButton, Text } from '@chakra-ui/react';
 import { memo } from 'react';
+import { FiX } from 'react-icons/fi';
 import { canvasStyles } from './canvas-styles';
 import { useSubtitleDisplay } from '@/hooks/canvas/use-subtitle-display';
 import { useSubtitle } from '@/context/subtitle-context';
@@ -21,13 +22,27 @@ SubtitleText.displayName = 'SubtitleText';
 // Main component
 const Subtitle = memo((): JSX.Element | null => {
   const { subtitleText, isLoaded } = useSubtitleDisplay();
-  const { showSubtitle } = useSubtitle();
+  const { showSubtitle, subtitleDismissed, dismissSubtitle } = useSubtitle();
 
-  if (!isLoaded || !subtitleText || !showSubtitle) return null;
+  const cleanSubtitle = subtitleText
+    .replace(/\[[a-z][a-z0-9_-]*\]\s*/gi, '')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!isLoaded || !cleanSubtitle || !showSubtitle || subtitleDismissed) return null;
 
   return (
     <Box {...canvasStyles.subtitle.container}>
-      <SubtitleText text={subtitleText} />
+      <IconButton
+        aria-label="Hide subtitles"
+        title="Hide subtitles"
+        onClick={dismissSubtitle}
+        {...canvasStyles.subtitle.closeButton}
+      >
+        <FiX />
+      </IconButton>
+      <SubtitleText text={cleanSubtitle} />
     </Box>
   );
 });
