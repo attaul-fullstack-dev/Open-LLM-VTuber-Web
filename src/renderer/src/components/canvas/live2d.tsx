@@ -25,6 +25,8 @@ export const Live2D = memo(
     const { modelInfo } = useLive2DConfig();
     const { mode } = useMode();
     const internalContainerRef = useRef<HTMLDivElement>(null);
+    const flashGuardCanvasRef = useRef<HTMLCanvasElement>(null);
+    const flashGuardTimerRef = useRef<number | undefined>(undefined);
     const { aiState } = useAiState();
     const { resetExpression } = useLive2DExpression();
     const isPet = mode === 'pet';
@@ -65,6 +67,10 @@ export const Live2D = memo(
     // visible white flash on mobile Chrome.
     useEffect(() => {
       setCanvasStable(false);
+      if (!modelInfo?.url) {
+        return undefined;
+      }
+
       let secondFrame = 0;
       const readyTimer = window.setTimeout(() => {
         requestAnimationFrame(() => {
@@ -77,6 +83,12 @@ export const Live2D = memo(
         if (secondFrame) cancelAnimationFrame(secondFrame);
       };
     }, [modelInfo?.url]);
+
+    useEffect(() => () => {
+      if (flashGuardTimerRef.current) {
+        window.clearTimeout(flashGuardTimerRef.current);
+      }
+    }, []);
 
     // Expose setExpression for console testing
     // useEffect(() => {
@@ -100,7 +112,32 @@ export const Live2D = memo(
     //   };
     // }, [setExpression]);
 
+    const showTapFlashGuard = () => {
+      const source = canvasRef.current;
+      const guard = flashGuardCanvasRef.current;
+      if (!source || !guard || !canvasStable || !source.width || !source.height) return;
+
+      try {
+        guard.width = source.width;
+        guard.height = source.height;
+        const context = guard.getContext("2d");
+        if (!context) return;
+        context.clearRect(0, 0, guard.width, guard.height);
+        context.drawImage(source, 0, 0, guard.width, guard.height);
+        guard.style.opacity = "1";
+        if (flashGuardTimerRef.current) {
+          window.clearTimeout(flashGuardTimerRef.current);
+        }
+        flashGuardTimerRef.current = window.setTimeout(() => {
+          guard.style.opacity = "0";
+        }, 180);
+      } catch {
+        guard.style.opacity = "0";
+      }
+    };
+
     const handlePointerDown = (e: React.PointerEvent) => {
+      showTapFlashGuard();
       handlers.onMouseDown(e);
     };
 
@@ -130,9 +167,9 @@ export const Live2D = memo(
           touchAction: "none",
           WebkitTapHighlightColor: "transparent",
         }}
+        {...handlers}
         onPointerDown={handlePointerDown}
         onContextMenu={handleContextMenu}
-        {...handlers}
       >
         <canvas
           id="canvas"
@@ -149,6 +186,21 @@ export const Live2D = memo(
             WebkitTapHighlightColor: "transparent",
             outline: "none",
             cursor: isDragging ? "grabbing" : "default",
+          }}
+        />
+        <canvas
+          ref={flashGuardCanvasRef}
+          aria-hidden="true"
+          style={{
+            position: "absolute",
+            inset: 0,
+            width: "100%",
+            height: "100%",
+            display: "block",
+            opacity: 0,
+            pointerEvents: "none",
+            transition: "opacity 50ms linear",
+            zIndex: 2,
           }}
         />
         {!isPet && (

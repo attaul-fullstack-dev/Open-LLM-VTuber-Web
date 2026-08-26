@@ -123,13 +123,18 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
         if (message.client_uid) {
           setSelfUid(message.client_uid);
         }
-        setPendingModelInfo(message.model_info);
-        // setModelInfo(message.model_info);
-        // We don't know when the confRef in live2d-config-context will be updated, so we set a delay here for convenience
-        if (message.model_info && !message.model_info.url.startsWith("http")) {
-          const modelUrl = baseUrl + message.model_info.url;
-          // eslint-disable-next-line no-param-reassign
-          message.model_info.url = modelUrl;
+        // Normalize a valid model before queueing it. Do not mutate the
+        // WebSocket payload and never pass an incomplete model into the SDK.
+        if (message.model_info?.url) {
+          const normalizedModelInfo = {
+            ...message.model_info,
+            url: message.model_info.url.startsWith("http")
+              ? message.model_info.url
+              : baseUrl + message.model_info.url,
+          };
+          setPendingModelInfo(normalizedModelInfo);
+        } else {
+          console.warn("Ignored Live2D model info without a URL");
         }
 
         setAiState('idle');

@@ -256,14 +256,12 @@ function Footer({ isCollapsed = false, onToggle }: FooterProps): JSX.Element {
             attachmentCount={attachmentCount}
           />
           <IconButton
-            aria-label={inputValue.trim() || attachmentCount ? 'Send message' : 'Raise hand'}
-            bg={inputValue.trim() || attachmentCount ? 'purple.500' : 'yellow.500'}
+            aria-label="Send message"
+            bg="purple.500"
             {...footerStyles.footer.actionButton}
-            onClick={inputValue.trim() || attachmentCount ? handleSend : handleInterrupt}
+            onClick={handleSend}
           >
-            {inputValue.trim() || attachmentCount
-              ? <FiSend size="21" />
-              : <IoHandRightSharp size="21" />}
+            <FiSend size="21" />
           </IconButton>
         </HStack>
       </Box>
