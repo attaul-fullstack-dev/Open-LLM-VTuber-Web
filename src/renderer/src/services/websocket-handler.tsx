@@ -21,7 +21,7 @@ import { useLocalStorage } from '@/hooks/utils/use-local-storage';
 import { useGroup } from '@/context/group-context';
 import { useInterrupt } from '@/hooks/utils/use-interrupt';
 import { useBrowser } from '@/context/browser-context';
-import { markBackendLatencyEvent } from '@/utils/chat-latency';
+import { markBackendLatencyEvent, markFrontendPayload } from '@/utils/chat-latency';
 import {
   clearLastHistoryUid,
   decideHistoryResume,
@@ -188,6 +188,11 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
         }
         break;
       case 'audio':
+        markFrontendPayload(
+          message.request_id,
+          'audio',
+          Boolean(message.display_text?.text),
+        );
         if (aiState === 'interrupted' || aiState === 'listening') {
           console.debug('Audio playback intercepted', {
             display_characters: message.display_text?.text?.length || 0,

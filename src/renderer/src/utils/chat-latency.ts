@@ -4,6 +4,8 @@ type FrontendLatency = {
   websocketSendPerfMs?: number;
   firstBackendStatusPerfMs?: number;
   firstTokenPerfMs?: number;
+  firstVisibleTextPerfMs?: number;
+  firstAudioPerfMs?: number;
   responseCompletePerfMs?: number;
 };
 
@@ -50,6 +52,28 @@ export function markWebSocketSend(requestId?: string) {
   return Date.now();
 }
 
+/**
+ * Correlate an arbitrary backend payload (e.g. an audio chunk) with the
+ * request trace. `kind` is the message type, `hasText` indicates whether the
+ * payload carries visible display text.
+ */
+export function markFrontendPayload(
+  requestId: string | undefined,
+  kind: string | undefined,
+  hasText = false,
+) {
+  if (!requestId || !kind) return;
+  const request = requests.get(requestId);
+  if (!request) return;
+  const now = performance.now();
+  if (kind === 'audio') {
+    if (request.firstAudioPerfMs == null) request.firstAudioPerfMs = now;
+    if (hasText && request.firstVisibleTextPerfMs == null) {
+      request.firstVisibleTextPerfMs = now;
+    }
+  }
+}
+
 export function markBackendLatencyEvent(
   requestId: string | undefined,
   event: string | undefined,
@@ -72,6 +96,8 @@ export function markBackendLatencyEvent(
   request.responseCompletePerfMs = now;
   const firstBackend = request.firstBackendStatusPerfMs ?? now;
   const firstToken = request.firstTokenPerfMs ?? now;
+  const firstVisibleText = request.firstVisibleTextPerfMs;
+  const firstAudio = request.firstAudioPerfMs;
   const values = {
     request_id: requestId,
     user_send_to_websocket_ms: request.websocketSendPerfMs == null
@@ -79,14 +105,18 @@ export function markBackendLatencyEvent(
     frontend_to_first_backend_status_ms: Math.round(firstBackend - request.userSendPerfMs),
     backend_status_to_first_token_ms: Math.round(firstToken - firstBackend),
     backend_to_frontend_first_token_ms: Math.round(firstToken - firstBackend),
-    frontend_to_first_token_ms: Math.round(firstToken - request.userSendPerfMs),
+    frontend_send_to_first_token_ms: Math.round(firstToken - request.userSendPerfMs),
+    first_token_to_first_visible_text_ms: firstVisibleText == null
+      ? null : Math.round(firstVisibleText - firstToken),
+    first_token_to_first_audio_ms: firstAudio == null
+      ? null : Math.round(firstAudio - firstToken),
     frontend_total_response_ms: Math.round(now - request.userSendPerfMs),
     backend: backendMetrics || {},
   };
   console.info('[FRONTEND LATENCY]', values);
 
   recent.push({
-    ttft: values.frontend_to_first_token_ms,
+    ttft: values.frontend_send_to_first_token_ms,
     total: values.frontend_total_response_ms,
   });
   if (recent.length > MAX_RECENT) recent.shift();
