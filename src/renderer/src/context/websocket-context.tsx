@@ -16,6 +16,7 @@ export interface HistoryInfo {
     content: string;
   } | null;
   timestamp: string | null;
+  title?: string | null;
 }
 
 interface WebSocketContextProps {

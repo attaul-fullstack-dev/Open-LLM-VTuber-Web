@@ -49,14 +49,12 @@ function GroupDrawer({ children }: GroupDrawerProps) {
     >
       <DrawerBackdrop />
       <DrawerTrigger asChild>{children}</DrawerTrigger>
-      <DrawerContent style={sidebarStyles.historyDrawer.drawer.content}>
-        <DrawerHeader>
-          <DrawerTitle style={sidebarStyles.historyDrawer.drawer.title}>
+      <DrawerContent {...sidebarStyles.historyDrawer.drawer.content}>
+        <DrawerHeader {...sidebarStyles.historyDrawer.drawer.header}>
+          <DrawerTitle {...sidebarStyles.historyDrawer.drawer.title}>
             {t('group.management')}
           </DrawerTitle>
-          <DrawerCloseTrigger
-            style={sidebarStyles.historyDrawer.drawer.closeButton}
-          />
+          <DrawerCloseTrigger {...sidebarStyles.historyDrawer.drawer.closeButton} />
         </DrawerHeader>
 
         <DrawerBody>
@@ -125,7 +123,7 @@ function GroupDrawer({ children }: GroupDrawerProps) {
 
         <DrawerFooter>
           <DrawerActionTrigger asChild>
-            <Button {...sidebarStyles.historyDrawer.drawer.actionButton}>
+            <Button {...sidebarStyles.historyDrawer.actionButton}>
               {t('common.close')}
             </Button>
           </DrawerActionTrigger>

@@ -237,6 +237,62 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
           duration: 2500,
         });
         break;
+      case 'compact-result':
+        toaster.create({
+          title: message.success
+            ? t('notification.compactSuccess')
+            : t('notification.compactFail'),
+          description: message.success ? undefined : (message.error || undefined),
+          type: message.success ? 'success' : 'error',
+          duration: 2500,
+        });
+        break;
+      case 'history-renamed':
+        if (message.success && message.history_uid && message.title) {
+          setHistoryList((prev: HistoryInfo[]) => prev.map((history) => (
+            history.uid === message.history_uid
+              ? { ...history, title: message.title }
+              : history
+          )));
+        }
+        toaster.create({
+          title: message.success
+            ? t('notification.historyRenameSuccess')
+            : t('notification.historyRenameFail'),
+          type: message.success ? 'success' : 'error',
+          duration: 2000,
+        });
+        break;
+      case 'character-memory':
+        // The memory list is consumed by the Agent settings panel.
+        break;
+      case 'character-memory-deleted':
+        toaster.create({
+          title: message.success
+            ? t('notification.memoryDeleteSuccess')
+            : t('notification.memoryDeleteFail'),
+          type: message.success ? 'success' : 'error',
+          duration: 2000,
+        });
+        break;
+      case 'character-memory-reset':
+        toaster.create({
+          title: message.success
+            ? t('notification.memoryResetSuccess')
+            : t('notification.memoryResetFail'),
+          type: message.success ? 'success' : 'error',
+          duration: 2000,
+        });
+        break;
+      case 'character-state-reset':
+        toaster.create({
+          title: message.success
+            ? t('notification.characterStateResetSuccess')
+            : t('notification.characterStateResetFail'),
+          type: message.success ? 'success' : 'error',
+          duration: 2000,
+        });
+        break;
       case 'history-list':
         if (message.histories) {
           setHistoryList(message.histories);

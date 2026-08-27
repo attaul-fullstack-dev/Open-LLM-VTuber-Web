@@ -5,7 +5,6 @@
 /* eslint-disable import/order */
 /* eslint-disable import/no-extraneous-dependencies */
 /* eslint-disable react/require-default-props */
-import React, { useEffect } from 'react';
 import { Box, Spinner, Flex, Text, Icon } from '@chakra-ui/react';
 import { sidebarStyles, chatPanelStyles } from './sidebar-styles';
 import { MainContainer, ChatContainer, MessageList as ChatMessageList, Message as ChatMessage, Avatar as ChatAvatar } from '@chatscope/chat-ui-kit-react';
@@ -16,6 +15,13 @@ import { useConfig } from '@/context/character-config-context';
 import { useWebSocket } from '@/context/websocket-context';
 import { FaTools, FaCheck, FaTimes } from 'react-icons/fa';
 import { useTranslation } from 'react-i18next';
+
+const cleanDisplayText = (value: string) => value
+  .replace(/\[[a-z][a-z0-9_-]*\]\s*/gi, '')
+  .replace(/\*([^*]+)\*/g, '$1')
+  .replace(/([.!?])(?=[A-Z])/g, '$1 ')
+  .replace(/\s+/g, ' ')
+  .trim();
 
 // Main component
 function ChatHistoryPanel(): JSX.Element {
@@ -100,7 +106,7 @@ function ChatHistoryPanel(): JSX.Element {
                   <ChatMessage
                     key={msg.id}
                     model={{
-                      message: msg.content,
+                      message: cleanDisplayText(msg.content),
                       sentTime: msg.timestamp,
                       sender: msg.role === 'ai'
                         ? (msg.name || confName || 'AI')

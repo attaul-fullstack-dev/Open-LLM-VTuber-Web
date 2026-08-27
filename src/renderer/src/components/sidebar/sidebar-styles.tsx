@@ -37,7 +37,7 @@ export const sidebarStyles = {
       left: 0,
       top: 0,
       height: '100%',
-      width: { base: 'min(82vw, 340px)', lg: '440px' },
+      width: { base: '100vw', lg: '440px' },
       bg: 'rgba(17, 24, 39, .96)',
       backdropFilter: 'blur(20px)',
       transform: isCollapsed
@@ -80,8 +80,23 @@ export const sidebarStyles = {
       width: '100%',
       display: 'flex',
       alignItems: 'center',
-      gap: 1,
-      p: 2,
+      gap: 2,
+      px: { base: 3, lg: 2 },
+      pt: { base: 3, lg: 2 },
+      pb: 2,
+    },
+    headerButton: {
+      variant: 'ghost' as const,
+      minW: { base: '44px', lg: '40px' },
+      width: { base: '44px', lg: '40px' },
+      height: { base: '44px', lg: '40px' },
+      p: 0,
+      borderRadius: { base: '14px', lg: '10px' },
+      color: 'whiteAlpha.800',
+      bg: 'rgba(255,255,255,.035)',
+      border: '1px solid rgba(255,255,255,.04)',
+      _hover: { bg: 'whiteAlpha.100', color: 'white' },
+      _active: { bg: 'whiteAlpha.200' },
     },
   },
 
@@ -89,7 +104,7 @@ export const sidebarStyles = {
     container: {
       flex: 1,
       overflow: 'hidden',
-      px: 4,
+      px: { base: 3, lg: 4 },
       display: 'flex',
       flexDirection: 'column',
     },
@@ -170,36 +185,38 @@ export const sidebarStyles = {
     listContainer: {
       flex: 1,
       overflowY: 'auto',
-      px: 4,
-      py: 2,
+      px: { base: 3, lg: 4 },
+      py: { base: 1, lg: 2 },
       css: commonStyles.scrollbar,
     },
     historyItem: {
-      mb: 4,
-      p: 3,
-      borderRadius: 'md',
-      bg: 'whiteAlpha.50',
+      mb: 2,
+      px: 3,
+      py: 2.5,
+      borderRadius: 'xl',
+      bg: 'rgba(255,255,255,.045)',
+      border: '1px solid rgba(255,255,255,.06)',
       cursor: 'pointer',
       transition: 'all 0.2s',
       _hover: {
-        bg: 'whiteAlpha.100',
+        bg: 'rgba(255,255,255,.075)',
       },
     },
     historyItemSelected: {
-      bg: 'whiteAlpha.200',
-      borderLeft: '3px solid',
-      borderColor: 'blue.500',
+      bg: 'rgba(59,130,246,.12)',
+      borderColor: 'rgba(96,165,250,.38)',
+      boxShadow: 'inset 3px 0 0 #60a5fa',
     },
-    historyHeader: {
+    historyBody: {
       display: 'flex',
       justifyContent: 'space-between',
-      alignItems: 'center',
-      mb: 2,
+      alignItems: 'flex-start',
+      gap: 2,
     },
     timestamp: {
-      fontSize: 'sm',
-      color: 'whiteAlpha.700',
-      fontFamily: 'mono',
+      fontSize: '11px',
+      color: 'whiteAlpha.500',
+      mt: 1,
     },
     deleteButton: {
       variant: 'ghost' as const,
@@ -212,30 +229,75 @@ export const sidebarStyles = {
         bg: 'whiteAlpha.200',
       },
     },
-    messagePreview: {
-      fontSize: 'sm',
+    actionButton: {
+      variant: 'ghost' as const,
+      colorScheme: 'whiteAlpha' as const,
+      size: 'sm' as const,
+      color: 'whiteAlpha.700',
+      opacity: 0.8,
+      _hover: {
+        opacity: 1,
+        bg: 'whiteAlpha.200',
+      },
+    },
+    title: {
+      fontSize: '15px',
+      fontWeight: 'semibold',
       color: 'whiteAlpha.900',
+      noOfLines: 1,
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
+      mb: 0.5,
+    },
+    messagePreview: {
+      fontSize: '13px',
+      lineHeight: '1.35',
+      color: 'whiteAlpha.650',
       noOfLines: 2,
       overflow: 'hidden',
       textOverflow: 'ellipsis',
     },
+    moreButton: {
+      variant: 'ghost' as const,
+      minW: '36px',
+      width: '36px',
+      height: '36px',
+      borderRadius: 'full',
+      color: 'whiteAlpha.600',
+      _hover: { color: 'white', bg: 'whiteAlpha.100' },
+    },
+    menuContent: {
+      bg: 'gray.800',
+      color: 'whiteAlpha.900',
+      borderColor: 'whiteAlpha.200',
+      minW: '190px',
+      boxShadow: 'xl',
+    },
     drawer: {
       content: {
         background: 'var(--chakra-colors-gray-900)',
-        maxWidth: '440px',
+        width: { base: '100vw', lg: '440px' },
+        maxWidth: { base: '100vw', lg: '440px' },
         marginTop: isElectron ? '30px' : '0',
         height: isElectron ? 'calc(100vh - 30px)' : '100vh',
+        borderRight: { base: 'none', lg: '1px solid rgba(255,255,255,.1)' },
+      },
+      header: {
+        minH: { base: '64px', lg: '72px' },
+        px: { base: 4, lg: 6 },
+        py: 4,
+        borderBottom: '1px solid rgba(255,255,255,.08)',
+        alignItems: 'center',
       },
       title: {
         color: 'white',
+        fontSize: { base: '20px', lg: '24px' },
+        fontWeight: 'semibold',
       },
       closeButton: {
         color: 'white',
-      },
-      actionButton: {
-        color: 'white',
-        borderColor: 'white',
-        variant: 'outline' as const,
+        top: { base: '14px', lg: '18px' },
+        insetEnd: { base: '14px', lg: '18px' },
       },
     },
   },
@@ -486,66 +548,67 @@ export const sidebarStyles = {
 export const chatPanelStyles = css`
   .cs-message-list {
     background: var(--chakra-colors-gray-900) !important;
-    padding: var(--chakra-space-4);
+    padding: 10px 12px 18px !important;
   }
   
   .cs-message {
-    margin: 12px 0;
-    // padding-top: 20px !important;
+    margin: 6px 0 !important;
   }
 
   .cs-message__content {
-    background-color: var(--chakra-colors-gray-700) !important;
-    border-radius: var(--chakra-radii-md);
-    padding: 8px !important;
+    background-color: rgba(255, 255, 255, .095) !important;
+    border: 1px solid rgba(255, 255, 255, .055) !important;
+    border-radius: 18px 18px 18px 6px !important;
+    padding: 10px 13px !important;
     color: var(--chakra-colors-white) !important;
-    font-size: 0.95rem !important;
-    line-height: 1.5 !important;
-    margin-top: 4px !important;
+    font-size: 0.94rem !important;
+    line-height: 1.42 !important;
+    margin-top: 0 !important;
+    box-shadow: 0 3px 12px rgba(0, 0, 0, .1) !important;
   }
 
   .cs-message__text {
-    padding: 8px 0 !important;
+    padding: 0 !important;
+    white-space: pre-wrap !important;
+    overflow-wrap: anywhere !important;
   }
 
   .cs-message--outgoing .cs-message__content {
-    background-color: var(--chakra-colors-gray-600) !important;
+    background: linear-gradient(145deg, rgba(124, 92, 255, .92), rgba(91, 72, 210, .92)) !important;
+    border-color: rgba(255, 255, 255, .12) !important;
+    border-radius: 18px 18px 6px 18px !important;
   }
 
   .cs-chat-container {
     background: transparent !important;
-    border: 1px solid var(--chakra-colors-whiteAlpha-200);
-    border-radius: var(--chakra-radii-lg);
-    padding: var(--chakra-space-2);
+    border: 0 !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
   }
 
   .cs-main-container {
     border: none !important;
     background: transparent !important;
-    width: calc(100% - 24px) !important;
+    width: 100% !important;
     margin-left: 0 !important;
   }
 
   .cs-message__sender {
-    position: absolute !important;
-    top: 0 !important;
-    left: 36px !important;
-    font-size: 0.875rem !important;
-    font-weight: 600 !important;
-    color: var(--chakra-colors-whiteAlpha-900) !important;
+    display: none !important;
   }
 
   .cs-message__content-wrapper {
-    max-width: 80%;
-    margin: 0 8px;
+    max-width: 82% !important;
+    margin: 0 7px !important;
   }
 
   .cs-avatar {
     background-color: var(--chakra-colors-blue-500) !important;
     color: white !important;
-    width: 28px !important;
-    height: 28px !important;
-    font-size: 14px !important;
+    width: 30px !important;
+    min-width: 30px !important;
+    height: 30px !important;
+    font-size: 13px !important;
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
@@ -557,8 +620,20 @@ export const chatPanelStyles = css`
   }
 
   .cs-message__header {
-    display: block !important;
-    visibility: visible !important;
-    opacity: 1 !important;
+    display: none !important;
+  }
+
+  @media (min-width: 1024px) {
+    .cs-message-list {
+      padding: 14px 16px 22px !important;
+    }
+
+    .cs-message {
+      margin: 8px 0 !important;
+    }
+
+    .cs-message__content-wrapper {
+      max-width: 80% !important;
+    }
   }
 `;

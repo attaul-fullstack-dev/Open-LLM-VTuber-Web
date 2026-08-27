@@ -159,7 +159,7 @@ function AppContent(): JSX.Element {
               </Box>
               <Box
                 position="absolute"
-                bottom={isFooterCollapsed ? "39px" : { base: "92px", lg: "135px" }}
+                bottom={isFooterCollapsed ? "39px" : { base: "84px", lg: "135px" }}
                 left="50%"
                 transform="translateX(-50%)"
                 zIndex={10}

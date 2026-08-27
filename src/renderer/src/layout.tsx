@@ -22,7 +22,7 @@ export const layoutStyles = {
     position: { base: 'fixed', lg: 'relative' } as const,
     left: 0,
     top: 0,
-    width: { base: 'min(82vw, 340px)', lg: '440px' },
+    width: { base: '100vw', lg: '440px' },
     height: '100%',
     bg: 'gray.800',
     borderRight: '1px solid',
@@ -31,7 +31,7 @@ export const layoutStyles = {
     flexShrink: 0,
     transition: 'all 0.2s',
     zIndex: { base: 30, lg: 1 },
-    boxShadow: { base: '12px 0 40px rgba(0,0,0,.32)', lg: 'none' },
+    boxShadow: { base: 'none', lg: 'none' },
   },
   mainContent: {
     flex: 1,
@@ -52,13 +52,13 @@ export const layoutStyles = {
     willChange: 'transform',
   },
   footer: {
-    width: { base: 'calc(100% - 32px)', lg: '100%' },
-    height: { base: '74px', lg: '120px' },
+    width: { base: 'calc(100% - 24px)', lg: '100%' },
+    height: { base: '66px', lg: '120px' },
     transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
     willChange: 'transform',
     position: { base: 'fixed', lg: 'relative' },
-    bottom: { base: 'max(6px, env(safe-area-inset-bottom))', lg: 'auto' },
-    left: { base: '16px', lg: 'auto' },
+    bottom: { base: 'max(8px, env(safe-area-inset-bottom))', lg: 'auto' },
+    left: { base: '12px', lg: 'auto' },
     zIndex: 1,
     overflow: 'hidden',
   },
@@ -91,7 +91,7 @@ export const layoutStyles = {
   collapsedFooter: {
     // Keep the mobile footer's layout box stable. The footer itself slides
     // down, leaving only its grab handle visible.
-    height: { base: '74px', lg: '24px' },
+    height: { base: '66px', lg: '24px' },
     transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
   },
   windowsTitleBar: {

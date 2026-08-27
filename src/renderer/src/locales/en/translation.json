@@ -55,8 +55,17 @@
       "idleSecondsToSpeak": "Idle seconds allow AI to speak",
       "allowButtonTrigger": "Prompt AI to Speak via Raise Hand Button",
       "resetRelationship": "Reset relationship with Mili",
-      "resetRelationshipHelp": "Reset only Mili's relationship continuity for this conversation. Messages and summary stay intact.",
-      "resetRelationshipConfirm": "Reset Mili's relationship for this conversation? Chat history will not be deleted."
+      "resetRelationshipHelp": "Reset Mili's relationship for ALL chats. Chat history, summaries, and long-term memory stay intact.",
+      "resetRelationshipConfirm": "Reset Mili's relationship across all conversations? Chat history will not be deleted.",
+      "characterMemory": "Mili's Long-Term Memory",
+      "characterMemoryHelp": "Facts Mili remembers across all chats (long-term context, not a transcript).",
+      "noCharacterMemory": "No long-term memory yet.",
+      "forgetMemory": "Forget this fact",
+      "resetMemory": "Reset Mili's memory",
+      "resetMemoryConfirm": "Clear all of Mili's long-term memory? Relationship and chat history stay intact.",
+      "resetCharacterState": "Reset relationship and memory",
+      "resetCharacterStateHelp": "Reset Mili's relationship to stranger and clear all long-term memory across every chat.",
+      "resetCharacterStateConfirm": "Reset Mili's relationship and clear long-term memory across all chats? Chat history will not be deleted."
     },
     "about": {
       "title": "Open LLM VTuber Frontend",
@@ -99,7 +108,13 @@
   },
   "history": {
     "chatHistoryList": "Chat History List",
-    "noMessages": "No messages"
+    "noMessages": "No messages",
+    "newChat": "New Conversation",
+    "rename": "Rename chat",
+    "renamePrompt": "Enter a new title for this chat:",
+    "compact": "Compact conversation",
+    "compactConfirm": "Compress the older messages of this conversation into a summary now? The transcript stays visible; only the AI's context is compacted.",
+    "delete": "Delete chat"
   },
   "notification": {
     "characterLoaded": "New Character Loaded",
@@ -109,8 +124,18 @@
     "newChatHistory": "New chat history created",
     "historyDeleteSuccess": "History deleted successfully",
     "historyDeleteFail": "Failed to delete history",
-    "relationshipResetSuccess": "Mili's relationship continuity was reset",
-    "relationshipResetFail": "Could not reset Mili's relationship continuity"
+    "relationshipResetSuccess": "Mili's relationship was reset across all chats",
+    "relationshipResetFail": "Could not reset Mili's relationship",
+    "compactSuccess": "Conversation compacted",
+    "compactFail": "Could not compact the conversation",
+    "historyRenameSuccess": "Chat renamed",
+    "historyRenameFail": "Could not rename chat",
+    "memoryDeleteSuccess": "Fact forgotten",
+    "memoryDeleteFail": "Could not forget fact",
+    "memoryResetSuccess": "Mili's long-term memory was cleared",
+    "memoryResetFail": "Could not clear Mili's long-term memory",
+    "characterStateResetSuccess": "Mili's relationship and memory were reset",
+    "characterStateResetFail": "Could not reset Mili's character state"
   },
   "error": {
     "cameraApiNotSupported": "Camera API is not supported on this device",

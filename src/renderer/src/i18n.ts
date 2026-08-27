@@ -5,6 +5,7 @@ import LanguageDetector from "i18next-browser-languagedetector";
 
 // Import translation resources
 import enTranslation from "./locales/en/translation.json";
+import idTranslation from "./locales/id/translation.json";
 import zhTranslation from "./locales/zh/translation.json";
 
 // Configure i18next instance
@@ -26,6 +27,9 @@ i18n
     resources: {
       en: {
         translation: enTranslation,
+      },
+      id: {
+        translation: idTranslation,
       },
       zh: {
         translation: zhTranslation,

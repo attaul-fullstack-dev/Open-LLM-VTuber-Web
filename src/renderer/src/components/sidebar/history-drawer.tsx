@@ -1,6 +1,11 @@
-import { Box, Button } from '@chakra-ui/react';
-import { FiTrash2 } from 'react-icons/fi';
-import { formatDistanceToNow } from 'date-fns';
+import {
+  Box, IconButton, Menu, Portal,
+} from '@chakra-ui/react';
+import {
+  FiTrash2, FiEdit2, FiArchive, FiMoreVertical,
+} from 'react-icons/fi';
+import { formatDistanceToNowStrict } from 'date-fns';
+import { enUS, id, zhCN } from 'date-fns/locale';
 import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -10,8 +15,6 @@ import {
   DrawerHeader,
   DrawerTitle,
   DrawerBody,
-  DrawerFooter,
-  DrawerActionTrigger,
   DrawerBackdrop,
   DrawerCloseTrigger,
 } from '@/components/ui/drawer';
@@ -27,8 +30,11 @@ interface HistoryDrawerProps {
 interface HistoryItemProps {
   isSelected: boolean;
   latestMessage: { content: string; timestamp: string | null };
+  title?: string | null;
   onSelect: () => void;
-  onDelete: (e: React.MouseEvent) => void;
+  onRename: () => void;
+  onCompact: () => void;
+  onDelete: () => void;
   isDeleteDisabled: boolean;
 }
 
@@ -36,36 +42,84 @@ interface HistoryItemProps {
 const HistoryItem = memo(({
   isSelected,
   latestMessage,
+  title,
   onSelect,
+  onRename,
+  onCompact,
   onDelete,
   isDeleteDisabled,
 }: HistoryItemProps): JSX.Element => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const cleanDisplayText = (value: string) => value
+    .replace(/\[[a-z][a-z0-9_-]*\]\s*/gi, '')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/([.!?])(?=[A-Z])/g, '$1 ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const preview = cleanDisplayText(latestMessage.content || '');
+  const displayTitle = (title && title.trim()) || preview || t('history.newChat');
+  const dateLocale = i18n.language.startsWith('zh')
+    ? zhCN
+    : (i18n.language.startsWith('id') ? id : enUS);
   return (
     <Box
       {...sidebarStyles.historyDrawer.historyItem}
       {...(isSelected ? sidebarStyles.historyDrawer.historyItemSelected : {})}
       onClick={onSelect}
     >
-      <Box {...sidebarStyles.historyDrawer.historyHeader}>
-        <Box {...sidebarStyles.historyDrawer.timestamp}>
+      <Box {...sidebarStyles.historyDrawer.historyBody}>
+        <Box minW="0" flex="1">
+          <Box {...sidebarStyles.historyDrawer.title}>
+            {cleanDisplayText(displayTitle)}
+          </Box>
+          <Box {...sidebarStyles.historyDrawer.messagePreview}>
+            {preview || t('history.noMessages')}
+          </Box>
+          <Box {...sidebarStyles.historyDrawer.timestamp}>
           {latestMessage.timestamp
-            ? formatDistanceToNow(new Date(latestMessage.timestamp), { addSuffix: true })
+            ? formatDistanceToNowStrict(new Date(latestMessage.timestamp), {
+              addSuffix: true,
+              locale: dateLocale,
+            })
             : t('history.noMessages')}
+          </Box>
         </Box>
-        <Button
-          onClick={onDelete}
-          disabled={isDeleteDisabled}
-          {...sidebarStyles.historyDrawer.deleteButton}
-        >
-          <FiTrash2 />
-        </Button>
+        <Menu.Root positioning={{ placement: 'bottom-end' }}>
+          <Menu.Trigger asChild>
+            <IconButton
+              aria-label="Conversation actions"
+              title="Conversation actions"
+              {...sidebarStyles.historyDrawer.moreButton}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <FiMoreVertical />
+            </IconButton>
+          </Menu.Trigger>
+          <Portal>
+            <Menu.Positioner>
+              <Menu.Content {...sidebarStyles.historyDrawer.menuContent}>
+                <Menu.Item value="rename" onClick={onRename}>
+                  <FiEdit2 />
+                  {t('history.rename')}
+                </Menu.Item>
+                <Menu.Item value="compact" onClick={onCompact}>
+                  <FiArchive />
+                  {t('history.compact')}
+                </Menu.Item>
+                <Menu.Item
+                  value="delete"
+                  disabled={isDeleteDisabled}
+                  color="red.300"
+                  onClick={onDelete}
+                >
+                  <FiTrash2 />
+                  {t('history.delete')}
+                </Menu.Item>
+              </Menu.Content>
+            </Menu.Positioner>
+          </Portal>
+        </Menu.Root>
       </Box>
-      {latestMessage.content && (
-        <Box {...sidebarStyles.historyDrawer.messagePreview}>
-          {latestMessage.content}
-        </Box>
-      )}
     </Box>
   );
 });
@@ -82,6 +136,8 @@ function HistoryDrawer({ children }: HistoryDrawerProps): JSX.Element {
     currentHistoryUid,
     fetchAndSetHistory,
     deleteHistory,
+    renameHistory,
+    compactConversation,
     getLatestMessageContent,
   } = useHistoryDrawer();
 
@@ -93,12 +149,12 @@ function HistoryDrawer({ children }: HistoryDrawerProps): JSX.Element {
     >
       <DrawerBackdrop />
       <DrawerTrigger asChild>{children}</DrawerTrigger>
-      <DrawerContent style={sidebarStyles.historyDrawer.drawer.content}>
-        <DrawerHeader>
-          <DrawerTitle style={sidebarStyles.historyDrawer.drawer.title}>
+      <DrawerContent {...sidebarStyles.historyDrawer.drawer.content}>
+        <DrawerHeader {...sidebarStyles.historyDrawer.drawer.header}>
+          <DrawerTitle {...sidebarStyles.historyDrawer.drawer.title}>
             {t('history.chatHistoryList')}
           </DrawerTitle>
-          <DrawerCloseTrigger style={sidebarStyles.historyDrawer.drawer.closeButton} />
+          <DrawerCloseTrigger {...sidebarStyles.historyDrawer.drawer.closeButton} />
         </DrawerHeader>
 
         <DrawerBody>
@@ -108,9 +164,18 @@ function HistoryDrawer({ children }: HistoryDrawerProps): JSX.Element {
                 key={history.uid}
                 isSelected={currentHistoryUid === history.uid}
                 latestMessage={getLatestMessageContent(history)}
-                onSelect={() => fetchAndSetHistory(history.uid)}
-                onDelete={(e) => {
-                  e.stopPropagation();
+                title={history.title}
+                onSelect={() => {
+                  fetchAndSetHistory(history.uid);
+                  setOpen(false);
+                }}
+                onRename={() => {
+                  renameHistory(history.uid, history.title || '');
+                }}
+                onCompact={() => {
+                  compactConversation(history.uid);
+                }}
+                onDelete={() => {
                   deleteHistory(history.uid);
                 }}
                 isDeleteDisabled={currentHistoryUid === history.uid}
@@ -119,13 +184,6 @@ function HistoryDrawer({ children }: HistoryDrawerProps): JSX.Element {
           </Box>
         </DrawerBody>
 
-        <DrawerFooter>
-          <DrawerActionTrigger asChild>
-            <Button {...sidebarStyles.historyDrawer.drawer.actionButton}>
-              {t('common.close')}
-            </Button>
-          </DrawerActionTrigger>
-        </DrawerFooter>
       </DrawerContent>
     </DrawerRoot>
   );

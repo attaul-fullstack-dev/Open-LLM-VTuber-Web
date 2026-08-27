@@ -110,31 +110,33 @@ const MessageInput = memo(({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   return (
-    <InputGroup flex={1} minW="0">
+    <InputGroup flex={1} minW="0" height="100%">
       <Box
         display="flex"
         alignItems="center"
         width="100%"
         minW="0"
-        height={{ base: '58px', lg: '80px' }}
-        px="1"
-        bg="gray.700"
-        borderRadius={{ base: '30px', lg: '12px' }}
+        height={{ base: '52px', lg: '80px' }}
+        px={{ base: '1', lg: '1' }}
+        bg={{ base: 'rgba(255,255,255,.09)', lg: 'gray.700' }}
+        border="1px solid"
+        borderColor={{ base: 'whiteAlpha.100', lg: 'transparent' }}
+        borderRadius={{ base: '26px', lg: '12px' }}
         overflow="hidden"
       >
         <IconButton
           aria-label="Attach file"
           variant="ghost"
           flexShrink={0}
-          width="40px"
-          minW="40px"
-          height="40px"
+          width={{ base: '34px', lg: '40px' }}
+          minW={{ base: '34px', lg: '40px' }}
+          height={{ base: '34px', lg: '40px' }}
           borderRadius="full"
           color={attachmentCount ? 'purple.300' : 'whiteAlpha.700'}
           bg="transparent"
           onClick={() => fileInputRef.current?.click()}
         >
-          <BsPaperclip size="24" />
+          <BsPaperclip size="20" />
         </IconButton>
         <input
           ref={fileInputRef}
@@ -147,6 +149,7 @@ const MessageInput = memo(({
           }}
         />
         <Textarea
+          rows={1}
           value={value}
           onChange={onChange}
           onKeyDown={onKeyDown}
@@ -161,16 +164,16 @@ const MessageInput = memo(({
           <IconButton
             aria-label={soundOn ? 'Mute avatar voice' : 'Enable avatar voice'}
             flexShrink={0}
-            width="40px"
-            minW="40px"
-            height="40px"
+            width={{ base: '32px', lg: '40px' }}
+            minW={{ base: '32px', lg: '40px' }}
+            height={{ base: '32px', lg: '40px' }}
             borderRadius="full"
             color={soundOn ? 'blue.300' : 'whiteAlpha.500'}
             bg="transparent"
             _hover={{ bg: 'whiteAlpha.100' }}
             onClick={onSoundToggle}
           >
-            {soundOn ? <BsVolumeUpFill /> : <BsVolumeMuteFill />}
+            {soundOn ? <BsVolumeUpFill size="17" /> : <BsVolumeMuteFill size="17" />}
           </IconButton>
         )}
       </Box>
@@ -234,8 +237,8 @@ function Footer({ isCollapsed = false, onToggle }: FooterProps): JSX.Element {
         </HStack>
       </Box>
 
-      <Box display={{ base: 'block', lg: 'none' }} px="2" pb="2">
-        <HStack width="100%" gap={2}>
+      <Box display={{ base: 'block', lg: 'none' }} px="1.5" pb="1.5">
+        <HStack width="100%" gap="1.5">
           <IconButton
             aria-label={micOn ? 'Mute microphone' : 'Enable microphone'}
             bg={micOn ? 'green.500' : 'red.500'}
@@ -258,8 +261,10 @@ function Footer({ isCollapsed = false, onToggle }: FooterProps): JSX.Element {
           <IconButton
             aria-label="Send message"
             bg="purple.500"
+            disabled={!inputValue.trim() && attachmentCount === 0}
             {...footerStyles.footer.actionButton}
             onClick={handleSend}
+            _disabled={{ opacity: 0.42, cursor: 'default' }}
           >
             <FiSend size="21" />
           </IconButton>

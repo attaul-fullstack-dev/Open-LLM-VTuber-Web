@@ -1,0 +1,69 @@
+{
+  "wsStatus": {
+    "connected": "Terhubung",
+    "connecting": "Menghubungkan",
+    "clickToReconnect": "Ketuk untuk menyambung lagi"
+  },
+  "aiState": {
+    "idle": "siap",
+    "thinking-speaking": "sedang menjawab",
+    "interrupted": "dihentikan",
+    "loading": "memuat",
+    "listening": "mendengarkan",
+    "waiting": "menunggu"
+  },
+  "notification": {
+    "characterLoaded": "Karakter baru dimuat",
+    "characterSwitched": "Karakter diganti",
+    "historyLoaded": "Riwayat dimuat",
+    "newConversation": "Percakapan baru dimulai",
+    "newChatHistory": "Chat baru dibuat",
+    "historyDeleteSuccess": "Riwayat berhasil dihapus",
+    "historyDeleteFail": "Riwayat gagal dihapus",
+    "relationshipResetSuccess": "Hubungan Mili berhasil direset",
+    "relationshipResetFail": "Hubungan Mili gagal direset",
+    "compactSuccess": "Percakapan berhasil diringkas",
+    "compactFail": "Percakapan gagal diringkas",
+    "historyRenameSuccess": "Nama chat berhasil diubah",
+    "historyRenameFail": "Nama chat gagal diubah",
+    "memoryDeleteSuccess": "Fakta berhasil dilupakan",
+    "memoryDeleteFail": "Fakta gagal dilupakan",
+    "memoryResetSuccess": "Ingatan jangka panjang Mili dihapus",
+    "memoryResetFail": "Ingatan Mili gagal dihapus",
+    "characterStateResetSuccess": "Hubungan dan ingatan Mili direset",
+    "characterStateResetFail": "Data karakter Mili gagal direset"
+  },
+  "history": {
+    "chatHistoryList": "Riwayat Chat",
+    "noMessages": "Belum ada pesan",
+    "newChat": "Percakapan Baru",
+    "rename": "Ubah nama chat",
+    "renamePrompt": "Masukkan nama baru untuk chat ini:",
+    "compact": "Ringkas konteks lama",
+    "compactConfirm": "Ringkas pesan lama untuk konteks AI? Transkrip tetap terlihat dan tidak akan dihapus.",
+    "delete": "Hapus chat"
+  },
+  "common": {
+    "save": "Simpan",
+    "cancel": "Batal",
+    "settings": "Pengaturan",
+    "close": "Tutup",
+    "accept": "Setuju"
+  },
+  "footer": {
+    "typeYourMessage": "Ketik pesan...",
+    "cameraControl": "Ketuk untuk menyalakan kamera",
+    "cameraStopping": "Ketuk untuk mematikan kamera",
+    "screenControl": "Ketuk untuk membagikan layar",
+    "screenStopping": "Ketuk untuk berhenti membagikan layar"
+  },
+  "sidebar": {
+    "camera": "Kamera",
+    "screen": "Layar",
+    "browser": "Browser",
+    "live": "Live",
+    "noMessages": "Belum ada pesan. Mulai percakapan, yuk!",
+    "noBrowserSession": "Tidak ada sesi browser aktif",
+    "browserSession": "Sesi Browser"
+  }
+}

@@ -19,9 +19,9 @@ export const footerStyles: {
 } = {
   footer: {
     container: (isCollapsed) => ({
-      bg: isCollapsed ? 'transparent' : { base: 'rgba(17, 24, 39, .78)', lg: 'gray.800' },
+      bg: isCollapsed ? 'transparent' : { base: 'rgba(10, 18, 31, .88)', lg: 'gray.800' },
       backdropFilter: { base: 'blur(18px)', lg: 'none' },
-      borderRadius: isCollapsed ? 'none' : { base: '22px', lg: '16px 16px 0 0' },
+      borderRadius: isCollapsed ? 'none' : { base: '28px', lg: '16px 16px 0 0' },
       border: isCollapsed ? 'none' : { base: '1px solid rgba(255,255,255,.12)', lg: 'none' },
       transform: isCollapsed
         ? { base: 'translateY(calc(100% - 10px))', lg: 'translateY(calc(100% - 24px))' }
@@ -31,9 +31,10 @@ export const footerStyles: {
       position: 'relative',
       overflow: 'hidden',
       pb: { base: '0', lg: '4' },
+      boxShadow: isCollapsed ? 'none' : { base: '0 12px 36px rgba(0,0,0,.28)', lg: 'none' },
     }),
     toggleButton: {
-      height: { base: '8px', lg: '24px' },
+      height: { base: '7px', lg: '24px' },
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
@@ -45,18 +46,20 @@ export const footerStyles: {
     },
     actionButton: {
       borderRadius: { base: 'full', lg: '12px' },
-      width: { base: '48px', lg: '50px' },
-      height: { base: '48px', lg: '50px' },
-      minW: { base: '48px', lg: '50px' },
+      width: { base: '44px', lg: '50px' },
+      height: { base: '44px', lg: '50px' },
+      minW: { base: '44px', lg: '50px' },
+      flexShrink: 0,
+      boxShadow: { base: '0 4px 14px rgba(0,0,0,.18)', lg: 'none' },
     },
     input: {
       bg: 'transparent',
       border: 'none',
-      height: { base: '58px', lg: '80px' },
+      height: { base: '52px', lg: '80px' },
       borderRadius: '0',
-      fontSize: { base: '16px', lg: '18px' },
-      pl: '2',
-      pr: '2',
+      fontSize: { base: '15px', lg: '18px' },
+      pl: { base: '1.5', lg: '2' },
+      pr: { base: '1', lg: '2' },
       color: 'whiteAlpha.900',
       _placeholder: {
         color: 'whiteAlpha.500',
@@ -66,9 +69,9 @@ export const footerStyles: {
         bg: 'transparent',
       },
       resize: 'none',
-      minHeight: { base: '58px', lg: '80px' },
-      maxHeight: { base: '58px', lg: '80px' },
-      py: { base: '8px', lg: '24px' },
+      minHeight: { base: '52px', lg: '80px' },
+      maxHeight: { base: '52px', lg: '80px' },
+      py: { base: '14px', lg: '24px' },
       lineHeight: '1.4',
       whiteSpace: 'pre-wrap',
       overflowY: 'auto',

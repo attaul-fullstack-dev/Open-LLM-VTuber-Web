@@ -71,6 +71,13 @@ export interface MessageEvent {
   success?: boolean;
   histories?: HistoryInfo[];
   configs?: ConfigFile[];
+  title?: string;
+  memories?: {
+    text: string;
+    added_at: string;
+    explicit?: boolean;
+  }[];
+  error?: string;
   message?: string;
   members?: string[];
   is_owner?: boolean;
