@@ -166,6 +166,10 @@
     "listening": "聆听中",
     "waiting": "等待中"
   },
+  "thinking": {
+    "elapsed": "{{seconds}}秒",
+    "stuck": "好像卡住了...（{{seconds}}秒），请重新发送"
+  },
   "wsStatus": {
     "connected": "已连接",
     "connecting": "连接中",

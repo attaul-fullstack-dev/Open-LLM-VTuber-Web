@@ -166,6 +166,10 @@
     "listening": "listening",
     "waiting": "waiting"
   },
+  "thinking": {
+    "elapsed": "{{seconds}}s",
+    "stuck": "Looks stuck... ({{seconds}}s). Try resending."
+  },
   "wsStatus": {
     "connected": "Connected",
     "connecting": "Connecting",

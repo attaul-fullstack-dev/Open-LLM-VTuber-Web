@@ -29,6 +29,7 @@ import "@chatscope/chat-ui-kit-styles/dist/default/styles.min.css";
 import Background from "./components/canvas/background";
 import WebSocketStatus from "./components/canvas/ws-status";
 import Subtitle from "./components/canvas/subtitle";
+import ThinkingStatus from "./components/canvas/thinking-status";
 import { ModeProvider, useMode } from "./context/mode-context";
 
 function AppContent(): JSX.Element {
@@ -166,6 +167,7 @@ function AppContent(): JSX.Element {
                 width={{ base: "88%", lg: "60%" }}
               >
                 <Subtitle />
+                <ThinkingStatus />
               </Box>
               <Box
                 {...layoutStyles.footer}

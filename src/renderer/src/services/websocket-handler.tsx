@@ -34,7 +34,9 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
   const [wsState, setWsState] = useState<string>('CLOSED');
   const [wsUrl, setWsUrl] = useLocalStorage<string>('wsUrl', defaultWsUrl);
   const [baseUrl, setBaseUrl] = useLocalStorage<string>('baseUrl', defaultBaseUrl);
-  const { aiState, setAiState, backendSynthComplete, setBackendSynthComplete } = useAiState();
+  const {
+    aiState, setAiState, backendSynthComplete, setBackendSynthComplete, setFirstTokenAt,
+  } = useAiState();
   const { setModelInfo } = useLive2DConfig();
   const { setSubtitleText, startSubtitleResponse } = useSubtitle();
   const { clearResponse, setForceNewMessage, appendHumanMessage, appendOrUpdateToolCallMessage } = useChatHistory();
@@ -76,7 +78,9 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
         break;
       case 'conversation-chain-start':
         setAiState('thinking-speaking');
-        setSubtitleText(t('aiState.thinking-speaking'));
+        // The dedicated thinking indicator owns the waiting state now; the
+        // subtitle only carries real response text.
+        setFirstTokenAt(null);
         audioTaskQueue.clearQueue();
         // A response may arrive in several audio chunks. Reset the previous
         // response before accepting the first chunk of this new turn.
@@ -155,6 +159,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
         if (message.event === 'first-token') {
           // Raw provider token is available now. Remove the waiting indicator
           // immediately; sentence segmentation/TTS may continue independently.
+          setFirstTokenAt(Date.now());
           setSubtitleText('');
         }
         break;

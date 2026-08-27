@@ -6,11 +6,15 @@
   },
   "aiState": {
     "idle": "siap",
-    "thinking-speaking": "Sedang berpikir...",
+    "thinking-speaking": "Sedang berpikir",
     "interrupted": "dihentikan",
     "loading": "memuat",
     "listening": "mendengarkan",
     "waiting": "menunggu"
+  },
+  "thinking": {
+    "elapsed": "{{seconds}} detik",
+    "stuck": "Kayaknya macet nih... ({{seconds}} detik). Coba kirim ulang."
   },
   "notification": {
     "characterLoaded": "Karakter baru dimuat",
