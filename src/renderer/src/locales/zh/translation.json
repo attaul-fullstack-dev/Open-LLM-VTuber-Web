@@ -26,8 +26,10 @@
       "wsUrl": "WebSocket地址",
       "baseUrl": "基础URL",
       "imageCompressionQuality": "图片压缩质量",
+      "imageCompressionQualityPlaceholder": "输入压缩质量 (0-100)",
       "imageCompressionQualityHelp": "JPEG压缩质量(0.1-1.0)。默认为0.8以减小文件体积，因为我们在向AI模型传输图片时没有进行压缩，可能导致文件过大。",
       "imageMaxWidth": "图片最大宽度",
+      "imageMaxWidthPlaceholder": "输入最大宽度（像素）",
       "imageMaxWidthHelp": "图片缩放的最大宽度。超过此宽度的图片会按比例缩小。设为0表示不限制大小。此功能存在的原因是某些AI模型在处理超大尺寸图片时可能存在限制。但是大部分AI模型都能自动处理图片，因此默认值为0（不限制），以保持您原始图片的完整性。"
     },
     "live2d": {
@@ -72,6 +74,7 @@
       "github": "GitHub",
       "documentation": "文档",
       "copyright": "版权",
+      "license": "许可证",
       "viewLicense": "查看许可证"
     }
   },
@@ -109,9 +112,14 @@
     "newChat": "新对话",
     "rename": "重命名对话",
     "renamePrompt": "为此对话输入新标题：",
+    "loadOlder": "加载较早消息",
     "compact": "压缩对话",
     "compactConfirm": "立即将此对话的较早消息压缩为摘要吗？聊天记录仍会显示；只有 AI 的上下文会被压缩。",
     "delete": "删除对话"
+  },
+  "toolCall": {
+    "using": "{{name}}正在使用工具 {{tool}}",
+    "used": "{{name}}使用了工具 {{tool}}"
   },
   "notification": {
     "characterLoaded": "新角色已加载",

@@ -74,7 +74,7 @@ function ChatHistoryPanel(): JSX.Element {
                   _hover={{ bg: 'whiteAlpha.100', color: 'white' }}
                   onClick={loadOlderMessages}
                 >
-                  Muat pesan lama
+                  {t('history.loadOlder')}
                 </Button>
               </Box>
             )}
@@ -105,8 +105,9 @@ function ChatHistoryPanel(): JSX.Element {
                         {...sidebarStyles.toolCallIndicator.icon}
                       />
                       <Text {...sidebarStyles.toolCallIndicator.text}>
-                        {/* {msg.tool_name}: {msg.status === 'running' ? 'Running...' : msg.content} */}
-                        {msg.status === "running" ? `${msg.name} is using tool ${msg.tool_name}` : `${msg.name} used tool ${msg.tool_name}`}
+                        {msg.status === "running"
+                          ? t('toolCall.using', { name: msg.name, tool: msg.tool_name })
+                          : t('toolCall.used', { name: msg.name, tool: msg.tool_name })}
                       </Text>
                       {/* Show spinner if running, checkmark if completed, maybe error icon? */}
                       {msg.status === "running" && (

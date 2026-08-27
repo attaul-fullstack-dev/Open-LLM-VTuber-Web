@@ -21,6 +21,7 @@ import { useLocalStorage } from '@/hooks/utils/use-local-storage';
 import { useGroup } from '@/context/group-context';
 import { useInterrupt } from '@/hooks/utils/use-interrupt';
 import { useBrowser } from '@/context/browser-context';
+import { markBackendLatencyEvent } from '@/utils/chat-latency';
 import {
   clearLastHistoryUid,
   decideHistoryResume,
@@ -75,6 +76,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
         break;
       case 'conversation-chain-start':
         setAiState('thinking-speaking');
+        setSubtitleText(t('aiState.thinking-speaking'));
         audioTaskQueue.clearQueue();
         // A response may arrive in several audio chunks. Reset the previous
         // response before accepting the first chunk of this new turn.
@@ -100,7 +102,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
       default:
         console.warn('Unknown control command:', controlText);
     }
-  }, [setAiState, clearResponse, setForceNewMessage, startMic, stopMic, startSubtitleResponse]);
+  }, [setAiState, setSubtitleText, clearResponse, setForceNewMessage, startMic, stopMic, startSubtitleResponse, t]);
 
   const handleWebSocketMessage = useCallback((message: MessageEvent) => {
     console.debug('WebSocket event received:', message.type);
@@ -144,6 +146,18 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
           setSubtitleText(message.text);
         }
         break;
+      case 'latency-event':
+        markBackendLatencyEvent(
+          message.request_id,
+          message.event,
+          message.metrics,
+        );
+        if (message.event === 'first-token') {
+          // Raw provider token is available now. Remove the waiting indicator
+          // immediately; sentence segmentation/TTS may continue independently.
+          setSubtitleText('');
+        }
+        break;
       case 'config-files':
         if (message.configs) {
           setConfigFiles(message.configs);
@@ -170,9 +184,14 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
         break;
       case 'audio':
         if (aiState === 'interrupted' || aiState === 'listening') {
-          console.log('Audio playback intercepted. Sentence:', message.display_text?.text);
+          console.debug('Audio playback intercepted', {
+            display_characters: message.display_text?.text?.length || 0,
+          });
         } else {
-          console.log("actions", message.actions);
+          console.debug('Audio payload received', {
+            has_actions: Boolean(message.actions),
+            display_characters: message.display_text?.text?.length || 0,
+          });
           addAudioTask({
             audioBase64: message.audio || '',
             volumes: message.volumes || [],

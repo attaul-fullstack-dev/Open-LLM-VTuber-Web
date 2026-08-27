@@ -112,9 +112,14 @@
     "newChat": "New Conversation",
     "rename": "Rename chat",
     "renamePrompt": "Enter a new title for this chat:",
+    "loadOlder": "Load older messages",
     "compact": "Compact conversation",
     "compactConfirm": "Compress the older messages of this conversation into a summary now? The transcript stays visible; only the AI's context is compacted.",
     "delete": "Delete chat"
+  },
+  "toolCall": {
+    "using": "{{name}} is using tool {{tool}}",
+    "used": "{{name}} used tool {{tool}}"
   },
   "notification": {
     "characterLoaded": "New Character Loaded",

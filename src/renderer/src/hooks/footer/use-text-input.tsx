@@ -5,6 +5,7 @@ import { useInterrupt } from '@/components/canvas/live2d';
 import { useChatHistory } from '@/context/chat-history-context';
 import { useVAD } from '@/context/vad-context';
 import { useMediaCapture } from '@/hooks/utils/use-media-capture';
+import { startChatLatency } from '@/utils/chat-latency';
 
 export function useTextInput() {
   const [inputText, setInputText] = useState('');
@@ -29,6 +30,7 @@ export function useTextInput() {
       interrupt();
     }
 
+    const timing = startChatLatency();
     const capturedImages = await captureAllMedia();
     const images = [...capturedImages, ...uploadedImages];
     const text = inputText.trim() || 'Describe this image.';
@@ -38,6 +40,8 @@ export function useTextInput() {
       type: 'text-input',
       text,
       images,
+      request_id: timing.requestId,
+      client_user_send_ms: timing.clientUserSendMs,
     });
 
     if (autoStopMic) stopMic();

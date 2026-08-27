@@ -6,6 +6,7 @@ import { ModelInfo } from '@/context/live2d-config-context';
 import { HistoryInfo } from '@/context/websocket-context';
 import { ConfigFile } from '@/context/character-config-context';
 import { toaster } from '@/components/ui/toaster';
+import { markWebSocketSend } from '@/utils/chat-latency';
 
 export interface DisplayText {
   text: string;
@@ -79,6 +80,9 @@ export interface MessageEvent {
   }[];
   error?: string;
   message?: string;
+  event?: string;
+  request_id?: string;
+  metrics?: Record<string, unknown>;
   members?: string[];
   is_owner?: boolean;
   client_uid?: string;
@@ -191,7 +195,11 @@ class WebSocketService {
 
   sendMessage(message: object) {
     if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify(message));
+      const outgoing = { ...message } as Record<string, unknown>;
+      if (outgoing.type === 'text-input' && typeof outgoing.request_id === 'string') {
+        outgoing.client_websocket_send_ms = markWebSocketSend(outgoing.request_id);
+      }
+      this.ws.send(JSON.stringify(outgoing));
     } else {
       const messageType = 'type' in message ? String(message.type) : 'unknown';
       console.warn('WebSocket is not open. Unable to send message type:', messageType);

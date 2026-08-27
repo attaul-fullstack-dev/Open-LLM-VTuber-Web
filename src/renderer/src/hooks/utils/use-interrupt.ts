@@ -4,8 +4,10 @@ import { useChatHistory } from '@/context/chat-history-context';
 import { audioTaskQueue } from '@/utils/task-queue';
 import { useSubtitle } from '@/context/subtitle-context';
 import { useAudioTask } from './use-audio-task';
+import { useTranslation } from 'react-i18next';
 
 export const useInterrupt = () => {
+  const { t } = useTranslation();
   const { aiState, setAiState } = useAiState();
   const { sendMessage } = useWebSocket();
   const { fullResponse, clearResponse } = useChatHistory();
@@ -32,7 +34,7 @@ export const useInterrupt = () => {
 
     clearResponse();
 
-    if (subtitleText === 'Thinking...') {
+    if (subtitleText === t('aiState.thinking-speaking')) {
       setSubtitleText('');
     }
     console.log('Interrupted!');
