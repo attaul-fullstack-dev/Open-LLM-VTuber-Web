@@ -169,7 +169,9 @@ function AppContent(): JSX.Element {
               </Box>
               <Box
                 {...layoutStyles.footer}
-                zIndex={10}
+                // Keep the fixed mobile controls above the interactive
+                // Live2D canvas so their touch events are never intercepted.
+                zIndex={50}
                 {...(isFooterCollapsed && layoutStyles.collapsedFooter)}
               >
                 <Footer

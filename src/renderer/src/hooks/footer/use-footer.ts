@@ -17,6 +17,7 @@ export const useFooter = () => {
     handleSend,
     handleFileSelect,
     attachmentCount,
+    inputRef,
   } = useTextInput();
 
   const { interrupt } = useInterrupt();
@@ -55,6 +56,7 @@ export const useFooter = () => {
     handleSend,
     handleFileSelect,
     attachmentCount,
+    inputRef,
     handleInterrupt,
     handleMicToggle,
     micOn,

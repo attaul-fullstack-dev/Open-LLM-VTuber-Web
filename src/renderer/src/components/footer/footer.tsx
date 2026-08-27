@@ -7,7 +7,9 @@ import {
 } from 'react-icons/bs';
 import { IoHandRightSharp } from 'react-icons/io5';
 import { FiChevronDown } from 'react-icons/fi';
-import { memo, useRef, useState } from 'react';
+import {
+  memo, RefObject, useRef, useState,
+} from 'react';
 import { FiSend } from 'react-icons/fi';
 import { useTranslation } from 'react-i18next';
 import { InputGroup } from '@/components/ui/input-group';
@@ -45,6 +47,7 @@ interface MessageInputProps {
   onSoundToggle?: () => void
   onFileSelect?: (files: FileList | null) => void
   attachmentCount?: number
+  inputRef: RefObject<HTMLTextAreaElement>
 }
 
 // Reusable components
@@ -105,6 +108,7 @@ const MessageInput = memo(({
   onSoundToggle,
   onFileSelect,
   attachmentCount = 0,
+  inputRef,
 }: MessageInputProps) => {
   const { t } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -149,6 +153,7 @@ const MessageInput = memo(({
           }}
         />
         <Textarea
+          ref={inputRef}
           rows={1}
           value={value}
           onChange={onChange}
@@ -198,6 +203,7 @@ function Footer({ isCollapsed = false, onToggle }: FooterProps): JSX.Element {
     handleSend,
     handleFileSelect,
     attachmentCount,
+    inputRef,
   } = useFooter();
 
   const handleSoundToggle = () => {
@@ -233,6 +239,7 @@ function Footer({ isCollapsed = false, onToggle }: FooterProps): JSX.Element {
             onCompositionEnd={handleCompositionEnd}
             onFileSelect={handleFileSelect}
             attachmentCount={attachmentCount}
+            inputRef={inputRef}
           />
         </HStack>
       </Box>
@@ -257,14 +264,13 @@ function Footer({ isCollapsed = false, onToggle }: FooterProps): JSX.Element {
             onSoundToggle={handleSoundToggle}
             onFileSelect={handleFileSelect}
             attachmentCount={attachmentCount}
+            inputRef={inputRef}
           />
           <IconButton
             aria-label="Send message"
             bg="purple.500"
-            disabled={!inputValue.trim() && attachmentCount === 0}
             {...footerStyles.footer.actionButton}
             onClick={handleSend}
-            _disabled={{ opacity: 0.42, cursor: 'default' }}
           >
             <FiSend size="21" />
           </IconButton>

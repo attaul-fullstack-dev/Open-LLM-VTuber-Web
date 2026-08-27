@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useWebSocket } from '@/context/websocket-context';
 import { useAiState } from '@/context/ai-state-context';
 import { useInterrupt } from '@/components/canvas/live2d';
@@ -13,6 +13,8 @@ export function useTextInput() {
     source: 'upload'; data: string; mime_type: string;
   }>>([]);
   const [isComposing, setIsComposing] = useState(false);
+  const isSendingRef = useRef(false);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const wsContext = useWebSocket();
   const { aiState } = useAiState();
   const { interrupt } = useInterrupt();
@@ -25,28 +27,60 @@ export function useTextInput() {
   };
 
   const handleSend = async () => {
-    if ((!inputText.trim() && uploadedImages.length === 0) || !wsContext) return;
+    // On some Android keyboards the displayed textarea value can be one
+    // render behind React state at the instant the send button is tapped.
+    // Read the native element as a fallback so a visible draft is never lost.
+    const text = inputText.trim() || inputRef.current?.value.trim() || '';
+    if (
+      (!text && uploadedImages.length === 0)
+      || !wsContext
+      || isSendingRef.current
+    ) return;
     if (aiState === 'thinking-speaking') {
       interrupt();
     }
 
-    const timing = startChatLatency();
-    const capturedImages = await captureAllMedia();
-    const images = [...capturedImages, ...uploadedImages];
-    const text = inputText.trim() || 'Describe this image.';
+    isSendingRef.current = true;
+    // Everything after this point is inside try/finally so the send lock can
+    // never stay stuck: an unexpected throw (e.g. startChatLatency outside a
+    // secure context) would otherwise make every later send a silent no-op.
+    try {
+      const timing = startChatLatency();
+      const messageText = text || 'Describe this image.';
 
-    appendHumanMessage(text);
-    wsContext.sendMessage({
-      type: 'text-input',
-      text,
-      images,
-      request_id: timing.requestId,
-      client_user_send_ms: timing.clientUserSendMs,
-    });
+      appendHumanMessage(messageText);
+      if (autoStopMic) stopMic();
+      setInputText('');
+      if (inputRef.current) inputRef.current.value = '';
+      setUploadedImages([]);
 
-    if (autoStopMic) stopMic();
-    setInputText('');
-    setUploadedImages([]);
+      // A camera or screen track can stall on some mobile browsers. The text
+      // message must remain sendable even when an optional frame cannot be read.
+      let capturedImages: Array<{
+        source: 'camera' | 'screen'; data: string; mime_type: string;
+      }> = [];
+      try {
+        capturedImages = await Promise.race([
+          captureAllMedia(),
+          new Promise<Array<{
+            source: 'camera' | 'screen'; data: string; mime_type: string;
+          }>>((resolve) => {
+            window.setTimeout(() => resolve([]), 1200);
+          }),
+        ]);
+      } catch (error) {
+        console.warn('Optional media capture failed; sending text without it.', error);
+      }
+      wsContext.sendMessage({
+        type: 'text-input',
+        text: messageText,
+        images: [...capturedImages, ...uploadedImages],
+        request_id: timing.requestId,
+        client_user_send_ms: timing.clientUserSendMs,
+      });
+    } finally {
+      isSendingRef.current = false;
+    }
   };
 
   const handleFileSelect = async (files: FileList | null) => {
@@ -85,6 +119,7 @@ export function useTextInput() {
     handleSend,
     handleFileSelect,
     attachmentCount: uploadedImages.length,
+    inputRef,
     handleKeyPress,
     handleCompositionStart,
     handleCompositionEnd,

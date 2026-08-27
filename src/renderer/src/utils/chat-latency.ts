@@ -11,8 +11,28 @@ const requests = new Map<string, FrontendLatency>();
 const recent: Array<{ ttft: number; total: number }> = [];
 const MAX_RECENT = 20;
 
+// crypto.randomUUID is only available in secure contexts (https or
+// localhost). The desktop backend is usually reached over plain http via a
+// LAN address (e.g. http://192.168.1.5:12393), where it is undefined and
+// would throw on every send. Fall back to a Math.random-based UUID so
+// request IDs keep working outside secure contexts.
+function generateRequestId(): string {
+  try {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+  } catch {
+    // fall through to the fallback below
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (char) => {
+    const random = (Math.random() * 16) | 0;
+    const value = char === 'x' ? random : (random & 0x3) | 0x8;
+    return value.toString(16);
+  });
+}
+
 export function startChatLatency() {
-  const requestId = crypto.randomUUID();
+  const requestId = generateRequestId();
   requests.set(requestId, {
     requestId,
     userSendPerfMs: performance.now(),
