@@ -5,7 +5,7 @@
 /* eslint-disable import/order */
 /* eslint-disable import/no-extraneous-dependencies */
 /* eslint-disable react/require-default-props */
-import { Box, Spinner, Flex, Text, Icon } from '@chakra-ui/react';
+import { Box, Spinner, Flex, Text, Icon, Button } from '@chakra-ui/react';
 import { sidebarStyles, chatPanelStyles } from './sidebar-styles';
 import { MainContainer, ChatContainer, MessageList as ChatMessageList, Message as ChatMessage, Avatar as ChatAvatar } from '@chatscope/chat-ui-kit-react';
 import '@chatscope/chat-ui-kit-styles/dist/default/styles.min.css';
@@ -15,6 +15,9 @@ import { useConfig } from '@/context/character-config-context';
 import { useWebSocket } from '@/context/websocket-context';
 import { FaTools, FaCheck, FaTimes } from 'react-icons/fa';
 import { useTranslation } from 'react-i18next';
+import { useEffect, useMemo, useState } from 'react';
+
+const MESSAGE_RENDER_BATCH = 48;
 
 const cleanDisplayText = (value: string) => value
   .replace(/\[[a-z][a-z0-9_-]*\]\s*/gi, '')
@@ -26,16 +29,31 @@ const cleanDisplayText = (value: string) => value
 // Main component
 function ChatHistoryPanel(): JSX.Element {
   const { t } = useTranslation();
-  const { messages } = useChatHistory(); // Get messages directly from context
+  const { messages, currentHistoryUid } = useChatHistory(); // Get messages directly from context
   const { confName } = useConfig();
   const { baseUrl } = useWebSocket();
   const userName = "Me";
 
-  const validMessages = messages.filter((msg) => msg.content || // Keep messages with content
+  const validMessages = useMemo(() => messages.filter((msg) => msg.content || // Keep messages with content
      (msg.type === 'tool_call_status' && msg.status === 'running') || // Keep running tools
      (msg.type === 'tool_call_status' && msg.status === 'completed') || // Keep completed tools
      (msg.type === 'tool_call_status' && msg.status === 'error'), // Keep error tools
-  );
+  ), [messages]);
+  const [visibleMessageCount, setVisibleMessageCount] = useState(MESSAGE_RENDER_BATCH);
+
+  // A different conversation should start light, even when its transcript is huge.
+  useEffect(() => {
+    setVisibleMessageCount(MESSAGE_RENDER_BATCH);
+  }, [currentHistoryUid]);
+
+  const hasOlderMessages = validMessages.length > visibleMessageCount;
+  const renderedMessages = hasOlderMessages
+    ? validMessages.slice(-visibleMessageCount)
+    : validMessages;
+
+  const loadOlderMessages = () => {
+    setVisibleMessageCount((current) => Math.min(current + MESSAGE_RENDER_BATCH, validMessages.length));
+  };
 
   return (
     <Box
@@ -47,6 +65,19 @@ function ChatHistoryPanel(): JSX.Element {
       <MainContainer>
         <ChatContainer>
           <ChatMessageList>
+            {hasOlderMessages && (
+              <Box display="flex" justifyContent="center" py="2">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  color="whiteAlpha.800"
+                  _hover={{ bg: 'whiteAlpha.100', color: 'white' }}
+                  onClick={loadOlderMessages}
+                >
+                  Muat pesan lama
+                </Button>
+              </Box>
+            )}
             {validMessages.length === 0 ? (
               <Box
                 display="flex"
@@ -59,7 +90,7 @@ function ChatHistoryPanel(): JSX.Element {
                 {t('sidebar.noMessages')}
               </Box>
             ) : (
-              validMessages.map((msg) => {
+              renderedMessages.map((msg) => {
                 // Check if it's a tool call message
                 if (msg.type === 'tool_call_status') {
                   return (

@@ -38,8 +38,10 @@ export const sidebarStyles = {
       top: 0,
       height: '100%',
       width: { base: '100vw', lg: '440px' },
-      bg: 'rgba(17, 24, 39, .96)',
-      backdropFilter: 'blur(20px)',
+      // Blur across a full-screen Live2D canvas is expensive on mobile while scrolling.
+      // The almost-opaque background preserves the same visual separation without GPU jank.
+      bg: 'rgba(17, 24, 39, .985)',
+      backdropFilter: { base: 'none', lg: 'blur(12px)' },
       transform: isCollapsed
         ? 'translateX(calc(-100% + 24px))'
         : 'translateX(0)',
