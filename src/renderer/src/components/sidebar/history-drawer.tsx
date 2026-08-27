@@ -65,10 +65,14 @@ const HistoryItem = memo(({
     <Box
       {...sidebarStyles.historyDrawer.historyItem}
       {...(isSelected ? sidebarStyles.historyDrawer.historyItemSelected : {})}
-      onClick={onSelect}
     >
       <Box {...sidebarStyles.historyDrawer.historyBody}>
-        <Box minW="0" flex="1">
+        <Box
+          minW="0"
+          flex="1"
+          cursor="pointer"
+          onClick={onSelect}
+        >
           <Box {...sidebarStyles.historyDrawer.title}>
             {cleanDisplayText(displayTitle)}
           </Box>
@@ -90,7 +94,6 @@ const HistoryItem = memo(({
               aria-label="Conversation actions"
               title="Conversation actions"
               {...sidebarStyles.historyDrawer.moreButton}
-              onClick={(event) => event.stopPropagation()}
             >
               <FiMoreVertical />
             </IconButton>

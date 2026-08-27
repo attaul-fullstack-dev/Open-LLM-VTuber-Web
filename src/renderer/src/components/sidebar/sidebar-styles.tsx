@@ -196,7 +196,6 @@ export const sidebarStyles = {
       borderRadius: 'xl',
       bg: 'rgba(255,255,255,.045)',
       border: '1px solid rgba(255,255,255,.06)',
-      cursor: 'pointer',
       transition: 'all 0.2s',
       _hover: {
         bg: 'rgba(255,255,255,.075)',
@@ -215,7 +214,7 @@ export const sidebarStyles = {
     },
     timestamp: {
       fontSize: '11px',
-      color: 'whiteAlpha.500',
+      color: 'rgba(255,255,255,.58)',
       mt: 1,
     },
     deleteButton: {
@@ -252,7 +251,7 @@ export const sidebarStyles = {
     messagePreview: {
       fontSize: '13px',
       lineHeight: '1.35',
-      color: 'whiteAlpha.650',
+      color: 'rgba(255,255,255,.72)',
       noOfLines: 2,
       overflow: 'hidden',
       textOverflow: 'ellipsis',
@@ -272,6 +271,7 @@ export const sidebarStyles = {
       borderColor: 'whiteAlpha.200',
       minW: '190px',
       boxShadow: 'xl',
+      zIndex: 1800,
     },
     drawer: {
       content: {
@@ -607,11 +607,25 @@ export const chatPanelStyles = css`
     color: white !important;
     width: 30px !important;
     min-width: 30px !important;
+    max-width: 30px !important;
     height: 30px !important;
+    min-height: 30px !important;
+    max-height: 30px !important;
+    flex: 0 0 30px !important;
+    aspect-ratio: 1 / 1 !important;
     font-size: 13px !important;
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
+    border-radius: 50% !important;
+    overflow: hidden !important;
+  }
+
+  .cs-avatar img,
+  .cs-avatar__image {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
     border-radius: 50% !important;
   }
 
