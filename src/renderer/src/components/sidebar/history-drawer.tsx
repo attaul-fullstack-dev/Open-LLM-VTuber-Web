@@ -101,18 +101,26 @@ const HistoryItem = memo(({
           <Portal>
             <Menu.Positioner>
               <Menu.Content {...sidebarStyles.historyDrawer.menuContent}>
-                <Menu.Item value="rename" onClick={onRename}>
+                <Menu.Item
+                  value="rename"
+                  {...sidebarStyles.historyDrawer.menuItem}
+                  onClick={onRename}
+                >
                   <FiEdit2 />
                   {t('history.rename')}
                 </Menu.Item>
-                <Menu.Item value="compact" onClick={onCompact}>
+                <Menu.Item
+                  value="compact"
+                  {...sidebarStyles.historyDrawer.menuItem}
+                  onClick={onCompact}
+                >
                   <FiArchive />
                   {t('history.compact')}
                 </Menu.Item>
                 <Menu.Item
                   value="delete"
                   disabled={isDeleteDisabled}
-                  color="red.300"
+                  {...sidebarStyles.historyDrawer.menuItemDanger}
                   onClick={onDelete}
                 >
                   <FiTrash2 />

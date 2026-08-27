@@ -262,8 +262,11 @@ export const sidebarStyles = {
       width: '36px',
       height: '36px',
       borderRadius: 'full',
+      bg: 'transparent',
       color: 'whiteAlpha.600',
       _hover: { color: 'white', bg: 'whiteAlpha.100' },
+      _active: { color: 'white', bg: 'whiteAlpha.100' },
+      _expanded: { color: 'white', bg: 'whiteAlpha.100' },
     },
     menuContent: {
       bg: 'gray.800',
@@ -272,6 +275,25 @@ export const sidebarStyles = {
       minW: '190px',
       boxShadow: 'xl',
       zIndex: 1800,
+    },
+    menuItem: {
+      color: 'rgba(255,255,255,.92)',
+      bg: 'transparent',
+      _highlighted: {
+        color: 'white',
+        bg: 'whiteAlpha.100',
+      },
+    },
+    menuItemDanger: {
+      color: 'red.300',
+      bg: 'transparent',
+      _highlighted: {
+        color: 'red.200',
+        bg: 'rgba(239,68,68,.12)',
+      },
+      _disabled: {
+        opacity: 0.4,
+      },
     },
     drawer: {
       content: {
