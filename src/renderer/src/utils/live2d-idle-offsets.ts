@@ -43,12 +43,14 @@ export const ZERO_OFFSET: IdleOffsetAdditive = Object.freeze({
  * anyway, so even a hard drag cannot push the parameter past its range.
  */
 export const IDLE_OFFSET_RANGES: Required<IdleOffsetAdditive> = {
-  AngleX: 9,
-  AngleY: 5.4,
-  AngleZ: 6,
-  BodyAngleX: 1.2,
-  EyeBallX: 0.25,
-  EyeBallY: 0.25,
+  // Deliberately lively: big enough to be clearly visible on a phone, still
+  // well inside mao_pro's parameter ranges (Angle ±30, BodyAngle ±10, Eye ±1).
+  AngleX: 16,
+  AngleY: 10,
+  AngleZ: 14,
+  BodyAngleX: 3.5,
+  EyeBallX: 0.5,
+  EyeBallY: 0.5,
 };
 
 export type IdleSuppressionKind = 'speaking' | 'drag' | 'motion';
@@ -109,18 +111,20 @@ export interface IdleAction {
  * `id` doubles as the anti-repetition key so `head_left, head_left` is unlikely.
  */
 export const IDLE_ACTIONS: IdleAction[] = [
-  { id: 'head_left', target: { AngleX: 1 } },
-  { id: 'head_right', target: { AngleX: -1 } },
-  { id: 'head_tilt_left', target: { AngleZ: 1 } },
-  { id: 'head_tilt_right', target: { AngleZ: -1 } },
-  { id: 'head_look_up', target: { AngleY: 1 } },
-  { id: 'head_look_down', target: { AngleY: -1 } },
-  { id: 'glance_left', target: { EyeBallX: 1 } },
-  { id: 'glance_right', target: { EyeBallX: -1 } },
-  { id: 'glance_up', target: { EyeBallY: 1 } },
-  { id: 'glance_down', target: { EyeBallY: -1 } },
-  { id: 'body_lean_left', target: { BodyAngleX: 1, AngleZ: 0.25 } },
-  { id: 'body_lean_right', target: { BodyAngleX: -1, AngleZ: -0.25 } },
+  // Whole-silhouette turns (head + body + eyes together) so the movement reads
+  // clearly; anti-repetition still prevents mechanical left-right-left cycles.
+  { id: 'look_left', target: { AngleX: 1, BodyAngleX: 1, EyeBallX: 1 } },
+  { id: 'look_right', target: { AngleX: -1, BodyAngleX: -1, EyeBallX: -1 } },
+  { id: 'tilt_left', target: { AngleZ: 1, AngleY: 0.3, EyeBallY: 0.4 } },
+  { id: 'tilt_right', target: { AngleZ: -1, AngleY: 0.3, EyeBallY: 0.4 } },
+  { id: 'look_up', target: { AngleY: 1, EyeBallY: 1, BodyAngleX: 0.5 } },
+  { id: 'look_down', target: { AngleY: -1, EyeBallY: -1 } },
+  { id: 'glance_left', target: { EyeBallX: 1, AngleX: 0.6 } },
+  { id: 'glance_right', target: { EyeBallX: -1, AngleX: -0.6 } },
+  { id: 'glance_up', target: { EyeBallY: 1, AngleY: 0.4 } },
+  { id: 'glance_down', target: { EyeBallY: -1, AngleY: -0.4 } },
+  { id: 'body_lean_left', target: { BodyAngleX: 1, AngleX: 0.5, AngleZ: 0.25 } },
+  { id: 'body_lean_right', target: { BodyAngleX: -1, AngleX: -0.5, AngleZ: -0.25 } },
 ];
 
 function clamp(value: number, min: number, max: number): number {
@@ -388,9 +392,9 @@ export class Live2DIdleOffsetController {
     for (const key of Object.keys(action.target) as (keyof IdleOffsetAdditive)[]) {
       const direction = action.target[key];
       if (!direction) continue;
-      // Subtle by design: primary param ≤ ~75% of the configured safe range,
-      // tiny fractions keep everything calm.
-      const mag = this.randBetween(0.3, 0.75) * this.ranges[key];
+      // Lively by design: primary param mostly 40–90% of the configured range
+      // so the movement is clearly visible without hitting parameter extremes.
+      const mag = this.randBetween(0.4, 0.9) * this.ranges[key];
       target[key] = clamp(direction * mag, -this.ranges[key], this.ranges[key]);
     }
     return target;
