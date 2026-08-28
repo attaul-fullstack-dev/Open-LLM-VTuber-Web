@@ -1,6 +1,5 @@
 /* eslint-disable import/no-extraneous-dependencies */
-import { Button, Stack, Text, Flex, Icon } from '@chakra-ui/react';
-import { FiTrash2 } from 'react-icons/fi';
+import { Button, Stack, Text } from '@chakra-ui/react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { settingStyles } from './setting-styles';
@@ -9,12 +8,11 @@ import { SwitchField, NumberField } from './common';
 import { useWebSocket } from '@/context/websocket-context';
 import { useChatHistory } from '@/context/chat-history-context';
 import { wsService, MessageEvent } from '@/services/websocket-service';
-
-interface CharacterMemoryItem {
-  text: string;
-  added_at: string;
-  explicit?: boolean;
-}
+import {
+  CharacterMemoryDialog,
+  CharacterMemoryItem,
+  CharacterMemoryLauncher,
+} from './character-memory-dialog';
 
 interface AgentProps {
   onSave?: (callback: () => void) => () => void
@@ -26,6 +24,7 @@ function Agent({ onSave, onCancel }: AgentProps): JSX.Element {
   const { sendMessage, wsState } = useWebSocket();
   const { currentHistoryUid } = useChatHistory();
   const [memories, setMemories] = useState<CharacterMemoryItem[]>([]);
+  const [memoryDialogOpen, setMemoryDialogOpen] = useState(false);
   const {
     settings,
     handleAllowProactiveSpeakChange,
@@ -84,54 +83,21 @@ function Agent({ onSave, onCancel }: AgentProps): JSX.Element {
         <Text fontSize="sm" color="fg.muted">
           {t('settings.agent.characterMemoryHelp')}
         </Text>
-        {memories.length === 0 ? (
-          <Text fontSize="sm" color="whiteAlpha.500">
-            {t('settings.agent.noCharacterMemory')}
-          </Text>
-        ) : (
-          <Stack gap={1}>
-            {memories.map((memory, index) => (
-              <Flex
-                key={`${memory.text}-${index}`}
-                justify="space-between"
-                align="center"
-                gap={2}
-                p={2}
-                borderRadius="md"
-                bg="whiteAlpha.50"
-              >
-                <Text fontSize="sm" color="whiteAlpha.900">
-                  {memory.text}
-                </Text>
-                <Button
-                  size="xs"
-                  variant="ghost"
-                  colorScheme="red"
-                  color="red.300"
-                  aria-label={t('settings.agent.forgetMemory')}
-                  onClick={() => sendMessage({
-                    type: 'delete-character-memory',
-                    text: memory.text,
-                  })}
-                >
-                  <Icon as={FiTrash2} />
-                </Button>
-              </Flex>
-            ))}
-          </Stack>
-        )}
-        <Button
-          colorPalette="red"
-          variant="outline"
-          disabled={wsState !== 'OPEN' || memories.length === 0}
-          onClick={() => {
-            if (window.confirm(t('settings.agent.resetMemoryConfirm'))) {
-              sendMessage({ type: 'reset-character-memory' });
-            }
-          }}
-        >
-          {t('settings.agent.resetMemory')}
-        </Button>
+        <CharacterMemoryLauncher
+          count={memories.length}
+          onClick={() => setMemoryDialogOpen(true)}
+        />
+        <CharacterMemoryDialog
+          memories={memories}
+          open={memoryDialogOpen}
+          disabled={wsState !== 'OPEN'}
+          onOpenChange={setMemoryDialogOpen}
+          onDelete={(memory) => sendMessage({
+            type: 'delete-character-memory',
+            text: memory.text,
+          })}
+          onDeleteAll={() => sendMessage({ type: 'reset-character-memory' })}
+        />
       </Stack>
 
       <Stack gap={2} pt={4} borderTopWidth="1px" borderColor="whiteAlpha.200">

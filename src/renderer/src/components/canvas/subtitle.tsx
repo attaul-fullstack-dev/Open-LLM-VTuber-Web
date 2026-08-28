@@ -4,6 +4,7 @@ import { FiX } from 'react-icons/fi';
 import { canvasStyles } from './canvas-styles';
 import { useSubtitleDisplay } from '@/hooks/canvas/use-subtitle-display';
 import { useSubtitle } from '@/context/subtitle-context';
+import { cleanChatDisplayText } from '@/utils/clean-display-text';
 
 // Type definitions
 interface SubtitleTextProps {
@@ -24,11 +25,7 @@ const Subtitle = memo((): JSX.Element | null => {
   const { subtitleText, isLoaded } = useSubtitleDisplay();
   const { showSubtitle, subtitleDismissed, dismissSubtitle } = useSubtitle();
 
-  const cleanSubtitle = subtitleText
-    .replace(/\[[a-z][a-z0-9_-]*\]\s*/gi, '')
-    .replace(/\*([^*]+)\*/g, '$1')
-    .replace(/\s+/g, ' ')
-    .trim();
+  const cleanSubtitle = cleanChatDisplayText(subtitleText || '');
 
   if (!isLoaded || !cleanSubtitle || !showSubtitle || subtitleDismissed) return null;
 

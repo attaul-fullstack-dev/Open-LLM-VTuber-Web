@@ -28,6 +28,7 @@ import {
   getLastHistoryUid,
   setLastHistoryUid,
 } from '@/utils/history-storage';
+import { subtitlePlaybackCoordinator } from '@/utils/subtitle-playback';
 
 function WebSocketHandler({ children }: { children: React.ReactNode }) {
   const { t } = useTranslation();
@@ -82,9 +83,8 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
         // subtitle only carries real response text.
         setFirstTokenAt(null);
         audioTaskQueue.clearQueue();
-        // A response may arrive in several audio chunks. Reset the previous
-        // response before accepting the first chunk of this new turn.
-        window.dispatchEvent(new Event('olv:subtitle-response-start'));
+        // Invalidate any late playback event from the previous response.
+        subtitlePlaybackCoordinator.startResponse();
         startSubtitleResponse();
         clearResponse();
         break;

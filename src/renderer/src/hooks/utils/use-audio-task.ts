@@ -12,10 +12,8 @@ import { toaster } from '@/components/ui/toaster';
 import { useWebSocket } from '@/context/websocket-context';
 import { DisplayText } from '@/services/websocket-service';
 import { useLive2DExpression } from '@/hooks/canvas/use-live2d-expression';
+import { subtitlePlaybackCoordinator } from '@/utils/subtitle-playback';
 import * as LAppDefine from '../../../WebSDK/src/lappdefine';
-
-// Simple type alias for Live2D model
-type Live2DModel = any;
 
 interface AudioTaskOptions {
   audioBase64: string
@@ -37,16 +35,6 @@ export const useAudioTask = () => {
   const { appendResponse, appendAIMessage } = useChatHistory();
   const { sendMessage } = useWebSocket();
   const { setExpression } = useLive2DExpression();
-  const responseSubtitleRef = useRef('');
-
-  useEffect(() => {
-    const resetResponseSubtitle = () => {
-      responseSubtitleRef.current = '';
-    };
-
-    window.addEventListener('olv:subtitle-response-start', resetResponseSubtitle);
-    return () => window.removeEventListener('olv:subtitle-response-start', resetResponseSubtitle);
-  }, []);
 
   // State refs to avoid stale closures
   const stateRef = useRef({
@@ -94,17 +82,15 @@ export const useAudioTask = () => {
     }
 
     const { audioBase64, displayText, expressions, forwarded } = options;
+    const subtitleTicket = displayText
+      ? subtitlePlaybackCoordinator.createSegment(displayText.text)
+      : null;
 
-    // Update display text
+    // History is independent from playback presentation and still receives
+    // every generated segment exactly as before.
     if (displayText) {
       appendText(displayText.text);
       appendAI(displayText.text, displayText.name, displayText.avatar);
-      if (audioBase64 && !isSubtitleDismissed) {
-        responseSubtitleRef.current = responseSubtitleRef.current
-          ? `${responseSubtitleRef.current} ${displayText.text}`
-          : displayText.text;
-        updateSubtitle(responseSubtitleRef.current);
-      }
       if (!forwarded) {
         sendMessage({
           type: "audio-play-start",
@@ -119,6 +105,10 @@ export const useAudioTask = () => {
       if (audioBase64) {
         if (audioManager.isMuted()) {
           console.log('[AudioManager] Voice playback skipped because sound is muted');
+          if (subtitleTicket && !isSubtitleDismissed) {
+            const subtitle = subtitlePlaybackCoordinator.activateWithoutPlayback(subtitleTicket);
+            if (subtitle !== null) updateSubtitle(subtitle);
+          }
           resolve();
           return;
         }
@@ -221,7 +211,16 @@ export const useAudioTask = () => {
               console.warn('WavFileHandler start skipped - audio was stopped');
             }
           }
-        });
+        }, { once: true });
+
+        audio.addEventListener('playing', () => {
+          // A queued or synthesized future segment must never replace the
+          // subtitle for audio that is currently being spoken.
+          if (subtitleTicket && !stateRef.current.subtitleDismissed) {
+            const subtitle = subtitlePlaybackCoordinator.activateForPlayback(subtitleTicket);
+            if (subtitle !== null) stateRef.current.setSubtitleText(subtitle);
+          }
+        }, { once: true });
 
         audio.addEventListener('ended', () => {
           console.log("Audio playback completed");
@@ -235,6 +234,10 @@ export const useAudioTask = () => {
 
         audio.load();
       } else {
+        if (subtitleTicket && !isSubtitleDismissed) {
+          const subtitle = subtitlePlaybackCoordinator.activateWithoutPlayback(subtitleTicket);
+          if (subtitle !== null) updateSubtitle(subtitle);
+        }
         resolve();
       }
     } catch (error) {
@@ -258,7 +261,6 @@ export const useAudioTask = () => {
         stopCurrentAudioAndLipSync();
         sendMessage({ type: "frontend-playback-complete" });
         setBackendSynthComplete(false);
-        responseSubtitleRef.current = '';
       }
     };
 

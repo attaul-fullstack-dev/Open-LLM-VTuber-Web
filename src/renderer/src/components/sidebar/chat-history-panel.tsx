@@ -16,15 +16,9 @@ import { useWebSocket } from '@/context/websocket-context';
 import { FaTools, FaCheck, FaTimes } from 'react-icons/fa';
 import { useTranslation } from 'react-i18next';
 import { useEffect, useMemo, useState } from 'react';
+import { cleanChatDisplayText } from '@/utils/clean-display-text';
 
 const MESSAGE_RENDER_BATCH = 48;
-
-const cleanDisplayText = (value: string) => value
-  .replace(/\[[a-z][a-z0-9_-]*\]\s*/gi, '')
-  .replace(/\*([^*]+)\*/g, '$1')
-  .replace(/([.!?])(?=[A-Z])/g, '$1 ')
-  .replace(/\s+/g, ' ')
-  .trim();
 
 // Main component
 function ChatHistoryPanel(): JSX.Element {
@@ -138,7 +132,7 @@ function ChatHistoryPanel(): JSX.Element {
                   <ChatMessage
                     key={msg.id}
                     model={{
-                      message: cleanDisplayText(msg.content),
+                      message: cleanChatDisplayText(msg.content),
                       sentTime: msg.timestamp,
                       sender: msg.role === 'ai'
                         ? (msg.name || confName || 'AI')

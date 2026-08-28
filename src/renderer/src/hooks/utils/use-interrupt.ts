@@ -4,15 +4,14 @@ import { useChatHistory } from '@/context/chat-history-context';
 import { audioTaskQueue } from '@/utils/task-queue';
 import { useSubtitle } from '@/context/subtitle-context';
 import { useAudioTask } from './use-audio-task';
-import { useTranslation } from 'react-i18next';
+import { subtitlePlaybackCoordinator } from '@/utils/subtitle-playback';
 
 export const useInterrupt = () => {
-  const { t } = useTranslation();
   const { aiState, setAiState } = useAiState();
   const { sendMessage } = useWebSocket();
   const { fullResponse, clearResponse } = useChatHistory();
   // const { currentModel } = useLive2DModel();
-  const { subtitleText, setSubtitleText } = useSubtitle();
+  const { setSubtitleText } = useSubtitle();
   const { stopCurrentAudioAndLipSync } = useAudioTask();
 
   const interrupt = (sendSignal = true) => {
@@ -21,6 +20,7 @@ export const useInterrupt = () => {
 
     stopCurrentAudioAndLipSync();
 
+    subtitlePlaybackCoordinator.cancelResponse();
     audioTaskQueue.clearQueue();
 
     setAiState('interrupted');
@@ -34,9 +34,8 @@ export const useInterrupt = () => {
 
     clearResponse();
 
-    if (subtitleText === t('aiState.thinking-speaking')) {
-      setSubtitleText('');
-    }
+    // No cancelled segment may remain visible or become visible later.
+    setSubtitleText('');
     console.log('Interrupted!');
   };
 

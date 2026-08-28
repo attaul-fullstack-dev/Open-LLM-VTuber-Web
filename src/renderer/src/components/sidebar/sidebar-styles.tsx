@@ -572,7 +572,7 @@ export const sidebarStyles = {
 export const chatPanelStyles = css`
   .cs-message-list {
     background: var(--chakra-colors-gray-900) !important;
-    padding: 10px 12px 18px !important;
+    padding: 12px 10px 22px !important;
   }
   
   .cs-message {
@@ -583,10 +583,10 @@ export const chatPanelStyles = css`
     background-color: rgba(255, 255, 255, .095) !important;
     border: 1px solid rgba(255, 255, 255, .055) !important;
     border-radius: 18px 18px 18px 6px !important;
-    padding: 10px 13px !important;
+    padding: 11px 14px !important;
     color: var(--chakra-colors-white) !important;
     font-size: 0.94rem !important;
-    line-height: 1.42 !important;
+    line-height: 1.5 !important;
     margin-top: 0 !important;
     box-shadow: 0 3px 12px rgba(0, 0, 0, .1) !important;
   }
@@ -595,6 +595,7 @@ export const chatPanelStyles = css`
     padding: 0 !important;
     white-space: pre-wrap !important;
     overflow-wrap: anywhere !important;
+    word-break: break-word !important;
   }
 
   .cs-message--outgoing .cs-message__content {
@@ -622,8 +623,9 @@ export const chatPanelStyles = css`
   }
 
   .cs-message__content-wrapper {
-    max-width: 82% !important;
-    margin: 0 7px !important;
+    max-width: min(84%, 680px) !important;
+    margin: 0 6px !important;
+    min-width: 0 !important;
   }
 
   .cs-avatar {
@@ -672,6 +674,31 @@ export const chatPanelStyles = css`
 
     .cs-message__content-wrapper {
       max-width: 80% !important;
+    }
+  }
+
+  @media (max-width: 430px) {
+    .cs-message-list {
+      padding-inline: 8px !important;
+    }
+
+    .cs-message {
+      margin: 7px 0 !important;
+    }
+
+    .cs-message__content-wrapper {
+      max-width: calc(100% - 48px) !important;
+      margin-inline: 5px !important;
+    }
+
+    .cs-message__content {
+      padding: 11px 13px !important;
+      border-radius: 17px 17px 17px 6px !important;
+      font-size: .95rem !important;
+    }
+
+    .cs-message--outgoing .cs-message__content {
+      border-radius: 17px 17px 6px 17px !important;
     }
   }
 `;
