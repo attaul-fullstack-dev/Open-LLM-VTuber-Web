@@ -7,8 +7,8 @@ import { LAppDelegate } from '../../../WebSDK/src/lappdelegate';
 import { useMode } from '@/context/mode-context';
 
 // Constants for model scaling behavior
-const MIN_SCALE = 0.8;
-const MAX_SCALE = 2.0;
+const MIN_SCALE = 0.5;
+const MAX_SCALE = 4.5;
 const EASING_FACTOR = 0.3; // Controls animation smoothness
 const WHEEL_SCALE_STEP = 0.03; // Scale change per wheel tick
 const DEFAULT_SCALE = 1.0; // Default scale if not specified
@@ -236,17 +236,66 @@ export const useLive2DResize = ({
     }
   }, [showSidebar, handleResize]);
 
-  // Set up event listeners and cleanup for wheel scaling
+  // --- Pinch-to-zoom (touch) ---
+  const activePointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
+  const pinchStateRef = useRef<{ active: boolean; startDist: number; startScale: number } | null>(null);
+
+  const handlePinchPointerDown = useCallback((e: PointerEvent) => {
+    activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (activePointersRef.current.size === 2) {
+      const [a, b] = [...activePointersRef.current.values()];
+      pinchStateRef.current = {
+        active: true,
+        startDist: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)),
+        startScale: lastScaleRef.current,
+      };
+    }
+  }, []);
+
+  const handlePinchPointerMove = useCallback((e: PointerEvent) => {
+    if (!activePointersRef.current.has(e.pointerId)) return;
+    activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const pinch = pinchStateRef.current;
+    if (!pinch?.active || activePointersRef.current.size < 2) return;
+    const [a, b] = [...activePointersRef.current.values()];
+    const dist = Math.max(1, Math.hypot(a.x - b.x, a.y - b.y));
+    const next = Math.max(
+      MIN_SCALE,
+      Math.min(MAX_SCALE, pinch.startScale * (dist / pinch.startDist)),
+    );
+    targetScaleRef.current = next;
+    lastScaleRef.current = next;
+    applyScale(next);
+  }, []);
+
+  const handlePinchPointerEnd = useCallback((e: PointerEvent) => {
+    activePointersRef.current.delete(e.pointerId);
+    if (activePointersRef.current.size < 2) {
+      pinchStateRef.current = null;
+    }
+  }, []);
+
+  // Set up event listeners and cleanup for wheel + pinch scaling
   useEffect(() => {
     const canvasElement = canvasRef.current;
     if (canvasElement) {
       canvasElement.addEventListener('wheel', handleWheel, { passive: false });
+      canvasElement.addEventListener('pointerdown', handlePinchPointerDown);
+      canvasElement.addEventListener('pointermove', handlePinchPointerMove);
+      canvasElement.addEventListener('pointerup', handlePinchPointerEnd);
+      canvasElement.addEventListener('pointercancel', handlePinchPointerEnd);
       return () => {
         canvasElement.removeEventListener('wheel', handleWheel);
+        canvasElement.removeEventListener('pointerdown', handlePinchPointerDown);
+        canvasElement.removeEventListener('pointermove', handlePinchPointerMove);
+        canvasElement.removeEventListener('pointerup', handlePinchPointerEnd);
+        canvasElement.removeEventListener('pointercancel', handlePinchPointerEnd);
+        activePointersRef.current.clear();
+        pinchStateRef.current = null;
       };
     }
     return undefined;
-  }, [handleWheel, canvasRef]);
+  }, [handleWheel, handlePinchPointerDown, handlePinchPointerMove, handlePinchPointerEnd, canvasRef]);
 
   // Clean up animations on unmount
   useEffect(() => () => {

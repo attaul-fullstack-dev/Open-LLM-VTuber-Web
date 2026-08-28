@@ -147,7 +147,7 @@ export const Live2D = memo(
 
     const handlePointerDown = (e: React.PointerEvent) => {
       showTapFlashGuard();
-      handlers.onMouseDown(e);
+      handlers.onPointerDown(e);
     };
 
     const handleContextMenu = (e: React.MouseEvent) => {
@@ -214,7 +214,7 @@ export const Live2D = memo(
         />
         {!isPet && (
           <VStack
-            display={{ base: "flex", lg: "none" }}
+            display="flex"
             position="absolute"
             right="14px"
             top="76px"
