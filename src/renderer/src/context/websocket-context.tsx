@@ -20,7 +20,8 @@ export interface HistoryInfo {
 }
 
 interface WebSocketContextProps {
-  sendMessage: (message: object) => void;
+  /** Returns true only when the payload was handed to an open socket. */
+  sendMessage: (message: object) => boolean;
   wsState: string;
   reconnect: () => void;
   wsUrl: string;

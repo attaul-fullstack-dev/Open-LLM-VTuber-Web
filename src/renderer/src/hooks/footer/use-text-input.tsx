@@ -48,12 +48,6 @@ export function useTextInput() {
       const timing = startChatLatency();
       const messageText = text || 'Describe this image.';
 
-      appendHumanMessage(messageText);
-      if (autoStopMic) stopMic();
-      setInputText('');
-      if (inputRef.current) inputRef.current.value = '';
-      setUploadedImages([]);
-
       // A camera or screen track can stall on some mobile browsers. The text
       // message must remain sendable even when an optional frame cannot be read.
       let capturedImages: Array<{
@@ -71,13 +65,22 @@ export function useTextInput() {
       } catch (error) {
         console.warn('Optional media capture failed; sending text without it.', error);
       }
-      wsContext.sendMessage({
+      const sent = wsContext.sendMessage({
         type: 'text-input',
         text: messageText,
         images: [...capturedImages, ...uploadedImages],
         request_id: timing.requestId,
         client_user_send_ms: timing.clientUserSendMs,
       });
+      // Never render a phantom user message. If the socket dropped, keep the
+      // draft and attachments intact so the user can resend after reconnect.
+      if (!sent) return;
+
+      appendHumanMessage(messageText);
+      if (autoStopMic) stopMic();
+      setInputText('');
+      if (inputRef.current) inputRef.current.value = '';
+      setUploadedImages([]);
     } finally {
       isSendingRef.current = false;
     }
