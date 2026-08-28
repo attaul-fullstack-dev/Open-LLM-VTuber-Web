@@ -39,6 +39,7 @@ import {
 
 import * as LAppDefine from "./lappdefine";
 import { getLive2DIdleApplyHook } from "./lapplive2didlehook";
+import { getLive2DIdleFacialHook } from "./lapplive2dfacialhook";
 import { frameBuffer, LAppDelegate } from "./lappdelegate";
 import { canvas, gl } from "./lappglmanager";
 import { LAppPal } from "./lapppal";
@@ -645,6 +646,18 @@ export class LAppModel extends CubismUserModel {
     }
     if (this.applyIdleOffsets) {
       this.applyIdleOffsets(this._model, deltaTimeSeconds);
+    }
+
+    // Stage 3 — autonomous idle facial micro-expressions. Runs AFTER the Stage
+    // 2 movement hook (and after physics/pose/breath/lipsync) so neither the
+    // movement offsets nor any earlier face-affecting system can overwrite it;
+    // it owns brows/mouth/eye-smile, never ParamA (lip-sync) nor the Stage 2
+    // movement params, so the two hooks coexist without fighting.
+    if (!this.applyIdleFacial) {
+      this.applyIdleFacial = getLive2DIdleFacialHook();
+    }
+    if (this.applyIdleFacial) {
+      this.applyIdleFacial(this._model, deltaTimeSeconds);
     }
 
     this._model.update();
@@ -1366,4 +1379,14 @@ export class LAppModel extends CubismUserModel {
    * expression and physics all keep working underneath.
    */
   public applyIdleOffsets: ((cubismModel: any, deltaTimeSeconds: number) => void) | null = null;
+
+  /**
+   * Stage 3 — Safe autonomous idle facial micro-expressions.
+   *
+   * Consumed by `LAppModel._update` after the Stage 2 movement hook. It owns
+   * facial parameters only (brows, mouth shape, eye-smile, blush) and never
+   * touches ParamA / lip-sync vowels or the Stage 2 movement parameters. When
+   * unset (no adapter mounted / unsupported character) behaves as a no-op.
+   */
+  public applyIdleFacial: ((cubismModel: any, deltaTimeSeconds: number) => void) | null = null;
 }

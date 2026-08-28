@@ -13,6 +13,7 @@ import { useLive2DResize } from "@/hooks/canvas/use-live2d-resize";
 import { useAiState, AiStateEnum } from "@/context/ai-state-context";
 import { useLive2DExpression } from "@/hooks/canvas/use-live2d-expression";
 import { useLive2DIdleBehavior } from "@/hooks/canvas/use-live2d-idle-behavior";
+import { useLive2DIdleFacial } from "@/hooks/canvas/use-live2d-idle-facial";
 import { useForceIgnoreMouse } from "@/hooks/utils/use-force-ignore-mouse";
 import { useMode } from "@/context/mode-context";
 
@@ -52,6 +53,14 @@ export const Live2D = memo(
     // `isMotionPlaying: false` because the looping Idle motion is the baseline we
     // additively layer under; real/non-idle motions suppress via setMotionSuppressed.
     useLive2DIdleBehavior({
+      isDragging,
+      isMotionPlaying: false,
+    });
+
+    // Stage 3 — autonomous idle facial micro-expressions. Owns facial params
+    // (brows/mouth/eye-smile/blush) plus an EyeOpen multiply; never touches
+    // lip-sync (ParamA) or Stage 2 movement parameters so both layers coexist.
+    useLive2DIdleFacial({
       isDragging,
       isMotionPlaying: false,
     });
