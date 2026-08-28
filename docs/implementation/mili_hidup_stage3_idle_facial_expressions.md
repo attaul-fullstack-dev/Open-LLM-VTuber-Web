@@ -16,7 +16,7 @@ Implemented, deterministic tests green, production build passing. Committed on i
 `005447a` (`feat: touch-reliable drag-to-move + deeper zoom`) — the latest committed FINAL Stage 2 frontend state.
 
 ## 5. Commit hash
-(see `git log` on the branch; inserted after commit)
+`92f07b0` on `mili-hidup-stage3-idle-emotions`
 
 ## 6. Files changed
 | File | Change |
