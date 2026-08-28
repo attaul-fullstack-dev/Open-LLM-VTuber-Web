@@ -12,6 +12,7 @@ import { useLive2DModel } from "@/hooks/canvas/use-live2d-model";
 import { useLive2DResize } from "@/hooks/canvas/use-live2d-resize";
 import { useAiState, AiStateEnum } from "@/context/ai-state-context";
 import { useLive2DExpression } from "@/hooks/canvas/use-live2d-expression";
+import { useLive2DIdleBehavior } from "@/hooks/canvas/use-live2d-idle-behavior";
 import { useForceIgnoreMouse } from "@/hooks/utils/use-force-ignore-mouse";
 import { useMode } from "@/context/mode-context";
 
@@ -46,6 +47,15 @@ export const Live2D = memo(
       modelInfo,
       canvasRef,
     });
+
+    // Stage 2 — safe autonomous idle movement when conversationally idle.
+    // `isMotionPlaying: false` because the looping Idle motion is the baseline we
+    // additively layer under; real/non-idle motions suppress via setMotionSuppressed.
+    const idleBehavior = useLive2DIdleBehavior({
+      isDragging,
+      isMotionPlaying: false,
+    });
+    void idleBehavior;
 
     // Setup hooks
     useIpcHandlers();

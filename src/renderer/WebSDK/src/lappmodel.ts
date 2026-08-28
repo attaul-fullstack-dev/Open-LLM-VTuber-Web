@@ -38,6 +38,7 @@ import {
 } from "@framework/utils/cubismdebug";
 
 import * as LAppDefine from "./lappdefine";
+import { getLive2DIdleApplyHook } from "./lapplive2didlehook";
 import { frameBuffer, LAppDelegate } from "./lappdelegate";
 import { canvas, gl } from "./lappglmanager";
 import { LAppPal } from "./lapppal";
@@ -600,6 +601,16 @@ export class LAppModel extends CubismUserModel {
     // ドラッグによる目の向きの調整
     this._model.addParameterValueById(this._idParamEyeBallX, this._dragX); // -1から1の値を加える
     this._model.addParameterValueById(this._idParamEyeBallY, this._dragY);
+
+    // 自動アイドルモーション用の加算オフセット（無ければ何もしない）
+    if (!this.applyIdleOffsets) {
+      // Auto-link the currently active idle hook so a freshly loaded model
+      // (character switch / reconnect) keeps the behavior without polling.
+      this.applyIdleOffsets = getLive2DIdleApplyHook();
+    }
+    if (this.applyIdleOffsets) {
+      this.applyIdleOffsets(this._model, deltaTimeSeconds);
+    }
 
     // 呼吸など
     if (this._breath != null) {
@@ -1342,4 +1353,15 @@ export class LAppModel extends CubismUserModel {
   _allMotionCount: number; // モーション総数
   _wavFileHandler: LAppWavFileHandler; //wavファイルハンドラ
   _consistency: boolean; // MOC3一貫性チェック管理用
+
+  /**
+   * Stage 2 — Safe autonomous idle motion.
+   *
+   * Optional per-frame additive offsets, consumed by the existing render loop
+   * right here. `null` (the default) keeps behavior identical to before; only
+   * the React idle-behavior adapter assigns a function. Each frame the offset
+   * is added to the head/body/eye parameters so breathing, drag, motion,
+   * expression and physics all keep working underneath.
+   */
+  public applyIdleOffsets: ((cubismModel: any, deltaTimeSeconds: number) => void) | null = null;
 }
