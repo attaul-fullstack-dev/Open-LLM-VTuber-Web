@@ -17,6 +17,7 @@ import { footerStyles } from './footer-styles';
 import AIStateIndicator from './ai-state-indicator';
 import { useFooter } from '@/hooks/footer/use-footer';
 import { audioManager } from '@/utils/audio-manager';
+import { useAvatarActivityState } from '@/context/avatar-activity-context';
 
 // Type definitions
 interface FooterProps {
@@ -191,6 +192,7 @@ MessageInput.displayName = 'MessageInput';
 // Main component
 function Footer({ isCollapsed = false, onToggle }: FooterProps): JSX.Element {
   const [soundOn, setSoundOn] = useState(() => !audioManager.isMuted());
+  const { endAllSpeaking } = useAvatarActivityState();
   const {
     inputValue,
     handleInputChange,
@@ -209,6 +211,7 @@ function Footer({ isCollapsed = false, onToggle }: FooterProps): JSX.Element {
   const handleSoundToggle = () => {
     const nextSoundOn = !soundOn;
     audioManager.setMuted(!nextSoundOn);
+    if (!nextSoundOn) endAllSpeaking();
     setSoundOn(nextSoundOn);
   };
 

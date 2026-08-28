@@ -31,6 +31,7 @@ import WebSocketStatus from "./components/canvas/ws-status";
 import Subtitle from "./components/canvas/subtitle";
 import ThinkingStatus from "./components/canvas/thinking-status";
 import { ModeProvider, useMode } from "./context/mode-context";
+import { AvatarActivityProvider } from "./context/avatar-activity-context";
 
 function AppContent(): JSX.Element {
   const [showSidebar, setShowSidebar] = useState(() => window.innerWidth >= 1024);
@@ -214,24 +215,26 @@ function AppWithGlobalStyles(): JSX.Element {
           <CharacterConfigProvider>
             <ChatHistoryProvider>
               <AiStateProvider>
-                <ProactiveSpeakProvider>
-                  <Live2DConfigProvider>
-                    <SubtitleProvider>
-                      <VADProvider>
-                        <BgUrlProvider>
-                          <GroupProvider>
-                            <BrowserProvider>
-                              <WebSocketHandler>
-                                <Toaster />
-                                <AppContent />
-                              </WebSocketHandler>
-                            </BrowserProvider>
-                          </GroupProvider>
-                        </BgUrlProvider>
-                      </VADProvider>
-                    </SubtitleProvider>
-                  </Live2DConfigProvider>
-                </ProactiveSpeakProvider>
+                <AvatarActivityProvider>
+                  <ProactiveSpeakProvider>
+                    <Live2DConfigProvider>
+                      <SubtitleProvider>
+                        <VADProvider>
+                          <BgUrlProvider>
+                            <GroupProvider>
+                              <BrowserProvider>
+                                <WebSocketHandler>
+                                  <Toaster />
+                                  <AppContent />
+                                </WebSocketHandler>
+                              </BrowserProvider>
+                            </GroupProvider>
+                          </BgUrlProvider>
+                        </VADProvider>
+                      </SubtitleProvider>
+                    </Live2DConfigProvider>
+                  </ProactiveSpeakProvider>
+                </AvatarActivityProvider>
               </AiStateProvider>
             </ChatHistoryProvider>
           </CharacterConfigProvider>

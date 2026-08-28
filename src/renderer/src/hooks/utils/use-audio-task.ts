@@ -14,6 +14,7 @@ import { DisplayText } from '@/services/websocket-service';
 import { useLive2DExpression } from '@/hooks/canvas/use-live2d-expression';
 import { subtitlePlaybackCoordinator } from '@/utils/subtitle-playback';
 import * as LAppDefine from '../../../WebSDK/src/lappdefine';
+import { useAvatarActivityState } from '@/context/avatar-activity-context';
 
 interface AudioTaskOptions {
   audioBase64: string
@@ -35,6 +36,7 @@ export const useAudioTask = () => {
   const { appendResponse, appendAIMessage } = useChatHistory();
   const { sendMessage } = useWebSocket();
   const { setExpression } = useLive2DExpression();
+  const { beginSpeaking, endAllSpeaking } = useAvatarActivityState();
 
   // State refs to avoid stale closures
   const stateRef = useRef({
@@ -60,7 +62,8 @@ export const useAudioTask = () => {
    */
   const stopCurrentAudioAndLipSync = useCallback(() => {
     audioManager.stopCurrentAudioAndLipSync();
-  }, []);
+    endAllSpeaking();
+  }, [endAllSpeaking]);
 
   /**
    * Handle audio playback with Live2D lip sync
@@ -214,6 +217,10 @@ export const useAudioTask = () => {
         }, { once: true });
 
         audio.addEventListener('playing', () => {
+          // Tokens intentionally live until frontend-playback-complete. That
+          // keeps a multi-segment response in one continuous speaking state
+          // across tiny queue gaps; interruption/mute clears them immediately.
+          beginSpeaking();
           // A queued or synthesized future segment must never replace the
           // subtitle for audio that is currently being spoken.
           if (subtitleTicket && !stateRef.current.subtitleDismissed) {

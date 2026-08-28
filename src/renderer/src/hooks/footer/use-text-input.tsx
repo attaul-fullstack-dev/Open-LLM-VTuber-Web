@@ -6,6 +6,7 @@ import { useChatHistory } from '@/context/chat-history-context';
 import { useVAD } from '@/context/vad-context';
 import { useMediaCapture } from '@/hooks/utils/use-media-capture';
 import { startChatLatency } from '@/utils/chat-latency';
+import { useAvatarActivityState } from '@/context/avatar-activity-context';
 
 export function useTextInput() {
   const [inputText, setInputText] = useState('');
@@ -21,6 +22,7 @@ export function useTextInput() {
   const { appendHumanMessage } = useChatHistory();
   const { stopMic, autoStopMic } = useVAD();
   const { captureAllMedia } = useMediaCapture();
+  const { markUserActivity } = useAvatarActivityState();
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setInputText(e.target.value);
@@ -76,6 +78,7 @@ export function useTextInput() {
       // draft and attachments intact so the user can resend after reconnect.
       if (!sent) return;
 
+      markUserActivity();
       appendHumanMessage(messageText);
       if (autoStopMic) stopMic();
       setInputText('');
