@@ -43,14 +43,15 @@ export const ZERO_OFFSET: IdleOffsetAdditive = Object.freeze({
  * anyway, so even a hard drag cannot push the parameter past its range.
  */
 export const IDLE_OFFSET_RANGES: Required<IdleOffsetAdditive> = {
-  // Deliberately lively: big enough to be clearly visible on a phone, still
-  // well inside mao_pro's parameter ranges (Angle ±30, BodyAngle ±10, Eye ±1).
-  AngleX: 16,
-  AngleY: 10,
-  AngleZ: 14,
-  BodyAngleX: 3.5,
-  EyeBallX: 0.5,
-  EyeBallY: 0.5,
+  // Very lively: near mao_pro's parameter limits (Angle ±30, BodyAngle ±10,
+  // Eye ±1); CubismModel clamps the final value, so even combined with the
+  // idle motion and drag the rig can never exceed its real min/max.
+  AngleX: 26,
+  AngleY: 16,
+  AngleZ: 22,
+  BodyAngleX: 7,
+  EyeBallX: 0.8,
+  EyeBallY: 0.8,
 };
 
 export type IdleSuppressionKind = 'speaking' | 'drag' | 'motion';
@@ -392,9 +393,9 @@ export class Live2DIdleOffsetController {
     for (const key of Object.keys(action.target) as (keyof IdleOffsetAdditive)[]) {
       const direction = action.target[key];
       if (!direction) continue;
-      // Lively by design: primary param mostly 40–90% of the configured range
-      // so the movement is clearly visible without hitting parameter extremes.
-      const mag = this.randBetween(0.4, 0.9) * this.ranges[key];
+      // Big by design: primary param mostly 50–100% of the configured range
+      // so the movement is unmistakable; CubismModel clamps to real min/max.
+      const mag = this.randBetween(0.5, 1.0) * this.ranges[key];
       target[key] = clamp(direction * mag, -this.ranges[key], this.ranges[key]);
     }
     return target;
