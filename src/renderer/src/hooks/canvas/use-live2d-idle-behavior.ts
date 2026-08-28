@@ -1,6 +1,6 @@
 /* eslint-disable no-underscore-dangle */
 import {
-  useCallback, useEffect, useMemo, useRef,
+  useCallback, useEffect, useRef,
 } from 'react';
 import { useAvatarActivityState } from '@/context/avatar-activity-context';
 import { CubismFramework } from '../../../WebSDK/Framework/src/live2dcubismframework';
@@ -55,6 +55,9 @@ export function useLive2DIdleBehavior({
   }
   const controller = controllerRef.current;
 
+  /** The most recent CubismModel the render loop handed to the apply hook. */
+  const modelRef = useRef<any>(null);
+
   // Feed Stage 1 activity state straight into the controller.
   useEffect(() => {
     controller.setActivity(activityState);
@@ -84,11 +87,12 @@ export function useLive2DIdleBehavior({
     controller.setSuppression('drag', suppressed);
   }, [controller]);
 
-  // Build the Cubism id handles once for the known-safe parameters. Guarded so
-  // running before CubismFramework.startUp() degrades to a no-op rather than a
-  // crash (the apply hook re-checks handles each frame).
+  // Cubism id handles. Resolved lazily inside the per-frame apply (and retried
+  // each frame until available) so this adapter keeps working even if it mounts
+  // before CubismFramework has started up; it never gets stuck with null ids.
   const idsRef = useRef<Record<string, unknown> | null>(null);
-  const ids = useMemo<Record<string, unknown> | null>(() => {
+  const ensureIds = useCallback((): Record<string, unknown> | null => {
+    if (idsRef.current) return idsRef.current;
     try {
       const idManager = CubismFramework.getIdManager();
       if (!idManager || typeof idManager.getId !== 'function') return null;
@@ -103,9 +107,27 @@ export function useLive2DIdleBehavior({
       idsRef.current = idsInstance;
       return idsInstance;
     } catch {
-      idsRef.current = null;
       return null;
     }
+  }, []);
+
+  // DEV diagnostics: exposed as `window.__idleMotion` so manual live tests can
+  // inspect state from the console without adding noisy per-frame logs.
+  const debugRef = useRef<{
+    idsResolved: boolean;
+    lastOffset: IdleOffsetAdditive;
+    /** Actual ParamAngleZ value read back from the Cubism model after adding. */
+    actualAngleZ: number;
+  }>({
+    idsResolved: false,
+    lastOffset: { ...controller.snapshot().current },
+    actualAngleZ: NaN,
+  });
+  useEffect(() => {
+    (window as any).__idleMotion = debugRef.current;
+    return () => {
+      delete (window as any).__idleMotion;
+    };
   }, []);
 
   // Publish the per-frame apply function for the render loop, and tear it down
@@ -116,9 +138,12 @@ export function useLive2DIdleBehavior({
       if (!active || !cubismModel || typeof cubismModel.addParameterValueById !== 'function') {
         return;
       }
-      const offset = active.step(deltaSeconds);
-      const handles = idsRef.current;
+      modelRef.current = cubismModel;
+      const handles = ensureIds();
+      debugRef.current.idsResolved = handles != null;
       if (!handles) return;
+      const offset = active.step(deltaSeconds);
+      debugRef.current.lastOffset = { ...offset };
       try {
         cubismModel.addParameterValueById(handles.AngleX, offset.AngleX);
         cubismModel.addParameterValueById(handles.AngleY, offset.AngleY);
@@ -126,6 +151,10 @@ export function useLive2DIdleBehavior({
         cubismModel.addParameterValueById(handles.BodyAngleX, offset.BodyAngleX);
         cubismModel.addParameterValueById(handles.EyeBallX, offset.EyeBallX);
         cubismModel.addParameterValueById(handles.EyeBallY, offset.EyeBallY);
+        // Read back the actual model value so we can prove the write landed.
+        if (typeof cubismModel.getParameterValueById === 'function') {
+          debugRef.current.actualAngleZ = cubismModel.getParameterValueById(handles.AngleZ) ?? NaN;
+        }
       } catch {
         // A parameter may be absent on a non-mao_pro model; ignore so idle
         // movement safely no-ops without breaking rendering.
@@ -135,7 +164,7 @@ export function useLive2DIdleBehavior({
       setLive2DIdleApplyHook(null);
       controllerRef.current?.dispose();
     };
-  }, [ids]);
+  }, [ensureIds]);
 
   const snapshot = useCallback(() => {
     const snap = controller.snapshot();
@@ -148,6 +177,8 @@ export function useLive2DIdleBehavior({
       lastAction: snap.lastAction,
     };
   }, [controller]);
+
+
 
   return {
     setMotionSuppressed,

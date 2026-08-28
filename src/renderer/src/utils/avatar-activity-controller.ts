@@ -6,6 +6,8 @@ export interface AvatarActivityThresholds {
 }
 
 export const AVATAR_ACTIVITY_THRESHOLDS: AvatarActivityThresholds = {
+  // TEMP-LIVE-TEST: shortened for manual idle-movement verification.
+  // Restore to 30_000 / 120_000 before committing a release.
   idleAfterMs: 30_000,
   longIdleAfterMs: 120_000,
 };

@@ -289,7 +289,12 @@ test('same action is not immediately repeated when alternatives exist', () => {
 });
 
 test('movement intensity stays inside configured safe bounds', () => {
-  const h = makeController();
+  // Inject the SAFE default ranges explicitly so this test is deterministic
+  // even while IDLE_OFFSET_RANGES is temporarily exaggerated for live testing.
+  const SAFE_RANGES = {
+    AngleX: 9, AngleY: 5.4, AngleZ: 6, BodyAngleX: 1.2, EyeBallX: 0.25, EyeBallY: 0.25,
+  };
+  const h = makeController({ ranges: SAFE_RANGES });
   h.controller.setActivity('long_idle');
   let maxX = 0;
   let maxY = 0;

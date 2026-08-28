@@ -51,11 +51,10 @@ export const Live2D = memo(
     // Stage 2 — safe autonomous idle movement when conversationally idle.
     // `isMotionPlaying: false` because the looping Idle motion is the baseline we
     // additively layer under; real/non-idle motions suppress via setMotionSuppressed.
-    const idleBehavior = useLive2DIdleBehavior({
+    useLive2DIdleBehavior({
       isDragging,
       isMotionPlaying: false,
     });
-    void idleBehavior;
 
     // Setup hooks
     useIpcHandlers();

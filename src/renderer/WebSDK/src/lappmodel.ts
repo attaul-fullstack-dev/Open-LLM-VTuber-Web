@@ -602,16 +602,6 @@ export class LAppModel extends CubismUserModel {
     this._model.addParameterValueById(this._idParamEyeBallX, this._dragX); // -1から1の値を加える
     this._model.addParameterValueById(this._idParamEyeBallY, this._dragY);
 
-    // 自動アイドルモーション用の加算オフセット（無ければ何もしない）
-    if (!this.applyIdleOffsets) {
-      // Auto-link the currently active idle hook so a freshly loaded model
-      // (character switch / reconnect) keeps the behavior without polling.
-      this.applyIdleOffsets = getLive2DIdleApplyHook();
-    }
-    if (this.applyIdleOffsets) {
-      this.applyIdleOffsets(this._model, deltaTimeSeconds);
-    }
-
     // 呼吸など
     if (this._breath != null) {
       this._breath.updateParameters(this._model, deltaTimeSeconds);
@@ -643,6 +633,18 @@ export class LAppModel extends CubismUserModel {
     // ポーズの設定
     if (this._pose != null) {
       this._pose.updateParameters(this._model, deltaTimeSeconds);
+    }
+
+    // 自動アイドルモーション用の加算オフセット（無ければ何もしない）
+    // Dipanggil PALING AKHIR — tepat sebelum model.update() — supaya tidak
+    // ada tahap lain (physics/pose/breath) yang menimpa nilai additif ini.
+    if (!this.applyIdleOffsets) {
+      // Auto-link the currently active idle hook so a freshly loaded model
+      // (character switch / reconnect) keeps the behavior without polling.
+      this.applyIdleOffsets = getLive2DIdleApplyHook();
+    }
+    if (this.applyIdleOffsets) {
+      this.applyIdleOffsets(this._model, deltaTimeSeconds);
     }
 
     this._model.update();
