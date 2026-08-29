@@ -1,5 +1,63 @@
 # Mili Hidup — Stage 3: Autonomous Idle Facial Expressions
 
+## FINAL — stable production build (2026-08-29)
+
+Status: **STABLE / COMPLETE.** User confirmed Stage 3 is visually sufficient.
+Remaining pout/angry separation differences are **accepted `mao_pro` Live2D rig
+limitations** and are not being chased further. All temporary development
+instrumentation has been removed.
+
+### Accepted rig limitations (do not re-tune)
+- **Smile width is capped** — `ParamMouthUp` is pinned at 1.0 (idle motion) and
+  its real max is 1.0, so a truly wide/big smile is physically impossible on
+  this model. Smiles are sold via eye-smile + cheek + eye narrowing only.
+- **pout vs angry separation is limited** — with only `MouthUp/-Down/-Angry/-
+  AngryLine` for the mouth and no dedicated frown/brow-bone deformation, a
+  small pout and a stronger angry/pout are distinguishable but cannot reach the
+  drama of a fully rigged anger face. This is accepted as-is.
+
+### Final production palette (weighted random, anti-repeat)
+| state | mouth | eyes/brows | eyeOpen | idle wt | long_idle wt |
+|---|---|---|---|---|---|
+| neutral | — | — | 1.0 | 30 | 30 |
+| small_smile | — | eye-smile 0.45, cheek 0.45 | 1.0 | 22 | 22 |
+| squint_smile | — | eye-smile 0.85, cheek 0.5, eye form 0.2 | 0.82 | 13 | 9 |
+| sad_soft | MouthDown 0.4, MouthUp -0.3 | brow up 0.22, brow angle 0.15 | 0.97 | 7 | 7 |
+| pout_small | MouthAngry/Line 0.7, MouthUp -0.6 | brows ≈ neutral | 1.0 | 13 | 10 |
+| angry_pout | MouthAngry/Line 1.0, MouthUp -1.0, MouthDown 0 | eye form 1.0, brow angle -0.7, form -0.6 | 0.85 | 7 | 7 |
+| sleepy_soft | — | eye-smile 0.18, brows down | 0.78 | 0 (excl.) | 22 |
+
+### Cleanup done (this commit)
+- **Removed** the deterministic debug facial cycle (`DEBUG_IDLE_FACIAL_CYCLE`,
+  `setCycle`, cycle options/path in the controller) and its two cycle tests.
+- **Removed** the runtime beacon + all dev logging from
+  `use-live2d-idle-facial.ts` (no more `/__facial_beacon` requests).
+- **Restored** pure weighted-random autonomous idle selection (the controller's
+  only selection path).
+- No facial parameter value was changed in this cleanup pass.
+
+### Final tests (all green)
+- Stage 3 facial: **16/16** PASS (incl. runtime-order overwrite-regression,
+  weighted selection, EyeOpen multiply, no ParamA / no Stage 2 writes)
+- Stage 2 idle-behavior: 16, Stage 1 activity: 10, subtitle: 5, display-text: 2
+- Integration: avatar (7), chat-delivery/reconnect (4), memory-ui (5)
+- Production build: **PASS**; typecheck scope: clean; `git diff --check`: clean
+
+### Commit history (branch `mili-hidup-stage3-idle-emotions`, not merged)
+- `005447a` base (Stage 2 final committed state)
+- `92f07b0 ab0c047` baseline Stage 3 implementation
+- `23266ab` mouth fix + debug beacon
+- `1c1bf73` mouth-separation tuning + cycle
+- `87c7677` natural arc + angry-not-sad fix
+- `e164e08` final 7-state weighted palette (big_smile/relaxed/curious removed)
+- `72af388` pout/angry rig-recipe tuning
+- **`<FINAL>` this clean commit** (debug cycle + beacon removed)
+
+Roll forward intentionally kept on its own branch/worktree; **NOT merged to
+main, backend untouched, Stage 4 not started.**
+
+---
+
 ## pout/angry tuning pass (2026-08-29): read anger from the rig's own recipe
 
 Live-test verdict: smiles + sad_soft + squint separated; `pout_small` and

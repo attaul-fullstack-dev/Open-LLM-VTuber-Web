@@ -259,23 +259,6 @@ export const IDLE_FACIAL_PALETTE: IdleFacialStateWeighted[] = [
   },
 ];
 
-/**
- * Temporary debug visual cycle (final verification): walks the emotion arc from
- * murung -> cemberut -> marah -> netral -> senyum -> mata sipit so each state is
- * natural to inspect on Android. Debug-only — REMOVE before final release;
- * production uses the weighted random anti-repeat palette.
- */
-export const DEBUG_IDLE_FACIAL_CYCLE: string[] = [
-  'neutral',
-  'sad_soft',
-  'pout_small',
-  'angry_pout',
-  'neutral',
-  'small_smile',
-  'squint_smile',
-  'small_smile',
-];
-
 export type IdleFacialSuppressionKind = 'speaking' | 'drag' | 'motion';
 
 /** Low-frequency event timing (ms), random per facial change. */
@@ -316,10 +299,6 @@ export interface IdleFacialControllerOptions {
   timing?: IdleFacialTiming;
   palette?: IdleFacialStateWeighted[];
   smoothing?: number;
-  /** Debug: when non-empty, walk these state ids in order instead of random. */
-  cycle?: string[] | null;
-  /** Debug: how long each cycle state is held (ms). */
-  cycleHoldMs?: number;
 }
 
 export class IdleFacialExpressionController {
@@ -334,12 +313,6 @@ export class IdleFacialExpressionController {
   private readonly palette: IdleFacialStateWeighted[];
 
   private readonly smoothing: number;
-
-  private cycle: string[] | null;
-
-  private cycleHoldMs: number;
-
-  private cycleIndex = 0;
 
   private activity: AvatarActivityState = 'active';
 
@@ -378,32 +351,6 @@ export class IdleFacialExpressionController {
     this.timing = options.timing ?? IDLE_FACIAL_TIMING;
     this.palette = options.palette ?? IDLE_FACIAL_PALETTE;
     this.smoothing = options.smoothing ?? 0.35;
-    this.cycle = options.cycle ?? null;
-    this.cycleHoldMs = options.cycleHoldMs ?? 5_000;
-  }
-
-  /**
-   * Toggle debug cycle mode. When a non-empty list is given the controller
-   * stops random selection and walks the listed state ids in order, holding
-   * each `holdMs`. Pass `null` to return to weighted random behavior.
-   */
-  setCycle(cycle: string[] | null, holdMs?: number): void {
-    this.cycle = cycle;
-    if (holdMs !== undefined) this.cycleHoldMs = holdMs;
-    this.cycleIndex = 0;
-    if (cycle && cycle.length > 0) {
-      // Start cycling immediately if eligible (debug: bypasses longIdleOnly).
-      this.clearChangeTimer();
-      if (this.shouldBeActive() && !this.isSuppressed()) {
-        this.applyNextState();
-      } else {
-        this.target = { ...ZERO_FACIAL };
-        this.targetEyeOpen = NEUTRAL_EYE_OPEN;
-        this.activeStateId = null;
-      }
-    } else {
-      this.reconcileSchedule();
-    }
   }
 
   setActivity(state: AvatarActivityState): void {
@@ -503,14 +450,10 @@ export class IdleFacialExpressionController {
 
   private armChange(): void {
     this.clearChangeTimer();
-    const delayMs = this.cycle && this.cycle.length > 0
-      ? this.cycleHoldMs
-      : (() => {
-        const { min, max } = this.activity === 'long_idle'
-          ? { min: this.timing.longIdleMinMs, max: this.timing.longIdleMaxMs }
-          : { min: this.timing.idleMinMs, max: this.timing.idleMaxMs };
-        return this.randBetween(min, max);
-      })();
+    const { min, max } = this.activity === 'long_idle'
+      ? { min: this.timing.longIdleMinMs, max: this.timing.longIdleMaxMs }
+      : { min: this.timing.idleMinMs, max: this.timing.idleMaxMs };
+    const delayMs = this.randBetween(min, max);
     this.changeTimer = this.schedule(() => {
       this.changeTimer = null;
       if (this.isSuppressed() || !this.shouldBeActive()) return;
@@ -519,23 +462,12 @@ export class IdleFacialExpressionController {
   }
 
   private applyNextState(): void {
-    const state = this.cycle && this.cycle.length > 0
-      ? this.pickCycleState()
-      : this.pickState();
+    const state = this.pickState();
     this.activeStateId = state.id;
     this.target = { ...ZERO_FACIAL, ...state.additive };
     this.targetEyeOpen = state.eyeOpen;
     // Schedule the next change (micro-expressions come and go).
     this.armChange();
-  }
-
-  private pickCycleState(): IdleFacialState {
-    const ids = this.cycle!;
-    const id = ids[this.cycleIndex % ids.length];
-    this.cycleIndex += 1;
-    const state = this.palette.find((s) => s.id === id) ?? this.palette[0];
-    this.rememberLast(state.id);
-    return state;
   }
 
   private pickState(): IdleFacialStateWeighted {

@@ -4,7 +4,6 @@ import {
   IdleFacialExpressionController,
   NEUTRAL_EYE_OPEN,
   IDLE_FACIAL_PALETTE,
-  DEBUG_IDLE_FACIAL_CYCLE,
   type IdleFacialAdditive,
   type IdleFacialTiming,
   type IdleFacialControllerOptions,
@@ -265,43 +264,25 @@ test('weighted selection favors calm neutral/subtle-positive over rare negatives
   assert.ok((byId.squint_smile.longIdleWeight ?? byId.squint_smile.weight) < byId.squint_smile.weight, 'squint_smile less frequent during long_idle');
 });
 
-test('debug cycle walks every state in order, holding each for cycleHoldMs', () => {
-  const h = makeController({ cycle: DEBUG_IDLE_FACIAL_CYCLE, cycleHoldMs: 400 });
-  h.controller.setActivity('long_idle');
-  const seen: string[] = [];
-  let prev: string | null = null;
-  // Fine-grained pumps (≈112ms each) so every held state is observed at least
-  // once before it changes (hold 400ms > pump granularity).
-  for (let i = 0; i < 90; i += 1) {
-    pump(h, 100);
-    const s = h.controller.snapshot().state;
-    if (s && s !== prev) {
-      seen.push(s);
-      prev = s;
-    }
-  }
-  const firstEight = seen.slice(0, DEBUG_IDLE_FACIAL_CYCLE.length);
-  assert.deepEqual(
-    firstEight,
-    DEBUG_IDLE_FACIAL_CYCLE,
-    `cycle must visit states in order, got ${firstEight.join(' -> ')}`,
-  );
-  // And it wraps back to the start afterwards.
-  assert.equal(seen[DEBUG_IDLE_FACIAL_CYCLE.length], DEBUG_IDLE_FACIAL_CYCLE[0]);
-});
-
-test('disabling the debug cycle returns to random weighted selection', () => {
-  const h = makeController({ cycle: DEBUG_IDLE_FACIAL_CYCLE, cycleHoldMs: 200 });
+test('production default is weighted-random selection (no debug cycle)', () => {
+  // A stock controller (no cycle option) must only ever pick from the palette
+  // via weighted random — it never walks any fixed order.
+  const h = makeController({ rng: seqRng([0.01, 0.5, 0.95, 0.3, 0.7]) });
   h.controller.setActivity('idle');
-  pump(h, 230);
-  assert.ok(DEBUG_IDLE_FACIAL_CYCLE.includes(h.controller.snapshot().state ?? ''));
-  h.controller.setCycle(null);
-  pump(h, 500);
-  // Random mode still produces a (non-null) state and never repeats instantly
-  // when alternatives exist.
-  const s = h.controller.snapshot().state;
-  assert.ok(s !== null, 'random mode still selects a state');
-  assert.ok(IDLE_FACIAL_PALETTE.some((p) => p.id === s));
+  let sawNeutral = false;
+  let sawNonNeutral = false;
+  const seen: string[] = [];
+  for (let i = 0; i < 20; i += 1) {
+    pump(h, 130);
+    const s = h.controller.snapshot().state;
+    if (s !== null) { seen.push(s); if (s === 'neutral') sawNeutral = true; else sawNonNeutral = true; }
+  }
+  assert.ok(seen.length > 0, 'random selection produces states');
+  assert.ok(sawNeutral && sawNonNeutral, 'weighted random yields a mix, not a fixed cycle');
+  for (const s of seen) {
+    assert.ok(IDLE_FACIAL_PALETTE.some((p) => p.id === s), `state ${s} must come from the palette`);
+    assert.ok(!s.includes('debug'), 'debug cycle state must not leak into production');
+  }
 });
 
 test('anti-repeat prevents immediate repetition when alternatives exist', () => {
