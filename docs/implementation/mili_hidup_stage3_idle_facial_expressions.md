@@ -1,5 +1,24 @@
 # Mili Hidup — Stage 3: Autonomous Idle Facial Expressions
 
+## pout/angry tuning pass (2026-08-29): read anger from the rig's own recipe
+
+Live-test verdict: smiles + sad_soft + squint separated; `pout_small` and
+`angry_pout` still under-read. The rig's own angry expression (`exp_08`)
+revealed the missing cue: **sharp angular eyes via `ParamEyeLForm/ParamEyeRForm`
+= 1** — we had it at 0.2, far too weak. It also uses a FULL mouth-corner frown
+`MouthUp -1` with `MouthDown 0`, i.e. the frown-and-pout-line (not the sad droop).
+
+- `pout_small`: mouth-driven ngambek — `MouthUp -0.6` (clear downturn) +
+  `MouthAngry/Line 0.7`; `MouthDown 0` (not sad); brows/eyes near neutral.
+- `angry_pout`: follows exp_08 — `MouthUp -1.0` + `MouthAngry/Line 1.0` +
+  `EyeL/RForm 1.0` (sharp eyes), plus furrowed/lowered brows and narrowed eyes
+  (×0.85) so it clearly reads more kesal than pout_small; `MouthDown 0`.
+
+No other state touched. Size side untouched. Debug cycle + beacon retained for
+the final verification.
+
+---
+
 ## Final polish pass (2026-08-29): visual separation + rig-limit cleanup
 
 ### Beacon ground-truth (from /tmp/server_setsid.log)

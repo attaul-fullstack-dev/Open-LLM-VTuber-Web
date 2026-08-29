@@ -199,40 +199,47 @@ export const IDLE_FACIAL_PALETTE: IdleFacialStateWeighted[] = [
     eyeOpen: 0.97,
   },
   {
-    // Cemberut kecil / ngambek. Emotion comes from the MOUTH ONLY (pout line,
-    // corners not drooping so it is NOT sad); brows/eyes stay near neutral.
+    // Cemberut kecil / ngambek. Primarily MOUTH-driven: a clear downward curve
+    // (MouthUp -0.6) + a distinct pout line (MouthAngry/Line 0.7). MouthDown
+    // stays 0 so it reads ngambek, NOT sad. Brows/eyes near neutral so the
+    // emotion clearly comes from the pouting mouth.
     id: 'pout_small',
     weight: 13,
     longIdleWeight: 10,
     additive: {
-      MouthAngry: 0.55,
-      MouthAngryLine: 0.55,
-      MouthUp: -0.25,
-      BrowLAngle: -0.15,
-      BrowRAngle: -0.15,
+      MouthAngry: 0.7,
+      MouthAngryLine: 0.7,
+      MouthUp: -0.6,
+      MouthDown: 0,
+      BrowLAngle: -0.05,
+      BrowRAngle: -0.05,
     },
     eyeOpen: NEUTRAL_EYE_OPEN,
   },
   {
     // Clearly more annoyed / marah kecil than pout_small; definitely NOT sad.
-    // Full pout line + furrowed, lowered, sharp inward brows + narrowed eyes.
-    // NO MouthDown anywhere (that would flip it to sadness).
+    // Follows the rig's own angry recipe (exp_08): full frown line (MouthUp
+    // -1), MouthAngry + MouthAngryLine full, and SHARP angular eyes (EyeForm
+    // 1.0 — the rig's prime anger cue we previously set far too low). On top:
+    // furrowed lowered inward brows + narrowed eyes (×0.85). MouthDown = 0 so
+    // it reads 😡/kesal, never 😔.
     id: 'angry_pout',
     weight: 7,
     additive: {
       MouthAngry: 1.0,
       MouthAngryLine: 1.0,
-      MouthUp: -0.4,
+      MouthUp: -1.0,
+      MouthDown: 0,
       BrowLAngle: -0.7,
       BrowRAngle: -0.7,
       BrowLForm: -0.6,
       BrowRForm: -0.6,
       BrowLY: -0.15,
       BrowRY: -0.15,
-      EyeLForm: 0.2,
-      EyeRForm: 0.2,
+      EyeLForm: 1.0,
+      EyeRForm: 1.0,
     },
-    eyeOpen: 0.9,
+    eyeOpen: 0.85,
   },
   // ---------- long_idle only ----------
   {
