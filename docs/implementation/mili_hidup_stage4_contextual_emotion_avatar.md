@@ -7,9 +7,10 @@ Requires Android visual verification before "production-ready". Stage 5 not star
 - Frontend branch: `mili-hidup-stage4-contextual-emotion`
 - Frontend worktree: `/root/waifu/worktrees/mili-stage4-web` (base = Stage 3 final
   commit `8ff1ed2`)
-- Frontend commit(s): see end of report
-- Backend patch: on `stage6-final-integration` (branch already active for the
-  backend repo), minimal emotion-label delivery fix.
+- Frontend commit: `5aec82a` (feat: add contextual response facial expressions)
+- Backend patch commit: `b9895f9` on `stage6-final-integration
+  (fix: preserve response emotion action metadata)
+- This report commit: `<DOC>` (docs record)
 
 ---
 
