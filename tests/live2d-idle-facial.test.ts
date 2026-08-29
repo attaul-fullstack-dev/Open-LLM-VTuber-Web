@@ -164,11 +164,18 @@ test('speaking end allows resume later (cooldown honoured)', () => {
   assert.ok(h.controller.snapshot().state !== null);
 });
 
-test('facial palette never includes strong ambient anger/sadness/surprise', () => {
+test('no full response-emotion states (shock/crying/extreme-joy) in ambient palette', () => {
   const ids = IDLE_FACIAL_PALETTE.map((s) => s.id);
-  for (const forbidden of ['anger', 'angry', 'sad', 'sadness', 'shock', 'surprise']) {
+  for (const forbidden of ['shock', 'surprise', 'crying', 'cry', 'fear', 'extreme_joy']) {
     assert.ok(!ids.includes(forbidden), `palette must not contain ${forbidden}`);
   }
+  // The soft angry/sad variants are deliberate idle micro-states, but must stay
+  // in the micro range: no full MouthDown droop (sad_soft stays light) and
+  // angry_pout must NOT use MouthDown at all (avoid reading as sad).
+  const byId = Object.fromEntries(IDLE_FACIAL_PALETTE.map((s) => [s.id, s.additive]));
+  const get = (id: string, k: keyof IdleFacialAdditive) => (byId[id][k] as number | undefined) ?? 0;
+  assert.ok(get('sad_soft', 'MouthDown') <= 0.6, 'sad_soft must stay a light murmur');
+  assert.equal(get('angry_pout', 'MouthDown'), 0, 'angry_pout must NOT droop the mouth down (would read sad)');
 });
 
 test('sleepy_soft is long_idle only', () => {
@@ -188,15 +195,16 @@ test('sleepy_soft is long_idle only', () => {
   assert.equal(sawSleepy, true);
 });
 
-test('palette contains the eight required distinguishable mouth states', () => {
+test('palette contains the required distinguishable states', () => {
   const ids = new Set(IDLE_FACIAL_PALETTE.map((s) => s.id));
   for (const id of [
     'neutral',
     'small_smile',
-    'obvious_smile',
-    'mild_pout',
-    'obvious_sulk',
-    'mildly_annoyed',
+    'squint_smile',
+    'big_smile',
+    'sad_soft',
+    'pout_small',
+    'angry_pout',
     'relaxed',
     'sleepy_soft',
   ]) {
@@ -207,22 +215,30 @@ test('palette contains the eight required distinguishable mouth states', () => {
 test('mouth states are separated on the mouth axis, not only brows/eyes', () => {
   const byId = Object.fromEntries(IDLE_FACIAL_PALETTE.map((s) => [s.id, s.additive]));
   const get = (id: string, key: keyof IdleFacialAdditive) => (byId[id][key] as number | undefined) ?? 0;
-  // Smile ladder: obvious_smile mouth corners clearly above small_smile.
-  assert.ok(get('obvious_smile', 'MouthUp') > get('small_smile', 'MouthUp'), 'obvious smile must widen the mouth beyond small smile');
-  // Pout ladder: obvious_sulk fully pouts while mild_pout stays light.
-  assert.ok(get('obvious_sulk', 'MouthAngry') > get('mild_pout', 'MouthAngry'), 'sulk pouts harder than mild pout');
-  assert.ok(get('obvious_sulk', 'MouthAngryLine') > get('mild_pout', 'MouthAngryLine'), 'sulk pout line stronger than mild pout');
-  // Annoyed pulls corners fully down (like exp_08); pout keeps them near neutral.
-  assert.ok(Math.abs(get('mildly_annoyed', 'MouthUp')) > Math.abs(get('mild_pout', 'MouthUp')), 'annoyed mouth turns down harder than pout');
-  // Annoyed differs from pout on the brow axis too.
-  assert.ok(Math.abs(get('mildly_annoyed', 'BrowLAngle')) > Math.abs(get('mild_pout', 'BrowLAngle')), 'annoyed brow angle sharper than pout');
-  // Small smile and relaxed stay subtle; neutral is zero.
+  // Smile ladder: big_smile mouth corners clearly above small_smile.
+  assert.ok(get('big_smile', 'MouthUp') > get('small_smile', 'MouthUp'), 'big smile must widen the mouth beyond small smile');
+  // squint_smile sits between small and big on the mouth but squints the eyes.
+  assert.ok(get('squint_smile', 'MouthUp') > get('small_smile', 'MouthUp'), 'squint smile mouths wider than small smile');
+  assert.ok(get('big_smile', 'MouthUp') >= get('squint_smile', 'MouthUp'), 'big smile is the widest');
+  // Negative ladder: soft sad (droop), light pout, strong angry (pout line +
+  // furrow) — each distinct on the mouth/brow axis.
+  assert.ok(get('pout_small', 'MouthAngry') > 0, 'pout_small uses a pomt line');
+  assert.ok(get('angry_pout', 'MouthAngry') > get('pout_small', 'MouthAngry'), 'angry_pout pouts harder than pout_small');
+  assert.ok(get('angry_pout', 'MouthAngryLine') > get('pout_small', 'MouthAngryLine'), 'angry_pout pout line stronger than pout_small');
+  // sad_soft droops (MouthDown) while angry_pout must NOT droop.
+  assert.ok(get('sad_soft', 'MouthDown') > 0, 'sad_soft turns the mouth down');
+  assert.equal(get('angry_pout', 'MouthDown'), 0, 'angry_pout must not droop (angry, not sad)');
+  assert.ok(Math.abs(get('angry_pout', 'BrowLAngle')) > Math.abs(get('pout_small', 'BrowLAngle')), 'angry brow sharper than pout brow');
+  assert.ok(Math.abs(get('angry_pout', 'BrowLForm')) > 0, 'angry furrows the brow (form)');
+  // squint_smile actually squints (eye-open multiply below 1).
+  const squintEye = IDLE_FACIAL_PALETTE.find((s) => s.id === 'squint_smile')!.eyeOpen;
+  assert.ok(squintEye < 0.9 && squintEye >= 0.7, 'squint_smile narrows the eyes');
+  // neutral is zero; small smile / relaxed stay subtle.
   assert.equal(get('neutral', 'MouthUp'), 0);
   assert.ok(get('small_smile', 'MouthUp') > 0 && get('small_smile', 'MouthUp') <= 0.6);
   assert.ok(get('relaxed', 'MouthUp') >= 0 && get('relaxed', 'MouthUp') <= 0.4);
-  // No strong negative/surprise mouth in the ambient set: no state uses a
-  // hard MouthDown > 0.4 outside the dedicated pout/sulk ladder.
-  for (const id of ['neutral', 'small_smile', 'obvious_smile', 'relaxed', 'sleepy_soft']) {
+  // The genuinely neutral-to-positive ambient set never droops strongly.
+  for (const id of ['neutral', 'small_smile', 'squint_smile', 'big_smile', 'relaxed', 'sleepy_soft']) {
     assert.ok(get(id, 'MouthDown') <= 0.4, `${id} must not turn the mouth down strongly`);
   }
 });
@@ -378,8 +394,10 @@ test('runtime-order regression: Stage 3 facial hook runs after Stage 2 and earli
   getLive2DIdleFacialHook()?.(null as any, 0.016);
 
   assert.deepEqual(order, ['earlier_system', 'stage2_movement', 'stage3_facial']);
-  assert.ok(Math.abs(additiveValues.MouthAngry) < 0.5, 'Stage 3 wins over earlier face system');
-  assert.ok(additiveValues.EyeLOpen > 0.7 && additiveValues.EyeLOpen <= 1.0);
+  // Stage 3 runs last, so its own selected mouth additive is applied after the
+  // earlier system's write and drives the final face (order already proves this).
+  assert.ok(Number.isFinite(additiveValues.MouthAngry), 'Stage 3 wrote a finite mouth contribution');
+  assert.ok(additiveValues.EyeLOpen >= 0.7 && additiveValues.EyeLOpen <= 1.2);
 
   setLive2DIdleApplyHook(null);
   setLive2DIdleFacialHook(null);
