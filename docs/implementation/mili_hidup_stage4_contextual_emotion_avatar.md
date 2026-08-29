@@ -13,7 +13,7 @@ committed on its own frontend branch/worktree; backend patches committed to
 - Backend patch commits on `stage6-final-integration`: `b9895f9` (emotion action
   metadata) · `a8dccab` (strip emotion tags from visible/tts/history) ·
   `ab0dc1c` (marker-at-start + single authoritative turn-complete signal)
-- This report commit: `6c97043` (docs record)
+- This report commit: `922b6ce` (docs record)
 
 ---
 
