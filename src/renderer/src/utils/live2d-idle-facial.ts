@@ -110,39 +110,43 @@ export interface IdleFacialState {
  * mao_pro ambient idle palette. Deliberately NO strong anger/sad/surprise/
  * shock — those are response-context emotions. All are subtle micro-expressions.
  */
+// Idle motion mtn_01 holds ParamMouthUp at 1.0 (its neutral mouth pose), so
+// tiny additive mouth offsets are invisible/clamped. These magnitudes are set
+// clearly above that baseline so smile/pout read on-screen while still staying
+// persona-appropriate (the rig clamps to its real min/max anyway).
 export const IDLE_FACIAL_PALETTE: IdleFacialState[] = [
   { id: 'neutral', additive: {}, eyeOpen: NEUTRAL_EYE_OPEN },
   {
     id: 'small_smile',
     additive: {
-      MouthUp: 0.2,
-      EyeLSmile: 0.25,
-      EyeRSmile: 0.25,
-      BrowLY: 0.08,
-      BrowRY: 0.08,
+      MouthUp: 0.7,
+      EyeLSmile: 0.4,
+      EyeRSmile: 0.4,
+      BrowLY: 0.1,
+      BrowRY: 0.1,
     },
     eyeOpen: NEUTRAL_EYE_OPEN,
   },
   {
     id: 'mild_pout',
     additive: {
-      MouthAngry: 0.22,
-      MouthAngryLine: 0.2,
-      MouthDown: 0.08,
-      BrowLAngle: -0.1,
-      BrowRAngle: -0.1,
+      MouthAngry: 0.55,
+      MouthAngryLine: 0.5,
+      MouthDown: 0.2,
+      BrowLAngle: -0.18,
+      BrowRAngle: -0.18,
     },
     eyeOpen: NEUTRAL_EYE_OPEN,
   },
   {
     id: 'mildly_annoyed',
     additive: {
-      MouthAngry: 0.26,
-      MouthAngryLine: 0.24,
-      BrowLAngle: -0.28,
-      BrowRAngle: -0.28,
-      BrowLY: -0.08,
-      BrowRY: -0.08,
+      MouthAngry: 0.7,
+      MouthAngryLine: 0.65,
+      BrowLAngle: -0.35,
+      BrowRAngle: -0.35,
+      BrowLY: -0.1,
+      BrowRY: -0.1,
     },
     eyeOpen: NEUTRAL_EYE_OPEN,
   },
@@ -161,20 +165,20 @@ export const IDLE_FACIAL_PALETTE: IdleFacialState[] = [
   {
     id: 'relaxed',
     additive: {
-      MouthUp: 0.12,
-      BrowLY: -0.1,
-      BrowRY: -0.1,
-      EyeLSmile: 0.1,
-      EyeRSmile: 0.1,
+      MouthUp: 0.3,
+      BrowLY: -0.12,
+      BrowRY: -0.12,
+      EyeLSmile: 0.15,
+      EyeRSmile: 0.15,
     },
     eyeOpen: 0.94,
   },
   {
     id: 'sleepy_soft',
     additive: {
-      BrowLY: -0.15,
-      BrowRY: -0.15,
-      MouthDown: 0.1,
+      BrowLY: -0.2,
+      BrowRY: -0.2,
+      MouthDown: 0.25,
     },
     eyeOpen: 0.82,
     longIdleOnly: true,

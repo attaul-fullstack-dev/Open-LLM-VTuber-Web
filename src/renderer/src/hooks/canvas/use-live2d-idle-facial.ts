@@ -102,6 +102,15 @@ export function useLive2DIdleFacial({
     }
   }, []);
 
+  // DEV beacon: prove facial writes land on the real mao_pro parameters.
+  // Reads back the model's actual values a few times after a state change and
+  // reports them via a URL 404 that lands in the server access log. Removed
+  // before final release (kept only while the user verifies Stage 3 live).
+  const beaconSentForRef = useRef<string | null>(null);
+  useEffect(() => {
+    return () => { beaconSentForRef.current = null; };
+  }, []);
+
   // Publish the per-frame apply function for the render loop, tear down on
   // unmount so no stale controller affects a different/next model or character.
   useEffect(() => {
@@ -114,6 +123,26 @@ export function useLive2DIdleFacial({
       if (!handles) return;
       const { additive, eyeOpen } = active.step(deltaSeconds);
       try {
+        // Debug beacon: once per selected state, read back the actual values.
+        const state = active.snapshot().state;
+        if (state && state !== beaconSentForRef.current
+          && typeof cubismModel.getParameterValueById === 'function') {
+          beaconSentForRef.current = state;
+          try {
+            const read = {
+              s: state,
+              up: cubismModel.getParameterValueById(handles.MouthUp) ?? NaN,
+              angry: cubismModel.getParameterValueById(handles.MouthAngry) ?? NaN,
+              angryLine: cubismModel.getParameterValueById(handles.MouthAngryLine) ?? NaN,
+              down: cubismModel.getParameterValueById(handles.MouthDown) ?? NaN,
+              eyeOpen: eyeOpen.toFixed(2),
+            };
+            const q = Object.entries(read).map(([k, v]) => `${k}=${v}`).join('&');
+            fetch(`/__facial_beacon?${q}`).catch(() => undefined);
+          } catch {
+            // beacon is best-effort only
+          }
+        }
         // Additive facial micro-expression parameters.
         cubismModel.addParameterValueById(handles.BrowLY, additive.BrowLY);
         cubismModel.addParameterValueById(handles.BrowRY, additive.BrowRY);
