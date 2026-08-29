@@ -283,6 +283,14 @@ export const IDLE_FACIAL_COOLDOWN_MS = {
   motion: 1_200,
 };
 
+/**
+ * Stage 4 — how long a contextual response face holds before auto-releasing.
+ * This is a safety net: normal response-end signals (queue drained / speaking
+ * ended) release sooner. Kept large enough that a sentence's face reads during
+ * playback, and each new sentence re-claims (refreshing) the timer.
+ */
+export const RESPONSE_FACE_HOLD_MS = 6_000;
+
 export interface IdleFacialSnapshot {
   state: string | null;
   activity: AvatarActivityState;
@@ -344,6 +352,14 @@ export class IdleFacialExpressionController {
 
   private wasInactive = false;
 
+  /** Stage 4 — contextual response face currently owning the face (nullable). */
+  private responseFace: IdleFacialStateWeighted | null = null;
+
+  private responseFaceTimer: unknown | null = null;
+
+  /** Semantic id exposed while a response face is active (snapshot). */
+  private responseFaceId: string | null = null;
+
   constructor(options: IdleFacialControllerOptions = {}) {
     this.rng = options.rng ?? Math.random;
     this.schedule = options.schedule ?? ((callback, delayMs) => setTimeout(callback, delayMs));
@@ -364,6 +380,54 @@ export class IdleFacialExpressionController {
     this.suppressed[kind] = suppressed;
     if (suppressed) this.lastSuppressionKind = kind;
     this.reconcileSchedule();
+  }
+
+  /**
+   * Stage 4 — claim the face for a contextual response emotion. The given face
+   * owns the facial contribution until released, INCLUDING while 'speaking'
+   * (where autonomous idle faces are legitimately suppressed). Calling with
+   * `null` releases back to neutral + normal idle scheduling.
+   */
+  claimResponseFace(
+    state: IdleFacialStateWeighted | null,
+    holdMs: number = RESPONSE_FACE_HOLD_MS,
+  ): void {
+    this.clearChangeTimer();
+    this.clearCooldownTimer();
+    this.clearResponseTimer();
+    this.responseFace = state;
+    this.responseFaceId = state ? state.id : null;
+    this.activeStateId = state ? state.id : null;
+    if (state) {
+      this.target = { ...ZERO_FACIAL, ...state.additive };
+      this.targetEyeOpen = state.eyeOpen;
+      this.responseFaceTimer = this.schedule(() => {
+        this.responseFaceTimer = null;
+        this.releaseResponseFace();
+      }, holdMs);
+    } else {
+      this.releaseResponseFace();
+    }
+  }
+
+  /**
+   * Stage 4 — release the contextual response face. Returns the facial
+   * contribution smoothly to neutral, then lets Stage 3 idle scheduling resume.
+   */
+  releaseResponseFace(graceMs: number = IDLE_FACIAL_COOLDOWN_MS.speaking): void {
+    this.clearResponseTimer();
+    this.responseFace = null;
+    this.responseFaceId = null;
+    this.target = { ...ZERO_FACIAL };
+    this.targetEyeOpen = NEUTRAL_EYE_OPEN;
+    this.activeStateId = null;
+    this.wasInactive = true;
+    this.reconcileSchedule();
+  }
+
+  /** True while a Stage 4 contextual response face owns the contribution. */
+  isResponseFaceActive(): boolean {
+    return this.responseFace !== null;
   }
 
   /** Advance one frame; returns current additive + eye factor. Call each frame. */
@@ -395,11 +459,14 @@ export class IdleFacialExpressionController {
   dispose(): void {
     this.clearChangeTimer();
     this.clearCooldownTimer();
+    this.clearResponseTimer();
     this.current = { ...ZERO_FACIAL };
     this.target = { ...ZERO_FACIAL };
     this.currentEyeOpen = NEUTRAL_EYE_OPEN;
     this.targetEyeOpen = NEUTRAL_EYE_OPEN;
     this.activeStateId = null;
+    this.responseFace = null;
+    this.responseFaceId = null;
     this.changeTimer = null;
     this.cooldownTimer = null;
   }
@@ -413,6 +480,9 @@ export class IdleFacialExpressionController {
   }
 
   private reconcileSchedule(): void {
+    // A Stage 4 response face owns the facial target until released; activity
+    // and suppression changes (e.g. speaking starting) must not clear it.
+    if (this.responseFace) return;
     const wantActive = this.shouldBeActive() && !this.isSuppressed();
 
     if (!wantActive) {
@@ -457,6 +527,7 @@ export class IdleFacialExpressionController {
     this.changeTimer = this.schedule(() => {
       this.changeTimer = null;
       if (this.isSuppressed() || !this.shouldBeActive()) return;
+      if (this.responseFace) return; // Stage 4 response owns the face
       this.applyNextState();
     }, delayMs);
   }
@@ -525,6 +596,13 @@ export class IdleFacialExpressionController {
     if (this.cooldownTimer !== null) {
       this.cancel(this.cooldownTimer);
       this.cooldownTimer = null;
+    }
+  }
+
+  private clearResponseTimer(): void {
+    if (this.responseFaceTimer !== null) {
+      this.cancel(this.responseFaceTimer);
+      this.responseFaceTimer = null;
     }
   }
 }

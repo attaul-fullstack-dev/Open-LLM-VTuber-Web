@@ -9,7 +9,9 @@ import {
   IDLE_FACIAL_PALETTE,
   IdleFacialExpressionController,
   type IdleFacialAdditive,
+  type IdleFacialStateWeighted,
 } from '@/utils/live2d-idle-facial';
+import { responseFaceBus } from '@/utils/response-face-bus';
 
 /**
  * Mili Hidup Stage 3 — Autonomous idle facial micro-expressions.
@@ -69,6 +71,23 @@ export function useLive2DIdleFacial({
   useEffect(() => {
     controller.setSuppression('motion', isMotionPlaying);
   }, [controller, isMotionPlaying]);
+
+  // Stage 4 — contextual response emotion → Stage 3 face. When the audio task
+  // publishes a semantic face id we claim it (owning the face even while
+  // speaking, where autonomous idle is suppressed); `null` releases back to
+  // neutral + normal idle scheduling.
+  useEffect(() => {
+    return responseFaceBus.subscribe(({ faceId }) => {
+      const active = controllerRef.current;
+      if (!active) return;
+      if (faceId === null || faceId === '' || faceId === 'neutral') {
+        if (active.isResponseFaceActive()) active.releaseResponseFace();
+        return;
+      }
+      const state = IDLE_FACIAL_PALETTE.find((s: IdleFacialStateWeighted) => s.id === faceId);
+      active.claimResponseFace(state ?? null);
+    });
+  }, []);
 
   // Cubism id handles, resolved lazily and retried per frame until available
   // (keeps working even if this mounts before CubismFramework has started up).

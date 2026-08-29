@@ -45,6 +45,7 @@ export interface Message {
 
 export interface Actions {
   expressions?: string[] | number [];
+  emotions?: (string | null)[] | null;
   pictures?: string[];
   sounds?: string[];
 }

@@ -11,7 +11,8 @@ import { audioManager } from '@/utils/audio-manager';
 import { toaster } from '@/components/ui/toaster';
 import { useWebSocket } from '@/context/websocket-context';
 import { DisplayText } from '@/services/websocket-service';
-import { useLive2DExpression } from '@/hooks/canvas/use-live2d-expression';
+import { resolveResponseFaceId } from '@/utils/contextual-emotion';
+import { responseFaceBus } from '@/utils/response-face-bus';
 import { subtitlePlaybackCoordinator } from '@/utils/subtitle-playback';
 import * as LAppDefine from '../../../WebSDK/src/lappdefine';
 import { useAvatarActivityState } from '@/context/avatar-activity-context';
@@ -22,6 +23,7 @@ interface AudioTaskOptions {
   sliceLength: number
   displayText?: DisplayText | null
   expressions?: string[] | number[] | null
+  emotions?: (string | null)[] | null
   speaker_uid?: string
   forwarded?: boolean
 }
@@ -35,7 +37,6 @@ export const useAudioTask = () => {
   const { setSubtitleText, subtitleDismissed } = useSubtitle();
   const { appendResponse, appendAIMessage } = useChatHistory();
   const { sendMessage } = useWebSocket();
-  const { setExpression } = useLive2DExpression();
   const { beginSpeaking, endAllSpeaking } = useAvatarActivityState();
 
   // State refs to avoid stale closures
@@ -63,6 +64,9 @@ export const useAudioTask = () => {
   const stopCurrentAudioAndLipSync = useCallback(() => {
     audioManager.stopCurrentAudioAndLipSync();
     endAllSpeaking();
+    // Stage 4 — the response is over; release the contextual response face so
+    // Stage 3 idle resumes naturally.
+    responseFaceBus.publish({ faceId: null });
   }, [endAllSpeaking]);
 
   /**
@@ -84,10 +88,16 @@ export const useAudioTask = () => {
       return;
     }
 
-    const { audioBase64, displayText, expressions, forwarded } = options;
+    const {
+      audioBase64, displayText, expressions, emotions, forwarded,
+    } = options;
     const subtitleTicket = displayText
       ? subtitlePlaybackCoordinator.createSegment(displayText.text)
       : null;
+
+    // Stage 4 — contextual response emotion → Stage 3 face (works for TTS and
+    // text-only alike: published regardless of whether audio bytes exist).
+    responseFaceBus.publish({ faceId: resolveResponseFaceId({ emotions, expressions }) });
 
     // History is independent from playback presentation and still receives
     // every generated segment exactly as before.
@@ -138,16 +148,6 @@ export const useAudioTask = () => {
           console.warn('Model does not have _wavFileHandler for lip sync');
         } else {
           console.log('Model has _wavFileHandler available');
-        }
-
-        // Set expression if available
-        const lappAdapter = (window as any).getLAppAdapter?.();
-        if (lappAdapter && expressions?.[0] !== undefined) {
-          setExpression(
-            expressions[0],
-            lappAdapter,
-            `Set expression to: ${expressions[0]}`,
-          );
         }
 
         // Start talk motion
