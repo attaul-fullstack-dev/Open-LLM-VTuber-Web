@@ -6,6 +6,8 @@ import { useAvatarActivityState } from '@/context/avatar-activity-context';
 import { CubismFramework } from '../../../WebSDK/Framework/src/live2dcubismframework';
 import { setLive2DIdleFacialHook } from '../../../WebSDK/src/lapplive2dfacialhook';
 import {
+  DEBUG_IDLE_FACIAL_CYCLE,
+  IDLE_FACIAL_PALETTE,
   IdleFacialExpressionController,
   type IdleFacialAdditive,
 } from '@/utils/live2d-idle-facial';
@@ -25,6 +27,17 @@ import {
  * is setTimeout-driven inside the pure controller, and interpolation rides the
  * existing Cubism render loop.
  */
+// ---------------------------------------------------------------------------
+// TEMPORARY Stage 3 mouth-tuning debug pass — deterministic visual cycle + rich
+// runtime beacon. Both are DEBUG ONLY and must be removed before final release
+// (production keeps the random anti-repeat palette and no beacon traffic).
+// ---------------------------------------------------------------------------
+const DEBUG_FACIAL_CYCLE = true;
+const DEBUG_FACIAL_CYCLE_HOLD_MS = 5_000;
+const DEBUG_BEACON_DELAY_MS = 1_200; // converged read (interpolation done)
+const DEBUG_BEACON_LATE_DELAY_MS = 2_600; // overwrite check read
+// ---------------------------------------------------------------------------
+
 interface UseLive2DIdleFacialOptions {
   isDragging: boolean;
   isMotionPlaying: boolean;
@@ -102,13 +115,29 @@ export function useLive2DIdleFacial({
     }
   }, []);
 
-  // DEV beacon: prove facial writes land on the real mao_pro parameters.
-  // Reads back the model's actual values a few times after a state change and
-  // reports them via a URL 404 that lands in the server access log. Removed
-  // before final release (kept only while the user verifies Stage 3 live).
-  const beaconSentForRef = useRef<string | null>(null);
+  // Enable the deterministic debug cycle (mouth-tuning pass).
   useEffect(() => {
-    return () => { beaconSentForRef.current = null; };
+    controller.setCycle(
+      DEBUG_FACIAL_CYCLE ? DEBUG_IDLE_FACIAL_CYCLE : null,
+      DEBUG_FACIAL_CYCLE_HOLD_MS,
+    );
+  }, [controller]);
+
+  // DEV beacon: for every selected facial state, prove the mouth writes land
+  // on the real mao_pro parameters. Reports the semantic state, mouth param
+  // IDs, requested targets, actual runtime values, the param min/max (real
+  // clamp bounds from the model API), a clamped flag, and a delayed read that
+  // detects whether any later system overwrites the value. Reported via a URL
+  // 404 that lands in the server access log. DEBUG ONLY — removed before
+  // final release.
+  const beaconStateRef = useRef<string | null>(null);
+  const beaconTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  useEffect(() => {
+    const timers = beaconTimersRef.current;
+    return () => {
+      timers.forEach((t) => clearTimeout(t));
+      beaconStateRef.current = null;
+    };
   }, []);
 
   // Publish the per-frame apply function for the render loop, tear down on
@@ -123,25 +152,71 @@ export function useLive2DIdleFacial({
       if (!handles) return;
       const { additive, eyeOpen } = active.step(deltaSeconds);
       try {
-        // Debug beacon: once per selected state, read back the actual values.
+        // Debug beacon: on every state CHANGE, schedule a converged read plus a
+        // delayed read (overwrite check).
         const state = active.snapshot().state;
-        if (state && state !== beaconSentForRef.current
+        if (state && state !== beaconStateRef.current
           && typeof cubismModel.getParameterValueById === 'function') {
-          beaconSentForRef.current = state;
-          try {
-            const read = {
-              s: state,
-              up: cubismModel.getParameterValueById(handles.MouthUp) ?? NaN,
-              angry: cubismModel.getParameterValueById(handles.MouthAngry) ?? NaN,
-              angryLine: cubismModel.getParameterValueById(handles.MouthAngryLine) ?? NaN,
-              down: cubismModel.getParameterValueById(handles.MouthDown) ?? NaN,
-              eyeOpen: eyeOpen.toFixed(2),
-            };
-            const q = Object.entries(read).map(([k, v]) => `${k}=${v}`).join('&');
-            fetch(`/__facial_beacon?${q}`).catch(() => undefined);
-          } catch {
-            // beacon is best-effort only
-          }
+          beaconStateRef.current = state;
+          const capturedState = state;
+          const fire = (suffix: string) => {
+            if (beaconStateRef.current !== capturedState) return; // moved on
+            try {
+              const target =
+                IDLE_FACIAL_PALETTE.find((s) => s.id === capturedState)?.additive ?? {};
+              const entries: string[] = [`s=${capturedState}`];
+              // Mouth baselines from the idle motion (mtn_01..mtn_04):
+              // MouthUp=1.0 constant, all other mouth params 0.
+              const MOUTH_BASE: Record<string, number> = {
+                MouthUp: 1.0,
+                MouthDown: 0.0,
+                MouthAngry: 0.0,
+                MouthAngryLine: 0.0,
+              };
+              const MOUTH_KEY: Array<[string, keyof IdleFacialAdditive]> = [
+                ['up', 'MouthUp'],
+                ['dn', 'MouthDown'],
+                ['an', 'MouthAngry'],
+                ['ln', 'MouthAngryLine'],
+              ];
+              for (const [tag, paramKey] of MOUTH_KEY) {
+                const handle = handles[paramKey];
+                const idx = cubismModel.getParameterIndex(handle);
+                const min = typeof cubismModel.getParameterMinimumValue === 'function'
+                  ? cubismModel.getParameterMinimumValue(idx)
+                  : NaN;
+                const max = typeof cubismModel.getParameterMaximumValue === 'function'
+                  ? cubismModel.getParameterMaximumValue(idx)
+                  : NaN;
+                const val = cubismModel.getParameterValueById(handle) ?? NaN;
+                const tgt = (target[paramKey] as number | undefined) ?? 0;
+                const base = MOUTH_BASE[paramKey];
+                const desired = base + tgt;
+                const clamped = Number.isFinite(desired) && Number.isFinite(val)
+                  && Math.abs(val - desired) > 0.01;
+                entries.push(
+                  `${tag}_tgt=${tgt.toFixed(2)}`,
+                  `${tag}_base=${base.toFixed(2)}`,
+                  `${tag}_min=${Number.isFinite(min) ? min.toFixed(2) : 'na'}`,
+                  `${tag}_max=${Number.isFinite(max) ? max.toFixed(2) : 'na'}`,
+                  `${tag}_val=${Number.isFinite(val) ? val.toFixed(2) : 'na'}`,
+                  `${tag}_clp=${clamped ? 1 : 0}`,
+                );
+              }
+              const eyeFactor = Number.isFinite(active.snapshot().eyeOpen)
+                ? active.snapshot().eyeOpen
+                : 1.0;
+              entries.push(`eo=${eyeFactor.toFixed(2)}`);
+              const q = entries.join('&');
+              fetch(`/__facial_beacon${suffix}?${q}`).catch(() => undefined);
+            } catch {
+              // beacon is best-effort only
+            }
+          };
+          beaconTimersRef.current.push(
+            setTimeout(() => fire(''), DEBUG_BEACON_DELAY_MS),
+            setTimeout(() => fire('_late'), DEBUG_BEACON_LATE_DELAY_MS),
+          );
         }
         // Additive facial micro-expression parameters.
         cubismModel.addParameterValueById(handles.BrowLY, additive.BrowLY);

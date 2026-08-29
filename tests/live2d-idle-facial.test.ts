@@ -4,6 +4,7 @@ import {
   IdleFacialExpressionController,
   NEUTRAL_EYE_OPEN,
   IDLE_FACIAL_PALETTE,
+  DEBUG_IDLE_FACIAL_CYCLE,
   type IdleFacialAdditive,
   type IdleFacialTiming,
   type IdleFacialControllerOptions,
@@ -185,6 +186,84 @@ test('sleepy_soft is long_idle only', () => {
     if (lh.controller.snapshot().state === 'sleepy_soft') sawSleepy = true;
   }
   assert.equal(sawSleepy, true);
+});
+
+test('palette contains the eight required distinguishable mouth states', () => {
+  const ids = new Set(IDLE_FACIAL_PALETTE.map((s) => s.id));
+  for (const id of [
+    'neutral',
+    'small_smile',
+    'obvious_smile',
+    'mild_pout',
+    'obvious_sulk',
+    'mildly_annoyed',
+    'relaxed',
+    'sleepy_soft',
+  ]) {
+    assert.ok(ids.has(id), `palette must contain ${id}`);
+  }
+});
+
+test('mouth states are separated on the mouth axis, not only brows/eyes', () => {
+  const byId = Object.fromEntries(IDLE_FACIAL_PALETTE.map((s) => [s.id, s.additive]));
+  const get = (id: string, key: keyof IdleFacialAdditive) => (byId[id][key] as number | undefined) ?? 0;
+  // Smile ladder: obvious_smile mouth corners clearly above small_smile.
+  assert.ok(get('obvious_smile', 'MouthUp') > get('small_smile', 'MouthUp'), 'obvious smile must widen the mouth beyond small smile');
+  // Pout ladder: obvious_sulk fully pouts while mild_pout stays light.
+  assert.ok(get('obvious_sulk', 'MouthAngry') > get('mild_pout', 'MouthAngry'), 'sulk pouts harder than mild pout');
+  assert.ok(get('obvious_sulk', 'MouthAngryLine') > get('mild_pout', 'MouthAngryLine'), 'sulk pout line stronger than mild pout');
+  // Annoyed pulls corners fully down (like exp_08); pout keeps them near neutral.
+  assert.ok(Math.abs(get('mildly_annoyed', 'MouthUp')) > Math.abs(get('mild_pout', 'MouthUp')), 'annoyed mouth turns down harder than pout');
+  // Annoyed differs from pout on the brow axis too.
+  assert.ok(Math.abs(get('mildly_annoyed', 'BrowLAngle')) > Math.abs(get('mild_pout', 'BrowLAngle')), 'annoyed brow angle sharper than pout');
+  // Small smile and relaxed stay subtle; neutral is zero.
+  assert.equal(get('neutral', 'MouthUp'), 0);
+  assert.ok(get('small_smile', 'MouthUp') > 0 && get('small_smile', 'MouthUp') <= 0.6);
+  assert.ok(get('relaxed', 'MouthUp') >= 0 && get('relaxed', 'MouthUp') <= 0.4);
+  // No strong negative/surprise mouth in the ambient set: no state uses a
+  // hard MouthDown > 0.4 outside the dedicated pout/sulk ladder.
+  for (const id of ['neutral', 'small_smile', 'obvious_smile', 'relaxed', 'sleepy_soft']) {
+    assert.ok(get(id, 'MouthDown') <= 0.4, `${id} must not turn the mouth down strongly`);
+  }
+});
+
+test('debug cycle walks every state in order, holding each for cycleHoldMs', () => {
+  const h = makeController({ cycle: DEBUG_IDLE_FACIAL_CYCLE, cycleHoldMs: 400 });
+  h.controller.setActivity('long_idle');
+  const seen: string[] = [];
+  let prev: string | null = null;
+  // Fine-grained pumps (≈112ms each) so every held state is observed at least
+  // once before it changes (hold 400ms > pump granularity).
+  for (let i = 0; i < 90; i += 1) {
+    pump(h, 100);
+    const s = h.controller.snapshot().state;
+    if (s && s !== prev) {
+      seen.push(s);
+      prev = s;
+    }
+  }
+  const firstEight = seen.slice(0, DEBUG_IDLE_FACIAL_CYCLE.length);
+  assert.deepEqual(
+    firstEight,
+    DEBUG_IDLE_FACIAL_CYCLE,
+    `cycle must visit states in order, got ${firstEight.join(' -> ')}`,
+  );
+  // And it wraps back to the start afterwards.
+  assert.equal(seen[DEBUG_IDLE_FACIAL_CYCLE.length], DEBUG_IDLE_FACIAL_CYCLE[0]);
+});
+
+test('disabling the debug cycle returns to random weighted selection', () => {
+  const h = makeController({ cycle: DEBUG_IDLE_FACIAL_CYCLE, cycleHoldMs: 200 });
+  h.controller.setActivity('idle');
+  pump(h, 230);
+  assert.ok(DEBUG_IDLE_FACIAL_CYCLE.includes(h.controller.snapshot().state ?? ''));
+  h.controller.setCycle(null);
+  pump(h, 500);
+  // Random mode still produces a (non-null) state and never repeats instantly
+  // when alternatives exist.
+  const s = h.controller.snapshot().state;
+  assert.ok(s !== null, 'random mode still selects a state');
+  assert.ok(IDLE_FACIAL_PALETTE.some((p) => p.id === s));
 });
 
 test('anti-repeat prevents immediate repetition when alternatives exist', () => {

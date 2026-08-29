@@ -73,26 +73,30 @@ export const ZERO_FACIAL: IdleFacialAdditive = Object.freeze({
 });
 
 /**
- * Max additive magnitudes. Intentional subtle (micro-expression, not
- * exaggerated anime face). Values are conservative already-scaled offsets well
- * inside mao_pro's parameter range; CubismModel clamps the final value anyway.
+ * Max additive magnitudes — safe ceilings, NOT the micro-expression defaults.
+ *
+ * The idle motion (mtn_01..mtn_04) holds ParamMouthUp at 1.0 (its neutral
+ * mouth pose), so smile offsets must stack far enough above that baseline to
+ * be visible; the model's own expression presets (exp_05/exp_08) use full
+ * ±1.0 mouth swings. CubismModel clamps the final value to the param's real
+ * min/max anyway, so pushing toward the design range is safe.
  */
 export const FACIAL_RANGES: Required<IdleFacialAdditive> = {
-  BrowLY: 0.35,
-  BrowRY: 0.35,
-  BrowLAngle: 0.35,
-  BrowRAngle: 0.35,
-  BrowLForm: 0.35,
-  BrowRForm: 0.35,
-  MouthUp: 0.4,
-  MouthDown: 0.3,
-  MouthAngry: 0.35,
-  MouthAngryLine: 0.3,
-  EyeLSmile: 0.35,
-  EyeRSmile: 0.35,
-  EyeLForm: 0.25,
-  EyeRForm: 0.25,
-  Cheek: 0.35,
+  BrowLY: 0.5,
+  BrowRY: 0.5,
+  BrowLAngle: 0.6,
+  BrowRAngle: 0.6,
+  BrowLForm: 0.4,
+  BrowRForm: 0.4,
+  MouthUp: 1.0,
+  MouthDown: 0.5,
+  MouthAngry: 1.0,
+  MouthAngryLine: 1.0,
+  EyeLSmile: 1.0,
+  EyeRSmile: 1.0,
+  EyeLForm: 0.4,
+  EyeRForm: 0.4,
+  Cheek: 0.7,
 };
 
 /** Semantic ambient facial state — a set of small offsets + optional eye factor. */
@@ -119,34 +123,73 @@ export const IDLE_FACIAL_PALETTE: IdleFacialState[] = [
   {
     id: 'small_smile',
     additive: {
-      MouthUp: 0.7,
-      EyeLSmile: 0.4,
-      EyeRSmile: 0.4,
-      BrowLY: 0.1,
-      BrowRY: 0.1,
+      MouthUp: 0.5,
+      EyeLSmile: 0.45,
+      EyeRSmile: 0.45,
+      BrowLY: 0.15,
+      BrowRY: 0.15,
     },
     eyeOpen: NEUTRAL_EYE_OPEN,
+  },
+  {
+    // Clearly wider than small_smile: mouth corners pushed hard upward
+    // (stacking on mtn_01's MouthUp=1.0 baseline), full eye-smile like
+    // exp_02/exp_04, plus sparkle-eye open (×1.15, exp_04 uses ×1.2).
+    id: 'obvious_smile',
+    additive: {
+      MouthUp: 1.0,
+      EyeLSmile: 0.9,
+      EyeRSmile: 0.9,
+      EyeLForm: 0.25,
+      EyeRForm: 0.25,
+      BrowLY: 0.3,
+      BrowRY: 0.3,
+      Cheek: 0.6,
+    },
+    eyeOpen: 1.15,
   },
   {
     id: 'mild_pout',
     additive: {
-      MouthAngry: 0.55,
-      MouthAngryLine: 0.5,
-      MouthDown: 0.2,
-      BrowLAngle: -0.18,
-      BrowRAngle: -0.18,
+      MouthAngry: 0.45,
+      MouthAngryLine: 0.45,
+      MouthUp: -0.3,
+      BrowLAngle: -0.2,
+      BrowRAngle: -0.2,
     },
     eyeOpen: NEUTRAL_EYE_OPEN,
   },
   {
+    // Unmistakable cemberut: full pout (exp_08 values) + corners down + droop.
+    id: 'obvious_sulk',
+    additive: {
+      MouthAngry: 1.0,
+      MouthAngryLine: 1.0,
+      MouthUp: -0.8,
+      MouthDown: 0.3,
+      BrowLAngle: -0.3,
+      BrowRAngle: -0.3,
+      BrowLY: -0.15,
+      BrowRY: -0.15,
+      EyeLForm: 0.15,
+      EyeRForm: 0.15,
+    },
+    eyeOpen: NEUTRAL_EYE_OPEN,
+  },
+  {
+    // Distinct from pout: corners pulled fully down (MouthUp -1, exp_08),
+    // stronger angry brows, no MouthDown droop.
     id: 'mildly_annoyed',
     additive: {
       MouthAngry: 0.7,
-      MouthAngryLine: 0.65,
-      BrowLAngle: -0.35,
-      BrowRAngle: -0.35,
-      BrowLY: -0.1,
-      BrowRY: -0.1,
+      MouthAngryLine: 0.7,
+      MouthUp: -1.0,
+      BrowLAngle: -0.5,
+      BrowRAngle: -0.5,
+      BrowLForm: -0.3,
+      BrowRForm: -0.3,
+      EyeLForm: 0.2,
+      EyeRForm: 0.2,
     },
     eyeOpen: NEUTRAL_EYE_OPEN,
   },
@@ -165,24 +208,43 @@ export const IDLE_FACIAL_PALETTE: IdleFacialState[] = [
   {
     id: 'relaxed',
     additive: {
-      MouthUp: 0.3,
-      BrowLY: -0.12,
-      BrowRY: -0.12,
-      EyeLSmile: 0.15,
-      EyeRSmile: 0.15,
+      MouthUp: 0.25,
+      BrowLY: -0.1,
+      BrowRY: -0.1,
+      EyeLSmile: 0.2,
+      EyeRSmile: 0.2,
     },
     eyeOpen: 0.94,
   },
   {
     id: 'sleepy_soft',
     additive: {
-      BrowLY: -0.2,
-      BrowRY: -0.2,
-      MouthDown: 0.25,
+      BrowLY: -0.25,
+      BrowRY: -0.25,
+      MouthUp: 0.15,
+      MouthDown: 0.15,
+      EyeLSmile: 0.15,
+      EyeRSmile: 0.15,
     },
-    eyeOpen: 0.82,
+    eyeOpen: 0.8,
     longIdleOnly: true,
   },
+];
+
+/**
+ * Temporary debug visual cycle (mouth-tuning pass): walks every mouth state in
+ * order and holds each one so it can be inspected on Android. Debug-only —
+ * REMOVE before final release; production uses the random anti-repeat palette.
+ */
+export const DEBUG_IDLE_FACIAL_CYCLE: string[] = [
+  'neutral',
+  'small_smile',
+  'obvious_smile',
+  'mild_pout',
+  'obvious_sulk',
+  'mildly_annoyed',
+  'relaxed',
+  'sleepy_soft',
 ];
 
 export type IdleFacialSuppressionKind = 'speaking' | 'drag' | 'motion';
@@ -225,6 +287,10 @@ export interface IdleFacialControllerOptions {
   timing?: IdleFacialTiming;
   palette?: IdleFacialState[];
   smoothing?: number;
+  /** Debug: when non-empty, walk these state ids in order instead of random. */
+  cycle?: string[] | null;
+  /** Debug: how long each cycle state is held (ms). */
+  cycleHoldMs?: number;
 }
 
 export class IdleFacialExpressionController {
@@ -239,6 +305,12 @@ export class IdleFacialExpressionController {
   private readonly palette: IdleFacialState[];
 
   private readonly smoothing: number;
+
+  private cycle: string[] | null;
+
+  private cycleHoldMs: number;
+
+  private cycleIndex = 0;
 
   private activity: AvatarActivityState = 'active';
 
@@ -277,6 +349,32 @@ export class IdleFacialExpressionController {
     this.timing = options.timing ?? IDLE_FACIAL_TIMING;
     this.palette = options.palette ?? IDLE_FACIAL_PALETTE;
     this.smoothing = options.smoothing ?? 0.35;
+    this.cycle = options.cycle ?? null;
+    this.cycleHoldMs = options.cycleHoldMs ?? 5_000;
+  }
+
+  /**
+   * Toggle debug cycle mode. When a non-empty list is given the controller
+   * stops random selection and walks the listed state ids in order, holding
+   * each `holdMs`. Pass `null` to return to weighted random behavior.
+   */
+  setCycle(cycle: string[] | null, holdMs?: number): void {
+    this.cycle = cycle;
+    if (holdMs !== undefined) this.cycleHoldMs = holdMs;
+    this.cycleIndex = 0;
+    if (cycle && cycle.length > 0) {
+      // Start cycling immediately if eligible (debug: bypasses longIdleOnly).
+      this.clearChangeTimer();
+      if (this.shouldBeActive() && !this.isSuppressed()) {
+        this.applyNextState();
+      } else {
+        this.target = { ...ZERO_FACIAL };
+        this.targetEyeOpen = NEUTRAL_EYE_OPEN;
+        this.activeStateId = null;
+      }
+    } else {
+      this.reconcileSchedule();
+    }
   }
 
   setActivity(state: AvatarActivityState): void {
@@ -376,23 +474,39 @@ export class IdleFacialExpressionController {
 
   private armChange(): void {
     this.clearChangeTimer();
-    const { min, max } = this.activity === 'long_idle'
-      ? { min: this.timing.longIdleMinMs, max: this.timing.longIdleMaxMs }
-      : { min: this.timing.idleMinMs, max: this.timing.idleMaxMs };
+    const delayMs = this.cycle && this.cycle.length > 0
+      ? this.cycleHoldMs
+      : (() => {
+        const { min, max } = this.activity === 'long_idle'
+          ? { min: this.timing.longIdleMinMs, max: this.timing.longIdleMaxMs }
+          : { min: this.timing.idleMinMs, max: this.timing.idleMaxMs };
+        return this.randBetween(min, max);
+      })();
     this.changeTimer = this.schedule(() => {
       this.changeTimer = null;
       if (this.isSuppressed() || !this.shouldBeActive()) return;
-      this.applyRandomState();
-    }, this.randBetween(min, max));
+      this.applyNextState();
+    }, delayMs);
   }
 
-  private applyRandomState(): void {
-    const state = this.pickState();
+  private applyNextState(): void {
+    const state = this.cycle && this.cycle.length > 0
+      ? this.pickCycleState()
+      : this.pickState();
     this.activeStateId = state.id;
     this.target = { ...ZERO_FACIAL, ...state.additive };
     this.targetEyeOpen = state.eyeOpen;
     // Schedule the next change (micro-expressions come and go).
     this.armChange();
+  }
+
+  private pickCycleState(): IdleFacialState {
+    const ids = this.cycle!;
+    const id = ids[this.cycleIndex % ids.length];
+    this.cycleIndex += 1;
+    const state = this.palette.find((s) => s.id === id) ?? this.palette[0];
+    this.rememberLast(state.id);
+    return state;
   }
 
   private pickState(): IdleFacialState {
