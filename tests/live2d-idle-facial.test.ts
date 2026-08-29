@@ -418,4 +418,51 @@ test('dispose resets to neutral and cancels timers', () => {
   assert.equal(snap.state, null);
 });
 
+test('AUDIO OFF: latched response face survives and idle timer cannot overwrite it', () => {
+  // Muted/text-only response: the contextual face is claimed from emotion
+  // metadata (activity stays idle because beginSpeaking is never called when
+  // muted). Even with the idle timer firing AND speaking suppression turning
+  // on mid-turn, the latched response face must keep owning the face.
+  const h = makeController();
+  h.controller.setActivity('idle');
+  // Start Stage 3 autonomous so its idle timer is armed.
+  pump(h, 300);
+  assert.ok(facialMax(h.controller.snapshot().additive) > 0);
+
+  // Stage 4 claims the contextual response face (muted path publishes at task
+  // time from emotion metadata). Find squint_smile in the palette.
+  const face = IDLE_FACIAL_PALETTE.find((s) => s.id === 'squint_smile')!;
+  h.controller.claimResponseFace(face, 20_000);
+  const latched = face.additive;
+
+  // Let the idle change timer fire multiple times while the response face is
+  // held — it must NOT replace the latched face (armChange returns early).
+  for (let i = 0; i < 10; i += 1) {
+    pump(h, 130); // 130ms > idle change interval (100ms)
+    h.controller.step(0.016);
+    const snap = h.controller.snapshot();
+    assert.equal(snap.state, 'squint_smile', 'response face must stay latched while held');
+  }
+
+  // Speaking suppression turning on mid-turn must not clear the response face.
+  h.controller.setSuppression('speaking', true);
+  pump(h, 200);
+  assert.equal(h.controller.snapshot().state, 'squint_smile', 'response face survives speaking suppression');
+
+  // Compare held additive against the target of the latched face (allow smooth
+  // interpolation to have approached it).
+  const held = h.controller.snapshot().additive;
+  for (const fk of Object.keys(latched) as (keyof IdleFacialAdditive)[]) {
+    const target = latched[fk] as number;
+    if (Math.abs(target) < 1e-9) continue;
+    assert.ok(Math.abs(held[fk] - target) < 1.0, `face parameter ${fk} driven toward latched target`);
+  }
+
+  // Only a real release (turn end / text-only hold expiry) returns to neutral
+  // and lets Stage 3 idle scheduling resume.
+  h.controller.releaseResponseFace();
+  pump(h, 300);
+  assert.ok(facialMax(h.controller.snapshot().additive) > 0, 'idle resumes after release');
+});
+
 void (0 as never);

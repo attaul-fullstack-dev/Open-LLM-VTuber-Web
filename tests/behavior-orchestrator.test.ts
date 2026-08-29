@@ -221,3 +221,88 @@ test('conflict matrix: long_idle + proactive yields to response', () => {
   assert.equal(b.isResponseOwned(), true);
   assert.equal(b.canRunIdleMovement(), false);
 });
+
+// ---------------------------------------------------------------------------
+// AUDIO OFF / muted — contextual emotional ownership must NOT depend on TTS.
+// A muted response still claims a response face (emotion metadata, not audible
+// playback), so the orchestrator must block Stage 3 idle the same way an
+// audio response does. `responseInProgress` (isThinkingSpeaking) can drop back
+// to false early in muted (no audio tasks keep the queue busy), so
+// `responseFaceActive` ALONE must be sufficient to own the face.
+// ---------------------------------------------------------------------------
+
+test('AUDIO OFF: muted response claims the same contextual face as audio', () => {
+  // responseInProgress false (chain already returned to idle) but a response
+  // face is latched via emotion metadata — this is the muted signal.
+  const audioOn = resolveBehaviorOwnership(base({ activityState: 'speaking', responseFaceActive: true }));
+  const muted = resolveBehaviorOwnership(base({ activityState: 'long_idle', responseFaceActive: true }));
+  assert.equal(audioOn.isResponseOwned(), true);
+  assert.equal(muted.isResponseOwned(), true, 'response face alone must own the face in muted');
+  assert.equal(muted.canRunIdleFace(), false);
+  assert.equal(muted.faceOwner, 'response');
+});
+
+test('AUDIO OFF: Stage 3 idle cannot overwrite Stage 4 during muted hold', () => {
+  const b = resolveBehaviorOwnership(base({
+    activityState: 'long_idle',
+    responseFaceActive: true,
+    responseInProgress: false,
+  }));
+  assert.equal(b.canRunIdleFace(), false);
+  assert.equal(b.faceOwner, 'response');
+});
+
+test('AUDIO OFF: text-only hold keeps the contextual face visible', () => {
+  const b = resolveBehaviorOwnership(base({
+    activityState: 'idle',
+    responseFaceActive: true,
+    responseInProgress: false,
+  }));
+  assert.equal(b.canRunIdleFace(), false, 'idle face blocked while text-only face held');
+  assert.equal(b.isResponseOwned(), true);
+});
+
+test('AUDIO OFF: contextual face releases after text-only lifecycle, Stage 3 resumes', () => {
+  const held = resolveBehaviorOwnership(base({ activityState: 'idle', responseFaceActive: true }));
+  assert.equal(held.canRunIdleFace(), false);
+  const released = resolveBehaviorOwnership(base({ activityState: 'idle', responseFaceActive: false }));
+  assert.equal(released.canRunIdleFace(), true);
+  assert.equal(released.lifecycle, 'idle');
+});
+
+test('AUDIO OFF: interruption clears muted response ownership', () => {
+  const b = resolveBehaviorOwnership(base({
+    activityState: 'long_idle',
+    responseFaceActive: true,
+    responseInProgress: false,
+    interrupted: true,
+  }));
+  assert.equal(b.lifecycle, 'interruption');
+  assert.equal(b.canRunIdleFace(), false);
+  assert.equal(b.isInterrupted(), true);
+});
+
+test('AUDIO OFF: next turn cannot inherit stale muted contextual face', () => {
+  // released (responseFaceActive false) + idle => idle may run; no stale owner.
+  const b = resolveBehaviorOwnership(base({ activityState: 'idle', responseFaceActive: false, responseInProgress: false }));
+  assert.equal(b.owner === 'idle_face' || b.owner === 'idle_movement', true);
+  assert.equal(b.isResponseOwned(), false);
+});
+
+test('AUDIO OFF: proactive muted response uses the same ownership rules', () => {
+  const b = resolveBehaviorOwnership(base({
+    activityState: 'long_idle',
+    responseFaceActive: true,
+    responseInProgress: false,
+  }));
+  assert.equal(b.isResponseOwned(), true);
+  assert.equal(b.canRunIdleFace(), false);
+});
+
+test('AUDIO ON: audio response still owns face via face OR in-progress signals', () => {
+  const viaProgress = resolveBehaviorOwnership(base({ activityState: 'long_idle', responseInProgress: true }));
+  const viaFace = resolveBehaviorOwnership(base({ activityState: 'speaking', responseFaceActive: true }));
+  assert.equal(viaProgress.isResponseOwned(), true);
+  assert.equal(viaFace.isResponseOwned(), true);
+  assert.equal(viaFace.canRunIdleFace(), false);
+});
