@@ -51,7 +51,7 @@ instrumentation has been removed.
 - `87c7677` natural arc + angry-not-sad fix
 - `e164e08` final 7-state weighted palette (big_smile/relaxed/curious removed)
 - `72af388` pout/angry rig-recipe tuning
-- **`<FINAL>` this clean commit** (debug cycle + beacon removed)
+- `3981a82` **final clean commit** — debug cycle + beacon removed
 
 Roll forward intentionally kept on its own branch/worktree; **NOT merged to
 main, backend untouched, Stage 4 not started.**
