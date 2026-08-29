@@ -1,16 +1,19 @@
 # Mili Hidup — Stage 4: Contextual Emotion → Avatar
 
-**Status:** IMPLEMENTED + committed on its own frontend branch/worktree; backend
-patch committed to `stage6-final-integration`. **NOT merged, NOT deployed.**
-Requires Android visual verification before "production-ready". Stage 5 not started.
+**Status:** DONE after final cleanup. Implemented, **live-verified on Android**
+(audio-ON and audio-OFF/text-only both PASS), temporary instrumentation removed,
+committed on its own frontend branch/worktree; backend patches committed to
+`stage6-final-integration`. **NOT merged to main.** Stage 5 not started.
 
 - Frontend branch: `mili-hidup-stage4-contextual-emotion`
 - Frontend worktree: `/root/waifu/worktrees/mili-stage4-web` (base = Stage 3 final
   commit `8ff1ed2`)
-- Frontend commit: `5aec82a` (feat: add contextual response facial expressions)
-- Backend patch commit: `b9895f9` on `stage6-final-integration
-  (fix: preserve response emotion action metadata)
-- This report commit: `<DOC>` (docs record)
+- Frontend commits: `5aec82a` (initial Stage 4) → `a7f20ba` (turn-level latch +
+  shared lifecycle + dedup + cleanup)
+- Backend patch commits on `stage6-final-integration`: `b9895f9` (emotion action
+  metadata) · `a8dccab` (strip emotion tags from visible/tts/history) ·
+  `ab0dc1c` (marker-at-start + single authoritative turn-complete signal)
+- This report commit: `6c97043` (docs record)
 
 ---
 
@@ -136,52 +139,108 @@ Wiring:
   to neutral. Surprise could theoretically use `exp_07`, but full presets fight
   the Stage 3 controller / lip-sync / blink, so neutral is the safer choice.
 
-## 7. Tests / validation
+## 7. Turn-level lifecycle, timing & cleanup (final)
 
-**Frontend (Stage 4, `tests/contextual-emotion.test.ts` — 20 tests):**
-label→face mapping, rig-limited→neutral, unknown→neutral, index fallback,
-label-wins-over-index, palette-id validity, claim-overrides-idle,
-idle-cannot-override-claim, active-during-speaking, claim-null-releases,
-consecutive-replace (no stale), only-facial-params (no ParamA/Stage2),
-lip-sync/EyeOpen-multiply, auto-release-after-hold, TTS+text-only both work,
-proactive-same-path, bus carry, no-provider-call, **runtime-order regression**
-(claimed response face drives final additive), dispose-cleans.
+This section records the work added after the initial `5aec82a` implementation,
+all driven by live-test findings.
 
-**Frontend regressions:**
-- Stage 3 `live2d-idle-facial`: 16/16 · Stage 2 `idle-behavior`: 16/16 · Stage 1
-  `activity` 10/10 · subtitle 5/5 · display 2/2 · integration (7+4+5) 16/16.
-- Production build: **PASS** (`index-B3Mxq_5A.js`).
-- Typecheck scope (changed files): clean (only transitive `WebSDK/Framework`
-  pre-existing noise; project gate = electron-vite build = PASS).
-- ESLint could not run (config `airbnb` not installed in this env — pre-existing).
+**Marker position (backend):** `live2d_expression_prompt.txt` now requires the
+single marker at the VERY START of the response (`[joy]` then text), never at the
+end/inline. Proven live: `idx=1 emotions=smirk has_marker=True` so the face is
+known before sentence 1 audio starts (the old late-marker build claimed the face
+only after all spoken sentences and held it ~64 ms).
 
-**Backend (`tests/test_stage4_emotion_labels.py` — 7 tests):** extract_emotion_keys
-labels, legacy extract_emotion untouched, no-match empty, case-insensitive,
-`Actions.to_dict` round-trip, None omitted. Ruff: clean. compileall: OK.
-Proactive suite: **106/106**. Conversation/memory/relationship/summary/latency:
-**99/100** (1 pre-existing env failure: `test_mili_ui_response_polish` fails to
-import `open_llm_vtuber` due to a top-level (non-`src.`) import convention clash —
-unrelated to this patch).
+**Turn-level latch (frontend):** a valid non-neutral emotion latches the face
+for the whole assistant turn. Later sentences with no marker/`neutral` fallback
+**keep** the face (`face_keep` / `decideResponseFace`); they no longer release
+it. Release only on real turn end (`null`), interruption, or cancellation.
 
-## 8. files changed
+**Shared per-turn lifecycle (`response-turn-lifecycle.ts`):** `useAudioTask` is
+mounted by several components (canvas, websocket-handler, every `useInterrupt`
+consumer), so per-instance refs caused BOTH: (a) an audio turn being
+misclassified as text-only (the releasing instance never played the audio), and
+(b) a duplicate-release storm (every instance ran its own completion effect).
+The per-turn state is now a module-level singleton: `markAudioPlayed` latches
+`audioPlayed` from a real `audio_start` for the WHOLE turn, and `decideTurnFinalize`
+returns exactly one authoritative decision per turn (`already_released`
+afterward, kept as defense-in-depth with the idempotent frontend guard). Only
+one mounted instance (first claimant) subscribes to `backendSynthComplete`, so
+duplicates are suppressed at the source too.
+
+**Watchdog / hold policies:** `RESPONSE_FACE_HOLD_MS` is 6s→**20s** (a pure
+fallback for a genuinely stuck lifecycle, not the primary lifetime) and is
+activity-refreshed (`refreshResponseFace`) on every audio task/start/end, text
+segment and sentence publish, so healthy multi-sentence turns (long TTS gaps)
+never time out. Audio turns release immediately at `playback_complete`; only a
+turn with NO real audio playback (muted/text-only) gets a bounded perceptual
+hold (`text_only_hold`, `pickTextOnlyHoldMs` = 2.5s min, ~8ms/char, 6s cap).
+
+**Turn-complete dedup:** `backend-synth-complete` was sent twice per turn (in
+`single_conversation.py`/`group_conversation.py` + in `finalize_conversation_turn`),
+releasing the face and re-emitting `frontend-playback-complete` repeatedly. The
+duplicate sends were removed — `finalize_conversation_turn` is the single
+authoritative emitter.
+
+**Temporary instrumentation removed before release:** `s4-trace.ts` + the
+`/debug/s4trace` bridge and every server-side `[S4TRACE]` line were removed.
+The served bundle contains **zero** S4TRACE/debug references.
+
+## 8. Tests / validation (final)
+
+**Frontend full regression:** **89/89 PASS** across 7 test files, including:
+- `contextual-emotion`: label→face mapping, rig-limited→neutral, unknown→neutral,
+  index fallback, label-wins-over-index, palette-id validity, claim-overrides-idle,
+  idle-cannot-override-claim, active-during-speaking, claim-null-releases,
+  consecutive-replace (no stale), only-facial-params (no ParamA/Stage2),
+  lip-sync/EyeOpen-multiply, hold-policy bounds, **turn-level latch** (unmarked
+  sentence keeps face; no neutral_sentence release), **LATCH text-only/perceptual
+  hold**, **lifecycle latch** (audio never text_only_hold; second/third sentence
+  cannot reset audio-played; new turn resets; interruption immediate; duplicate
+  completion → one decision; idempotent).
+- `response-turn-lifecycle`: pure state-machine tests (**8**).
+- Stage 3 `live2d-idle-facial` 16/16 · Stage 2 `idle-behavior` 16/16 · Stage 1
+  `activity` 10/10 · subtitle/display 7/7.
+- **runtime-order regression** covers a response face surviving the real update order.
+- Production build: **PASS** (`index-CuxzRkLo.js` final clean bundle, **0** S4TRACE
+  markers after instrumentation removal).
+- Typecheck (scoped to changed files): clean; only pre-existing `WebSDK/Framework`
+  noise (project gate = electron-vite build = PASS). ESLint config `airbnb` not
+  installed in this env (pre-existing).
+
+**Backend:**
+- `tests/test_stage4_emotion_labels.py`: 16/16 (incl. marker-at-start extraction,
+  tag removed from visible/tts/persisted text, cleanup applies to proactive too).
+- Proactive + architecture + stage4 + memory/relationship/summary/latency:
+  **232/232 PASS**.
+- `test_mili_ui_response_polish`: 1 pre-existing env failure (`ModuleNotFoundError:
+  open_llm_vtuber` import convention clash) — unchanged, unrelated to this patch.
+- Ruff: clean. compileall: OK. `git diff --check`: clean.
+
+## 9. files changed
 
 **Frontend (`mili-hidup-stage4-contextual-emotion`):**
 - `src/renderer/src/utils/contextual-emotion.ts` (new) — label→face mapping + index fallback
-- `src/renderer/src/utils/response-face-bus.ts` (new) — response-face pub/sub
-- `src/renderer/src/utils/live2d-idle-facial.ts` — response-face ownership in controller
-- `src/renderer/src/hooks/canvas/use-live2d-idle-facial.ts` — subscribe + claim/release
-- `src/renderer/src/hooks/utils/use-audio-task.ts` — publish face; release on end; drop legacy preset
+- `src/renderer/src/utils/response-face-bus.ts` (new) — response-face pub/sub + decideResponseFace latch + pickTextOnlyHoldMs
+- `src/renderer/src/utils/response-turn-lifecycle.ts` (new) — shared per-turn lifecycle state machine
+- `src/renderer/src/utils/live2d-idle-facial.ts` — response-face ownership + watchdog refresh in controller
+- `src/renderer/src/hooks/canvas/use-live2d-idle-facial.ts` — subscribe + claim/keep/release latch
+- `src/renderer/src/hooks/utils/use-audio-task.ts` — publish face; turn-level lifecycle; heartbeat; drop legacy preset
+- `src/renderer/src/hooks/utils/use-interrupt.ts` — pass `interruption` reason
 - `src/renderer/src/services/websocket-handler.tsx` — forward `emotions`
 - `src/renderer/src/services/websocket-service.tsx` — `emotions` type
-- `tests/contextual-emotion.test.ts` (new)
+- `tests/contextual-emotion.test.ts`, `tests/response-turn-lifecycle.test.ts` (new)
+- `src/renderer/src/utils/s4-trace.ts` — temporary instrumentation, **deleted**
 
 **Backend (committed to `stage6-final-integration`):**
 - `src/open_llm_vtuber/live2d_model.py` — `extract_emotion_keys`
 - `src/open_llm_vtuber/agent/output_types.py` — `Actions.emotions`
 - `src/open_llm_vtuber/agent/transformers.py` — carry `actions.emotions`
+- `prompts/utils/live2d_expression_prompt.txt` — marker-at-start instruction
+- `src/open_llm_vtuber/conversations/single_conversation.py` / `group_conversation.py` — single-authoritative completion dedup
+- `src/open_llm_vtuber/conversations/conversation_utils.py` — tag cleanup (metadata kept, text stripped); S4 trace added then removed
 - `tests/test_stage4_emotion_labels.py` (new)
 
-## 9. Android live-test procedure (after deploy)
+## 10. Android live-test procedure (after deploy)
 
 1. Neutral: normal factual chat → neutral face.
 2. Happy/positive chat → small_smile.
@@ -193,7 +252,7 @@ unrelated to this patch).
 8. Text-only (TTS off): expression still appears for a perceivable duration.
 9. Proactive: Mili's proactive message also drives a face from its emotion.
 
-## 10. known limitations
+## 11. known limitations
 
 - fear / surprise response emotions stay **neutral** (no safe Stage 3 face; using
   presets would fight the controller). Honest rig limit.
@@ -201,14 +260,15 @@ unrelated to this patch).
   full preset strengths (no smooth intensity ramp). Accepted per label-only design.
 - If the model is NOT mao_pro, the same mapping still applies; faces that map to
   palette ids work for any model with those params, and absent params no-op safely.
-- `[emotion]` tags themselves: `remove_emotion_keywords` exists but is currently
-  not called anywhere, so the raw `[sadness]` may still appear in some display text
-  paths. **Out of scope for Stage 4** (would change display/tts semantics); noted
-  for a future display cleanup.
 
-## 11. recommended Stage 5 handoff
+**RESOLVED:** the `[emotion]` tag display/history cleanup was completed separately
+on the backend (`a8dccab` — markers extracted as metadata, then stripped from
+visible/tts/persisted text).
+
+## 12. recommended Stage 5 handoff
 - Emotion **intensity** (if a future backend labels intensity) → scale Stage 3
   offsets toward `FACIAL_RANGES`.
 - Optional safe preset for surprise (exp_07) with strict release, IF proven not to
   fight the controller during live testing.
-- Decide whether to auto-strip `[emotion]` tags from display text.
+- Consider feeding response-visible duration (for text-only mode) from a backend
+  timing hint instead of the current frontend bounded hold.
