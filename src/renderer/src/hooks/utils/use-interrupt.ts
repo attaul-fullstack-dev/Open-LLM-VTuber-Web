@@ -24,7 +24,7 @@ export const useInterrupt = () => {
     // interruption signals from another client must not reset this runtime.
     if (sendSignal) markUserActivity();
 
-    stopCurrentAudioAndLipSync();
+    stopCurrentAudioAndLipSync('interruption');
 
     subtitlePlaybackCoordinator.cancelResponse();
     audioTaskQueue.clearQueue();

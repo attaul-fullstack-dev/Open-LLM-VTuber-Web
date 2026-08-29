@@ -10,11 +10,18 @@ import {
   IdleFacialExpressionController,
   IDLE_FACIAL_PALETTE,
   NEUTRAL_EYE_OPEN,
+  RESPONSE_FACE_HOLD_MS,
   type IdleFacialControllerOptions,
   type IdleFacialTiming,
   type IdleFacialStateWeighted,
 } from '../src/renderer/src/utils/live2d-idle-facial.ts';
-import { responseFaceBus } from '../src/renderer/src/utils/response-face-bus.ts';
+import {
+  responseFaceBus,
+  decideResponseFace,
+  pickTextOnlyHoldMs,
+  TEXT_ONLY_HOLD_MIN_MS,
+  TEXT_ONLY_HOLD_MAX_MS,
+} from '../src/renderer/src/utils/response-face-bus.ts';
 
 class FakeClock {
   nowMs = 0;
@@ -260,6 +267,221 @@ test('responseFaceBus carries face ids and releases', () => {
   assert.equal(responseFaceBus.getLastPayload().faceId, null);
   unsub();
   responseFaceBus.clear();
+});
+
+test('turn-level latch: unmarked sentences never release an active response face', () => {
+  // Live-proven bug: the marker sat on the LAST sentence, so squint_smile was
+  // claimed for ~64ms and then released by the turn-end signal. The latch
+  // fixes the *missing-marker* case: 'neutral' on a sentence means "no new
+  // emotion update", never "reset to neutral".
+  assert.deepEqual(
+    decideResponseFace(null, 'smirk'),
+    { kind: 'claim', faceId: 'smirk', switchingFrom: null },
+  );
+  // Unmarked / neutral fallback / same-face re-publish → keep + refresh hold.
+  assert.deepEqual(decideResponseFace('squint_smile', 'neutral'), { kind: 'refresh', faceId: 'squint_smile' });
+  assert.deepEqual(decideResponseFace('squint_smile', ''), { kind: 'refresh', faceId: 'squint_smile' });
+  assert.deepEqual(decideResponseFace('squint_smile', 'squint_smile'), { kind: 'refresh', faceId: 'squint_smile' });
+  // True turn-end / cancellation only.
+  assert.deepEqual(decideResponseFace('squint_smile', null), { kind: 'release' });
+  assert.deepEqual(decideResponseFace(null, null), { kind: 'keep' });
+  // Fully neutral turn: nothing latches.
+  assert.deepEqual(decideResponseFace(null, 'neutral'), { kind: 'keep' });
+  // Next turn can replace the latched face cleanly.
+  assert.deepEqual(
+    decideResponseFace('squint_smile', 'joy'),
+    { kind: 'claim', faceId: 'joy', switchingFrom: 'squint_smile' },
+  );
+});
+
+test('full turn flow: claim early, keep through unmarked sentences, release at turn end', () => {
+  const h = makeController();
+  h.c.setActivity('idle');
+  // Sentence 1 carries the emotion marker (now at the START of the response).
+  // The publisher resolves the raw label to a palette face id first, exactly
+  // like use-audio-task does before publishing.
+  const smirkFace = resolveResponseFaceId({ emotions: ['smirk'] });
+  assert.equal(smirkFace, 'squint_smile');
+  let decision = decideResponseFace(null, smirkFace);
+  assert.equal(decision.kind, 'claim');
+  if (decision.kind === 'claim') h.c.claimResponseFace(face(decision.faceId));
+  pump(h, 200);
+  assert.equal(h.c.snapshot().state, 'squint_smile');
+  // Sentences 2..4 have no marker → 'neutral' fallback → latch must hold.
+  for (const incoming of ['neutral', 'neutral', 'neutral']) {
+    decision = decideResponseFace(
+      h.c.isResponseFaceActive() ? h.c.snapshot().state : null,
+      incoming,
+    );
+    assert.equal(decision.kind, 'refresh', 'unmarked sentence must refresh, not release');
+    if (decision.kind === 'refresh') h.c.claimResponseFace(face(decision.faceId));
+    pump(h, 200);
+    assert.equal(h.c.snapshot().state, 'squint_smile', 'unmarked sentence must not release the face');
+  }
+  // Turn playback complete → null → release.
+  decision = decideResponseFace(h.c.snapshot().state, null);
+  assert.equal(decision.kind, 'release');
+  if (decision.kind === 'release') h.c.releaseResponseFace();
+  pump(h, 300);
+  assert.notEqual(h.c.snapshot().state, 'squint_smile');
+});
+
+test('unmarked sentences refresh the safety hold so a long response survives', () => {
+  const h = makeController();
+  h.c.setActivity('idle');
+  h.c.claimResponseFace(face('squint_smile'), 1_000); // 1s hold
+  pump(h, 700);
+  assert.equal(h.c.snapshot().state, 'squint_smile');
+  // A neutral sentence refreshes the hold before the original 1s expires.
+  const decision = decideResponseFace('squint_smile', 'neutral');
+  assert.equal(decision.kind, 'refresh');
+  if (decision.kind === 'refresh') h.c.claimResponseFace(face(decision.faceId), 1_000);
+  pump(h, 700); // past the original 1s expiry
+  assert.equal(h.c.snapshot().state, 'squint_smile', 'refreshed hold must survive past original expiry');
+});
+
+test('neutral response with no contextual emotion never latches a stale face', () => {
+  const h = makeController();
+  h.c.setActivity('idle');
+  for (const incoming of ['neutral', 'neutral', 'neutral']) {
+    assert.equal(decideResponseFace(null, incoming).kind, 'keep');
+  }
+  assert.equal(h.c.isResponseFaceActive(), false, 'no contextual face latched');
+  // Turn ends with nothing latched: no release needed, no stale face.
+  assert.equal(decideResponseFace(null, null).kind, 'keep');
+});
+
+test('text-only hold policy keeps a muted/text-only face visibly long enough', () => {
+  // Muted/text-only live case: the face was claimed but released ~50-100ms
+  // later because there was no audio lifecycle. The perceptual hold must keep
+  // it visible for a bounded, human-perceivable duration.
+  assert.equal(pickTextOnlyHoldMs(0), TEXT_ONLY_HOLD_MIN_MS);
+  const short = pickTextOnlyHoldMs(60); // short response
+  assert.ok(short >= 2_500 && short <= 4_000, `short response hold=${short}`);
+  const long = pickTextOnlyHoldMs(800); // long response
+  assert.equal(long, TEXT_ONLY_HOLD_MAX_MS);
+  assert.ok(TEXT_ONLY_HOLD_MAX_MS <= 6_000, 'bounded: never stuck for 20-30s');
+  assert.ok(pickTextOnlyHoldMs(200) >= pickTextOnlyHoldMs(100), 'scales with length');
+  assert.ok(TEXT_ONLY_HOLD_MIN_MS < TEXT_ONLY_HOLD_MAX_MS);
+});
+
+test('text-only face survives the perceptual window and releases cleanly after', () => {
+  // No audio activity at all: the contextual face must NOT drop the instant a
+  // (near-instant) text completion arrives — it holds through the perceptual
+  // window, then a delayed text-only release releases it cleanly.
+  const h = makeController();
+  h.c.setActivity('idle');
+  h.c.claimResponseFace(face('squint_smile'));
+  pump(h, 100);
+  assert.equal(h.c.snapshot().state, 'squint_smile');
+  // No audio lifecycle; the minimum perceptual hold passes without dropping
+  // (the 20s watchdog is only a stuck-lifecycle fallback, not the lifetime).
+  pump(h, TEXT_ONLY_HOLD_MIN_MS + 200);
+  assert.equal(
+    h.c.snapshot().state,
+    'squint_smile',
+    'face must survive the whole perceptual hold window',
+  );
+  // The delayed text-only release arrives → smooth release, idle may resume.
+  h.c.releaseResponseFace();
+  pump(h, 400);
+  assert.notEqual(h.c.snapshot().state, 'squint_smile');
+});
+
+test('safety window default is a generous fallback, not the primary lifetime', () => {
+  // Live proof: the old 6s window expired between two sentences of the SAME
+  // turn (face released at holdMs=6000 while seq2 arrived 340ms later). The
+  // default is now a 20s fallback combined with activity refresh.
+  assert.ok(
+    RESPONSE_FACE_HOLD_MS >= 15_000 && RESPONSE_FACE_HOLD_MS <= 30_000,
+    `RESPONSE_FACE_HOLD_MS=${RESPONSE_FACE_HOLD_MS} must be a generous safety window`,
+  );
+});
+
+test('response face survives >6 seconds of a valid ongoing turn (watchdog refresh)', () => {
+  const h = makeController();
+  h.c.setActivity('idle');
+  // Simulate the OLD 6s window: heartbeats must keep it alive past 6s.
+  h.c.claimResponseFace(face('squint_smile'), 6_000);
+  pump(h, 5_500);
+  assert.equal(h.c.snapshot().state, 'squint_smile');
+  h.c.refreshResponseFace(6_000); // audio_end / next-task heartbeat
+  pump(h, 5_500);
+  h.c.refreshResponseFace(6_000);
+  pump(h, 5_500);
+  h.c.refreshResponseFace(6_000);
+  pump(h, 5_500);
+  assert.equal(h.c.snapshot().state, 'squint_smile', 'heartbeat must keep the face alive past 6s');
+});
+
+test('audio activity refreshes the watchdog across a long TTS gap between sentences', () => {
+  const h = makeController();
+  h.c.setActivity('idle');
+  h.c.claimResponseFace(face('squint_smile')); // default 20s hold
+  pump(h, 100);
+  // sentence 1 audio_start + audio_end heartbeats, then a long gap until seq2.
+  h.c.refreshResponseFace();
+  pump(h, 5_000);
+  h.c.refreshResponseFace();
+  pump(h, 5_000);
+  // seq2 task arrives: heartbeat again — still inside the refreshed window.
+  h.c.refreshResponseFace();
+  assert.equal(h.c.snapshot().state, 'squint_smile');
+  pump(h, 15_000);
+  assert.equal(
+    h.c.snapshot().state,
+    'squint_smile',
+    'gap between sentences of one turn must not time out the face',
+  );
+});
+
+test('unmarked sentence keeps the face and refreshes the watchdog (subscriber path)', () => {
+  const h = makeController();
+  h.c.setActivity('idle');
+  h.c.claimResponseFace(face('squint_smile'), 6_000); // old too-short window
+  pump(h, 100);
+  for (let i = 0; i < 3; i += 1) {
+    const decision = decideResponseFace('squint_smile', 'neutral');
+    assert.equal(decision.kind, 'refresh');
+    if (decision.kind === 'refresh') h.c.refreshResponseFace(6_000);
+    pump(h, 3_000); // half the old 6s window passes
+    h.c.refreshResponseFace(6_000); // audio_end heartbeat mid-gap
+    pump(h, 4_000); // total gap 7s > the old 6s window
+    assert.equal(
+      h.c.snapshot().state,
+      'squint_smile',
+      'unmarked sentence + mid-gap heartbeat must prevent mid-turn timeout',
+    );
+  }
+});
+
+test('safety timeout still releases a genuinely stuck face', () => {
+  const h = makeController();
+  h.c.setActivity('idle');
+  h.c.claimResponseFace(face('squint_smile')); // default 20s fallback
+  pump(h, 100);
+  assert.equal(h.c.snapshot().state, 'squint_smile');
+  // No activity at all: the fallback must eventually release the stuck face.
+  pump(h, 21_000);
+  assert.notEqual(h.c.snapshot().state, 'squint_smile');
+});
+
+test('duplicate turn completion / release is idempotent', () => {
+  const h = makeController();
+  h.c.setActivity('idle');
+  h.c.claimResponseFace(face('small_smile'));
+  pump(h, 200);
+  assert.equal(h.c.snapshot().state, 'small_smile');
+  h.c.releaseResponseFace();
+  pump(h, 300);
+  assert.notEqual(h.c.snapshot().state, 'small_smile');
+  // A second completion signal (duplicate backend-synth-complete) must be a
+  // no-op: nothing latched, no crash, no stale face resurrection.
+  h.c.releaseResponseFace();
+  assert.equal(h.c.isResponseFaceActive(), false);
+  assert.equal(decideResponseFace(null, null).kind, 'keep');
+  pump(h, 2_000);
+  assert.notEqual(h.c.snapshot().state, 'small_smile');
 });
 
 test('no extra provider/LLM call is introduced by stage 4 logic', () => {

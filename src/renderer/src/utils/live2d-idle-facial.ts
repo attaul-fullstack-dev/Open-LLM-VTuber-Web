@@ -284,12 +284,18 @@ export const IDLE_FACIAL_COOLDOWN_MS = {
 };
 
 /**
- * Stage 4 — how long a contextual response face holds before auto-releasing.
- * This is a safety net: normal response-end signals (queue drained / speaking
- * ended) release sooner. Kept large enough that a sentence's face reads during
- * playback, and each new sentence re-claims (refreshing) the timer.
+ * Stage 4 — safety-net fallback window for a contextual response face.
+ *
+ * This is NOT the primary lifetime: normal release authority is real turn
+ * completion (`playback_complete` / interruption / cancellation → `null`), and
+ * the watchdog is REFRESHED on every response activity (audio start/end, text
+ * segments, subsequent sentence publishes), so a healthy turn never times out.
+ *
+ * 6s was proven too short live (a long TTS gap between two sentences of the
+ * SAME turn exceeded it and released the face mid-response). 20s only fires
+ * for a genuinely stuck lifecycle (no activity at all for 20s).
  */
-export const RESPONSE_FACE_HOLD_MS = 6_000;
+export const RESPONSE_FACE_HOLD_MS = 20_000;
 
 export interface IdleFacialSnapshot {
   state: string | null;
@@ -401,13 +407,30 @@ export class IdleFacialExpressionController {
     if (state) {
       this.target = { ...ZERO_FACIAL, ...state.additive };
       this.targetEyeOpen = state.eyeOpen;
-      this.responseFaceTimer = this.schedule(() => {
-        this.responseFaceTimer = null;
-        this.releaseResponseFace();
-      }, holdMs);
+      this.armResponseTimer(state.id, holdMs);
     } else {
       this.releaseResponseFace();
     }
+  }
+
+  /**
+   * Stage 4 — watchdog heartbeat. Refreshes the safety hold WITHOUT touching
+   * the latched face or its targets, so continued response activity (audio
+   * start/end, text segments, unmarked sentence publishes) proves the turn is
+   * alive and the face survives long TTS gaps between sentences. No-op when no
+   * response face is currently latched.
+   */
+  refreshResponseFace(holdMs: number = RESPONSE_FACE_HOLD_MS): void {
+    if (this.responseFace === null) return;
+    this.armResponseTimer(this.responseFaceId ?? 'unknown', holdMs);
+  }
+
+  private armResponseTimer(_stateId: string, holdMs: number): void {
+    this.clearResponseTimer();
+    this.responseFaceTimer = this.schedule(() => {
+      this.responseFaceTimer = null;
+      this.releaseResponseFace();
+    }, holdMs);
   }
 
   /**

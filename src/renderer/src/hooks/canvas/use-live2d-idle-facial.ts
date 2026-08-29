@@ -11,7 +11,7 @@ import {
   type IdleFacialAdditive,
   type IdleFacialStateWeighted,
 } from '@/utils/live2d-idle-facial';
-import { responseFaceBus } from '@/utils/response-face-bus';
+import { responseFaceBus, decideResponseFace } from '@/utils/response-face-bus';
 
 /**
  * Mili Hidup Stage 3 — Autonomous idle facial micro-expressions.
@@ -72,20 +72,41 @@ export function useLive2DIdleFacial({
     controller.setSuppression('motion', isMotionPlaying);
   }, [controller, isMotionPlaying]);
 
-  // Stage 4 — contextual response emotion → Stage 3 face. When the audio task
-  // publishes a semantic face id we claim it (owning the face even while
-  // speaking, where autonomous idle is suppressed); `null` releases back to
-  // neutral + normal idle scheduling.
+  // Stage 4 — contextual response emotion → Stage 3 face, applied as a
+  // TURN-LEVEL LATCH. A valid non-neutral emotion claims the face and KEEPS it
+  // for the whole response turn; later sentences without emotion metadata
+  // ('neutral' fallback) must NOT release it — they only refresh the safety
+  // hold. Audio/text activity from the same response ALSO refreshes the
+  // watchdog, so long TTS gaps between sentences of one turn never time it
+  // out. Only `null` (real turn end / interruption / cancellation) releases
+  // back to neutral + idle scheduling.
   useEffect(() => {
     return responseFaceBus.subscribe(({ faceId }) => {
       const active = controllerRef.current;
       if (!active) return;
-      if (faceId === null || faceId === '' || faceId === 'neutral') {
-        if (active.isResponseFaceActive()) active.releaseResponseFace();
-        return;
+      const snap = active.snapshot();
+      const wasActive = active.isResponseFaceActive();
+      const currentFace = wasActive ? (snap.state ?? null) : null;
+      const decision = decideResponseFace(currentFace, faceId);
+      switch (decision.kind) {
+        case 'keep':
+          // Nothing latched and nothing to claim (e.g. fully neutral response).
+          return;
+        case 'release':
+          // Real turn end / interruption / cancellation: release back to
+          // neutral, letting Stage 3 idle scheduling resume normally.
+          active.releaseResponseFace();
+          return;
+        case 'refresh':
+          // No new emotion on this signal: keep the latch and refresh the
+          // safety watchdog (heartbeat) so the face survives the response.
+          active.refreshResponseFace();
+          return;
+        default: {
+          const state = IDLE_FACIAL_PALETTE.find((s: IdleFacialStateWeighted) => s.id === decision.faceId);
+          active.claimResponseFace(state ?? null);
+        }
       }
-      const state = IDLE_FACIAL_PALETTE.find((s: IdleFacialStateWeighted) => s.id === faceId);
-      active.claimResponseFace(state ?? null);
     });
   }, []);
 
