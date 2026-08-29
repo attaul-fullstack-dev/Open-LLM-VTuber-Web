@@ -14,6 +14,7 @@ import { useAiState, AiStateEnum } from "@/context/ai-state-context";
 import { useLive2DExpression } from "@/hooks/canvas/use-live2d-expression";
 import { useLive2DIdleBehavior } from "@/hooks/canvas/use-live2d-idle-behavior";
 import { useLive2DIdleFacial } from "@/hooks/canvas/use-live2d-idle-facial";
+import { useBehaviorOwnership } from "@/hooks/canvas/use-behavior-ownership";
 import { useForceIgnoreMouse } from "@/hooks/utils/use-force-ignore-mouse";
 import { useMode } from "@/context/mode-context";
 
@@ -49,20 +50,30 @@ export const Live2D = memo(
       canvasRef,
     });
 
+    // Stage 5 — behavior ownership: ONE shared decision for "may autonomous
+    // idle behavior run now?". Resolved from Stage 1 activity + ai-state + the
+    // Stage 4 response-face bus + drag/motion + interruption + session switch.
+    // Both Stage 2 and Stage 3 read the same suppression flags so they never
+    // act against each other or against an ongoing response/interruption.
+    const behavior = useBehaviorOwnership({ isDragging, isMotionPlaying: false });
+    const { face: faceSuppressed, movement: movementSuppressed }
+      = behavior.shouldSuppressAutonomous();
+
     // Stage 2 — safe autonomous idle movement when conversationally idle.
-    // `isMotionPlaying: false` because the looping Idle motion is the baseline we
-    // additively layer under; real/non-idle motions suppress via setMotionSuppressed.
+    // `isMotionPlaying` now carries the shared orchestrator decision (Movement
+    // yields during a response/interruption; also yields to the safe baseline).
     useLive2DIdleBehavior({
       isDragging,
-      isMotionPlaying: false,
+      isMotionPlaying: movementSuppressed,
     });
 
-    // Stage 3 — autonomous idle facial micro-expressions. Owns facial params
-    // (brows/mouth/eye-smile/blush) plus an EyeOpen multiply; never touches
-    // lip-sync (ParamA) or Stage 2 movement parameters so both layers coexist.
+    // Stage 3 — autonomous idle facial micro-expressions. `isMotionPlaying`
+    // carries the shared face decision (blocked during speaking/response/
+    // active/interruption). Face channel ownership is preserved: a Stage 4
+    // contextual face still wins over any idle selection.
     useLive2DIdleFacial({
       isDragging,
-      isMotionPlaying: false,
+      isMotionPlaying: faceSuppressed,
     });
 
     // Setup hooks
