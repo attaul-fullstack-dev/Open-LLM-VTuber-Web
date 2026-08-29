@@ -111,172 +111,162 @@ export interface IdleFacialState {
 }
 
 /**
- * mao_pro ambient idle palette. Rich enough to sell emotion on a phone screen.
+ * mao_pro ambient idle palette — FINAL production set.
  *
- * Design rule (drawn from the rig's own presets): on mao_pro the ONE thing that
- * separates ANGRY from SAD is the mouth:
- *   - angry  = ParamMouthAngry + ParamMouthAngryLine (pout/frown line), corners
- *              do NOT droop.
- *   - sad    = ParamMouthDown (corners pulled DOWN) + mouth corners down.
- * So angry states must NOT use MouthDown (that instantly reads sad), and sad
- * states must NOT use MouthAngry. Brows sharpen (lower + furrow) for anger and
- * relax upward for sadness.
+ * Live beacon findings that shaped this palette:
+ *   - ParamMouthUp is already pinned at 1.0 by idle motion mtn_01 AND its real
+ *     max is 1.0, so ANY positive mouth-corner offset is CLAMPED (val=1.0
+ *     for small_smile / squint_smile / big_smile). The mouth literally cannot
+ *     open wider than neutral → smiles must be sold by EYES + CHEEK, never by
+ *     raising the mouth. big_smile therefore looks identical to small_smile on
+ *     the mouth axis and was REMOVED from production.
+ *   - MouthDown / MouthAngry / MouthAngryLine are NOT clamped and reach the rig
+ *     intact, so the negative side has full power.
+ *   - On mao_pro the ONE thing that separates ANGRY from SAD is the mouth:
+ *       angry = ParamMouthAngry + ParamMouthAngryLine (pout line), corners do
+ *               NOT droop (no MouthDown, or it reads sad).
+ *       sad   = ParamMouthDown (corners pulled down).
  *
- * Idle motion mtn_01..mtn_04 holds ParamMouthUp at 1.0 (neutral mouth pose), so
- * mouth offsets must be comfortably above that baseline to be visible; the rig
- * clamps final values to real min/max anyway.
+ * Emotion construction per state (mouth + brows + eyes stay in sync):
+ *   - sad_soft   : moved by BROWS (lifted inner) + EYES + mild mouth droop.
+ *   - pout_small : moved by the MOUTH only (pout line), brows/eyes near neutral.
+ *   - angry_pout : full pout line + furrowed lowered sharp brows + narrowed eyes.
+ *   - smiles     : EyeSmile + Cheek (+ narrow eyes for squint); the mouth sits
+ *                  at its pinned 1.0 baseline and adds nothing.
+ *
+ * `weight` = relative selection probability; `longIdleWeight` (if set) overrides
+ * `weight` while the avatar is in long_idle. Weights intentionally favor calm,
+ * subtly-positive faces: negative states are rare so Mili is not constantly
+ * emotional.
  */
-export const IDLE_FACIAL_PALETTE: IdleFacialState[] = [
-  // ---------- reset / calm ----------
-  { id: 'neutral', additive: {}, eyeOpen: NEUTRAL_EYE_OPEN },
-  {
-    id: 'relaxed',
-    additive: {
-      MouthUp: 0.25,
-      BrowLY: -0.1,
-      BrowRY: -0.1,
-      EyeLSmile: 0.2,
-      EyeRSmile: 0.2,
-    },
-    eyeOpen: 0.94,
-  },
-  {
-    id: 'curious_soft',
-    additive: {
-      BrowLForm: 0.3,
-      BrowRForm: 0.3,
-      BrowLY: 0.1,
-      BrowRY: 0.1,
-      EyeLForm: 0.12,
-      EyeRForm: 0.12,
-    },
-    eyeOpen: NEUTRAL_EYE_OPEN,
-  },
-  // ---------- smile ladder ----------
+export interface IdleFacialStateWeighted extends IdleFacialState {
+  /** Relative selection probability while idle (higher = more common). */
+  weight: number;
+  /** Optional probability override while in long_idle. */
+  longIdleWeight?: number;
+}
+
+export const IDLE_FACIAL_PALETTE: IdleFacialStateWeighted[] = [
+  // ---------- reset ----------
+  { id: 'neutral', weight: 30, additive: {}, eyeOpen: NEUTRAL_EYE_OPEN },
+  // ---------- subtle positive ----------
   {
     id: 'small_smile',
+    weight: 22,
     additive: {
-      MouthUp: 0.5,
       EyeLSmile: 0.45,
       EyeRSmile: 0.45,
-      BrowLY: 0.15,
-      BrowRY: 0.15,
+      Cheek: 0.45,
+      BrowLY: 0.12,
+      BrowRY: 0.12,
     },
     eyeOpen: NEUTRAL_EYE_OPEN,
   },
   {
-    // NEW: squinted pleased/mischievous smile — narrowed happy eyes + wide
-    // smile + blush. Cute, not threatening (brows stay soft, mouth is a smile).
+    // Squinted pleased/mischievous smile: narrowed happy eyes + eye-smile +
+    // blush. The mouth stays at its pinned 1.0 baseline; the distinct look is
+    // carried by the eyes (EyeOpen multiply ×0.82) — cute, not threatening.
     id: 'squint_smile',
+    weight: 13,
+    longIdleWeight: 9,
     additive: {
-      MouthUp: 0.8,
       EyeLSmile: 0.85,
       EyeRSmile: 0.85,
       EyeLForm: 0.2,
       EyeRForm: 0.2,
-      BrowLY: 0.1,
-      BrowRY: 0.1,
+      BrowLY: 0.08,
+      BrowRY: 0.08,
       Cheek: 0.5,
     },
     eyeOpen: 0.82,
   },
-  {
-    // Widest smile the rig allows: full corner-up (stacking on mtn_01 MouthUp
-    // baseline), full eye-smile like exp_02/exp_04, sparkle-eye open (×1.15).
-    id: 'big_smile',
-    additive: {
-      MouthUp: 1.0,
-      EyeLSmile: 0.9,
-      EyeRSmile: 0.9,
-      EyeLForm: 0.25,
-      EyeRForm: 0.25,
-      BrowLY: 0.3,
-      BrowRY: 0.3,
-      Cheek: 0.6,
-    },
-    eyeOpen: 1.15,
-  },
   // ---------- negative ladder (sad -> pout -> angry) ----------
   {
-    // NEW: light murmur / soft sad. The negative-states' tail (MouthDown droop)
-    // previously read as this; made deliberate, subtle, clearly not exhausted.
+    // Murung / soft sad. Emotion driven by BROWS (lifted inner) + softened
+    // eyes + a mild mouth downturn — reads as light sadness, not exhaustion.
     id: 'sad_soft',
+    weight: 7,
     additive: {
-      MouthDown: 0.5,
-      MouthUp: -0.4,
-      BrowLY: -0.15,
-      BrowRY: -0.15,
-      BrowLAngle: -0.2,
-      BrowRAngle: -0.2,
+      MouthDown: 0.4,
+      MouthUp: -0.3,
+      BrowLY: 0.22,
+      BrowRY: 0.22,
+      BrowLAngle: 0.15,
+      BrowRAngle: 0.15,
       EyeLForm: 0.12,
       EyeRForm: 0.12,
-    },
-    eyeOpen: 0.96,
-  },
-  {
-    // Light pout: soft MouthAngry line, brows neutral. Clearly distinct from
-    // sad_soft (no MouthDown droop) and from angry_pout (lighter mouth + no
-    // furrow).
-    id: 'pout_small',
-    additive: {
-      MouthAngry: 0.5,
-      MouthAngryLine: 0.5,
-      MouthUp: -0.2,
-      BrowLAngle: -0.3,
-      BrowRAngle: -0.3,
-    },
-    eyeOpen: NEUTRAL_EYE_OPEN,
-  },
-  {
-    // Angry pout (stronger than pout_small, definitely NOT sad). No MouthDown
-    // (that would read sad). Instead: full pout line + furrowed, lowered sharp
-    // brows + slightly narrowed eyes = unmistakable annoyed/ngambek.
-    id: 'angry_pout',
-    additive: {
-      MouthAngry: 1.0,
-      MouthAngryLine: 1.0,
-      MouthUp: -0.4,
-      BrowLAngle: -0.6,
-      BrowRAngle: -0.6,
-      BrowLForm: -0.5,
-      BrowRForm: -0.5,
-      BrowLY: -0.1,
-      BrowRY: -0.1,
-      EyeLForm: 0.15,
-      EyeRForm: 0.15,
     },
     eyeOpen: 0.97,
   },
   {
-    id: 'sleepy_soft',
+    // Cemberut kecil / ngambek. Emotion comes from the MOUTH ONLY (pout line,
+    // corners not drooping so it is NOT sad); brows/eyes stay near neutral.
+    id: 'pout_small',
+    weight: 13,
+    longIdleWeight: 10,
     additive: {
-      BrowLY: -0.25,
-      BrowRY: -0.25,
-      MouthUp: 0.15,
-      MouthDown: 0.15,
-      EyeLSmile: 0.15,
-      EyeRSmile: 0.15,
+      MouthAngry: 0.55,
+      MouthAngryLine: 0.55,
+      MouthUp: -0.25,
+      BrowLAngle: -0.15,
+      BrowRAngle: -0.15,
     },
-    eyeOpen: 0.8,
+    eyeOpen: NEUTRAL_EYE_OPEN,
+  },
+  {
+    // Clearly more annoyed / marah kecil than pout_small; definitely NOT sad.
+    // Full pout line + furrowed, lowered, sharp inward brows + narrowed eyes.
+    // NO MouthDown anywhere (that would flip it to sadness).
+    id: 'angry_pout',
+    weight: 7,
+    additive: {
+      MouthAngry: 1.0,
+      MouthAngryLine: 1.0,
+      MouthUp: -0.4,
+      BrowLAngle: -0.7,
+      BrowRAngle: -0.7,
+      BrowLForm: -0.6,
+      BrowRForm: -0.6,
+      BrowLY: -0.15,
+      BrowRY: -0.15,
+      EyeLForm: 0.2,
+      EyeRForm: 0.2,
+    },
+    eyeOpen: 0.9,
+  },
+  // ---------- long_idle only ----------
+  {
+    // Calm sleepy-soft. Mainly a gentle EyeOpen ×0.78 with relaxed brows and a
+    // barely-there mouth; never a closed-eye lock.
+    id: 'sleepy_soft',
+    weight: 0,
+    longIdleWeight: 22,
+    additive: {
+      BrowLY: -0.2,
+      BrowRY: -0.2,
+      EyeLSmile: 0.18,
+      EyeRSmile: 0.18,
+    },
+    eyeOpen: 0.78,
     longIdleOnly: true,
   },
 ];
 
 /**
- * Temporary debug visual cycle (revision pass): walks the emotion arc from
- * murung -> netral -> senyum lebar so each state is natural to inspect on
- * Android. Debug-only — REMOVE before final release; production uses the
- * random anti-repeat palette.
+ * Temporary debug visual cycle (final verification): walks the emotion arc from
+ * murung -> cemberut -> marah -> netral -> senyum -> mata sipit so each state is
+ * natural to inspect on Android. Debug-only — REMOVE before final release;
+ * production uses the weighted random anti-repeat palette.
  */
 export const DEBUG_IDLE_FACIAL_CYCLE: string[] = [
+  'neutral',
   'sad_soft',
   'pout_small',
   'angry_pout',
   'neutral',
-  'relaxed',
   'small_smile',
   'squint_smile',
-  'big_smile',
+  'small_smile',
 ];
 
 export type IdleFacialSuppressionKind = 'speaking' | 'drag' | 'motion';
@@ -317,7 +307,7 @@ export interface IdleFacialControllerOptions {
   schedule?: (callback: () => void, delayMs: number) => unknown;
   cancel?: (handle: unknown) => void;
   timing?: IdleFacialTiming;
-  palette?: IdleFacialState[];
+  palette?: IdleFacialStateWeighted[];
   smoothing?: number;
   /** Debug: when non-empty, walk these state ids in order instead of random. */
   cycle?: string[] | null;
@@ -334,7 +324,7 @@ export class IdleFacialExpressionController {
 
   private readonly timing: IdleFacialTiming;
 
-  private readonly palette: IdleFacialState[];
+  private readonly palette: IdleFacialStateWeighted[];
 
   private readonly smoothing: number;
 
@@ -541,15 +531,32 @@ export class IdleFacialExpressionController {
     return state;
   }
 
-  private pickState(): IdleFacialState {
+  private pickState(): IdleFacialStateWeighted {
     const longIdle = this.activity === 'long_idle';
     const eligible = this.palette.filter((s) => (!s.longIdleOnly || longIdle));
     const notRecent = eligible.filter((s) => !this.recentStates.includes(s.id));
     const pool = notRecent.length > 0 ? notRecent : eligible;
-    const index = Math.floor(this.rng() * pool.length) % pool.length;
-    const choice = pool[index];
+    const choice = this.pickWeighted(pool, longIdle);
     this.rememberLast(choice.id);
     return choice;
+  }
+
+  private pickWeighted(pool: IdleFacialStateWeighted[], longIdle: boolean): IdleFacialStateWeighted {
+    let total = 0;
+    for (const s of pool) {
+      const w = longIdle ? (s.longIdleWeight ?? s.weight) : s.weight;
+      if (w > 0) total += w;
+    }
+    if (total <= 0) return pool[0];
+    let r = this.rng() * total;
+    for (const s of pool) {
+      const w = longIdle ? (s.longIdleWeight ?? s.weight) : s.weight;
+      if (w > 0) {
+        r -= w;
+        if (r < 0) return s;
+      }
+    }
+    return pool[pool.length - 1];
   }
 
   private rememberLast(id: string): void {

@@ -195,52 +195,74 @@ test('sleepy_soft is long_idle only', () => {
   assert.equal(sawSleepy, true);
 });
 
-test('palette contains the required distinguishable states', () => {
+test('palette contains only required distinguishable states', () => {
   const ids = new Set(IDLE_FACIAL_PALETTE.map((s) => s.id));
   for (const id of [
     'neutral',
     'small_smile',
     'squint_smile',
-    'big_smile',
     'sad_soft',
     'pout_small',
     'angry_pout',
-    'relaxed',
     'sleepy_soft',
   ]) {
     assert.ok(ids.has(id), `palette must contain ${id}`);
   }
+  // Redundant states visually indistinguishable on the clamped ma0_pro rig
+  // (see delivery report: ParamMouthUp is pinned at 1.0, so a wider "big"
+  // smile is impossible and relaxed collapses into neutral) must NOT be part
+  // of the autonomous selection palette.
+  assert.ok(!ids.has('big_smile'), 'big_smile is visually redundant (mouth pinned at 1.0) — removed');
+  assert.ok(!ids.has('relaxed'), 'relaxed collapses into neutral — removed');
+  assert.ok(!ids.has('curious_soft'), 'curious_soft removed to keep the palette clean');
 });
 
-test('mouth states are separated on the mouth axis, not only brows/eyes', () => {
+test('emotional states are separated per the real rig (mouth for negatives, eyes/cheek for smiles)', () => {
   const byId = Object.fromEntries(IDLE_FACIAL_PALETTE.map((s) => [s.id, s.additive]));
   const get = (id: string, key: keyof IdleFacialAdditive) => (byId[id][key] as number | undefined) ?? 0;
-  // Smile ladder: big_smile mouth corners clearly above small_smile.
-  assert.ok(get('big_smile', 'MouthUp') > get('small_smile', 'MouthUp'), 'big smile must widen the mouth beyond small smile');
-  // squint_smile sits between small and big on the mouth but squints the eyes.
-  assert.ok(get('squint_smile', 'MouthUp') > get('small_smile', 'MouthUp'), 'squint smile mouths wider than small smile');
-  assert.ok(get('big_smile', 'MouthUp') >= get('squint_smile', 'MouthUp'), 'big smile is the widest');
+  const eyeOpenOf = (id: string) => IDLE_FACIAL_PALETTE.find((s) => s.id === id)!.eyeOpen;
   // Negative ladder: soft sad (droop), light pout, strong angry (pout line +
-  // furrow) — each distinct on the mouth/brow axis.
-  assert.ok(get('pout_small', 'MouthAngry') > 0, 'pout_small uses a pomt line');
+  // furrow) — each distinct on the mouth/brow axis. MouthDown is clamped-free
+  // so these truly separate on the rig.
+  assert.ok(get('pout_small', 'MouthAngry') > 0, 'pout_small uses a pout line');
   assert.ok(get('angry_pout', 'MouthAngry') > get('pout_small', 'MouthAngry'), 'angry_pout pouts harder than pout_small');
   assert.ok(get('angry_pout', 'MouthAngryLine') > get('pout_small', 'MouthAngryLine'), 'angry_pout pout line stronger than pout_small');
-  // sad_soft droops (MouthDown) while angry_pout must NOT droop.
-  assert.ok(get('sad_soft', 'MouthDown') > 0, 'sad_soft turns the mouth down');
+  // sad_soft is moved by BROWS (lifted inner) + a mild droop; pout_small is
+  // moved by the MOUTH with brows near neutral — meaningfully different sets.
+  assert.ok(get('sad_soft', 'MouthDown') > 0, 'sad_soft turns the mouth down mildly');
+  assert.ok(get('sad_soft', 'BrowLY') > 0, 'sad_soft lifts inner brows (sad)');
+  assert.ok(Math.abs(get('pout_small', 'BrowLAngle')) <= 0.2, 'pout_small brows stay near neutral (not sad)');
   assert.equal(get('angry_pout', 'MouthDown'), 0, 'angry_pout must not droop (angry, not sad)');
   assert.ok(Math.abs(get('angry_pout', 'BrowLAngle')) > Math.abs(get('pout_small', 'BrowLAngle')), 'angry brow sharper than pout brow');
-  assert.ok(Math.abs(get('angry_pout', 'BrowLForm')) > 0, 'angry furrows the brow (form)');
-  // squint_smile actually squints (eye-open multiply below 1).
-  const squintEye = IDLE_FACIAL_PALETTE.find((s) => s.id === 'squint_smile')!.eyeOpen;
-  assert.ok(squintEye < 0.9 && squintEye >= 0.7, 'squint_smile narrows the eyes');
-  // neutral is zero; small smile / relaxed stay subtle.
+  assert.ok(Math.abs(get('angry_pout', 'BrowLForm')) > 0, 'angry furrows the brow');
+  assert.ok(eyeOpenOf('angry_pout') < 1.0, 'angry narrows the eyes');
+  // Smile palette: mouth is pinned at 1.0 by the idle motion and clamped there
+  // (beacon val=1.0), so smiles differentiate via EYE-SMILE / CHEEK / EYE-OPEN
+  // narrowing, never via raising the mouth.
+  const smileEyeSmile = get('squint_smile', 'EyeLSmile');
+  assert.ok(smileEyeSmile > get('small_smile', 'EyeLSmile'), 'squint smile has stronger eye-smile than small smile');
+  assert.ok(get('squint_smile', 'Cheek') > get('small_smile', 'Cheek'), 'squint smile blushes more than small smile');
+  assert.ok(eyeOpenOf('squint_smile') < 0.9 && eyeOpenOf('squint_smile') >= 0.7, 'squint_smile clearly narrows the eyes');
+  assert.equal(eyeOpenOf('small_smile'), 1.0, 'small smile keeps fully open eyes');
   assert.equal(get('neutral', 'MouthUp'), 0);
-  assert.ok(get('small_smile', 'MouthUp') > 0 && get('small_smile', 'MouthUp') <= 0.6);
-  assert.ok(get('relaxed', 'MouthUp') >= 0 && get('relaxed', 'MouthUp') <= 0.4);
-  // The genuinely neutral-to-positive ambient set never droops strongly.
-  for (const id of ['neutral', 'small_smile', 'squint_smile', 'big_smile', 'relaxed', 'sleepy_soft']) {
+  assert.equal(get('neutral', 'MouthDown'), 0);
+  // No ambient state ever droops strongly or spams a hard mouth-down.
+  for (const id of ['neutral', 'small_smile', 'squint_smile', 'sleepy_soft']) {
     assert.ok(get(id, 'MouthDown') <= 0.4, `${id} must not turn the mouth down strongly`);
   }
+  // sleepy_soft keeps both eyes very slightly open-capable (multiply, no lock).
+  assert.ok(eyeOpenOf('sleepy_soft') >= 0.7, 'sleepy_soft never locks eyes closed');
+});
+
+test('weighted selection favors calm neutral/subtle-positive over rare negatives', () => {
+  const byId = Object.fromEntries(IDLE_FACIAL_PALETTE.map((s) => [s.id, s]));
+  assert.ok((byId.neutral.weight ?? 0) > (byId.angry_pout.weight ?? 0), 'neutral more common than angry_pout');
+  assert.ok((byId.small_smile.weight ?? 0) > (byId.sad_soft.weight ?? 0), 'small_smile more common than sad_soft');
+  assert.ok((byId.angry_pout.weight ?? 0) <= 8, 'angry_pout stays rare');
+  assert.ok((byId.sad_soft.weight ?? 0) <= 8, 'sad_soft stays rare');
+  assert.ok((byId.sleepy_soft.weight ?? 0) === 0, 'sleepy_soft never picked during normal idle');
+  assert.ok((byId.sleepy_soft.longIdleWeight ?? 0) > 0, 'sleepy_soft common during long_idle');
+  assert.ok((byId.squint_smile.longIdleWeight ?? byId.squint_smile.weight) < byId.squint_smile.weight, 'squint_smile less frequent during long_idle');
 });
 
 test('debug cycle walks every state in order, holding each for cycleHoldMs', () => {

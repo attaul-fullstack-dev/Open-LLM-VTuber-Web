@@ -1,5 +1,57 @@
 # Mili Hidup — Stage 3: Autonomous Idle Facial Expressions
 
+## Final polish pass (2026-08-29): visual separation + rig-limit cleanup
+
+### Beacon ground-truth (from /tmp/server_setsid.log)
+The runtime beacon proved a hard rig limitation that shapes the final palette:
+
+- **`ParamMouthUp` is pinned at 1.0 by idle motion `mtn_01` AND has a real
+  `max` of 1.0.** Every positive mouth offset (`small_smile`/`squint_smile`/
+  `big_smile`) resolves to `up_val=1.00 up_clp=1` — the mouth cannot open any
+  wider than neutral. Smiles must therefore be sold by EYES + CHEEK, never by
+  raising the mouth. `big_smile` is visually identical to `small_smile` on the
+  mouth axis and was **REMOVED** from the autonomous palette.
+- `MouthDown` / `MouthAngry` / `MouthAngryLine` reach the rig intact (not
+  clamped), so the negative side has full power.
+
+### Decisions driven by the beacon
+- **Removed** `big_smile` (mouth pinned at 1.0, indistinguishable), `relaxed`
+  (collapses into `neutral`; relaxed feel now comes from EyeOpen ×0.94 during
+  long_idle) and `curious_soft` (reduces clutter). Palette = **7 readable
+  states**: `neutral`, `small_smile`, `squint_smile`, `sad_soft`, `pout_small`,
+  `angry_pout`, `sleepy_soft` (long_idle).
+- `angry_pout` carries anger via full pout line + furrowed, sharp **inward
+down** brows + narrowed eyes (EyeOpen ×0.9). Zero `MouthDown` → reads angry, not
+  sad.
+- `sad_soft` vs `pout_small` separated: sad_soft = BROWS (lifted inner) + eyes +
+  mild droop; pout_small = MOUTH ONLY (pout line), brows/eyes near neutral.
+- `small_smile` vs `squint_smile` separated by eye-smile / blush / eye narrowing
+  (×0.82) — the only live smile axes.
+
+### Weighted random selection
+Each state now has `weight` (+ optional `longIdleWeight`). Calm/subtly-positive
+states dominate; negatives are rare:
+| state | idle weight | long_idle weight |
+|---|---|---|
+| neutral | 30 | 30 |
+| small_smile | 22 | 22 |
+| squint_smile | 13 | 9 |
+| pout_small | 13 | 10 |
+| sad_soft | 7 | 7 |
+| angry_pout | 7 | 7 |
+| sleepy_soft | 0 (excluded) | 22 |
+
+### Debug cycle (final verification, temporary)
+```
+neutral → sad_soft → pout_small → angry_pout → neutral → small_smile → squint_smile → small_smile
+```
+will be removed together with the beacon once the user confirms final
+separation on Android; production then uses weighted random selection.
+
+### Tests (17) + regressions green; build PASS; bundle deployed for live check.
+
+---
+
 ## Revision pass (2026-08-29): natural emotion arc + angry-not-sad fix
 
 ### Shared root cause of "cedeut, terkesan sedih"
