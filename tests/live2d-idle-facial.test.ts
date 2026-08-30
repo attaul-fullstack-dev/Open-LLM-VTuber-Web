@@ -17,8 +17,23 @@ import {
   setLive2DIdleFacialHook,
   getLive2DIdleFacialHook,
 } from '../src/renderer/WebSDK/src/lapplive2dfacialhook.ts';
-import { TEMP_CAPABILITY_FACES } from '../src/renderer/src/hooks/canvas/use-live2d-idle-facial.ts';
 import { ZERO_FACIAL } from '../src/renderer/src/utils/live2d-idle-facial.ts';
+
+// Pure lookups over IDLE_FACIAL_PALETTE by semantic id (no Live2D model needed).
+function stateById(id: string) {
+  const st = IDLE_FACIAL_PALETTE.find((s) => s.id === id);
+  assert.ok(st, `palette contains ${id}`);
+  return st;
+}
+
+function mergedFace(id: string) {
+  const st = stateById(id);
+  return { ...ZERO_FACIAL, ...st.additive };
+}
+
+function palEyeOpen(id: string) {
+  return stateById(id).eyeOpen;
+}
 
 class FakeClock {
   nowMs = 0;
@@ -170,12 +185,13 @@ test('no full response-emotion states (shock/crying/extreme-joy) in ambient pale
   for (const forbidden of ['shock', 'surprise', 'crying', 'cry', 'fear', 'extreme_joy']) {
     assert.ok(!ids.includes(forbidden), `palette must not contain ${forbidden}`);
   }
-  // The soft angry/sad variants are deliberate idle micro-states, but must stay
-  // in the micro range: no full MouthDown droop (sad_soft stays light) and
-  // angry_pout must NOT use MouthDown at all (avoid reading as sad).
+  // The soft angry/sad variants are deliberate idle micro-states, but remain
+  // bounded: sad_soft uses a clear droop (proven 0.8 for phone-screen
+  // readability) but never maxes the mouth fully, and angry_pout must NOT use
+  // MouthDown at all (avoid reading as sad).
   const byId = Object.fromEntries(IDLE_FACIAL_PALETTE.map((s) => [s.id, s.additive]));
   const get = (id: string, k: keyof IdleFacialAdditive) => (byId[id][k] as number | undefined) ?? 0;
-  assert.ok(get('sad_soft', 'MouthDown') <= 0.6, 'sad_soft must stay a light murmur');
+  assert.ok(get('sad_soft', 'MouthDown') > 0.5 && get('sad_soft', 'MouthDown') < 1.0, 'sad_soft droops clearly but not to the max');
   assert.equal(get('angry_pout', 'MouthDown'), 0, 'angry_pout must NOT droop the mouth down (would read sad)');
 });
 
@@ -228,10 +244,11 @@ test('emotional states are separated per the real rig (mouth for negatives, eyes
   assert.ok(get('pout_small', 'MouthAngry') > 0, 'pout_small uses a pout line');
   assert.ok(get('angry_pout', 'MouthAngry') > get('pout_small', 'MouthAngry'), 'angry_pout pouts harder than pout_small');
   assert.ok(get('angry_pout', 'MouthAngryLine') > get('pout_small', 'MouthAngryLine'), 'angry_pout pout line stronger than pout_small');
-  // sad_soft is moved by BROWS (lifted inner) + a mild droop; pout_small is
-  // moved by the MOUTH with brows near neutral — meaningfully different sets.
-  assert.ok(get('sad_soft', 'MouthDown') > 0, 'sad_soft turns the mouth down mildly');
-  assert.ok(get('sad_soft', 'BrowLY') > 0, 'sad_soft lifts inner brows (sad)');
+  // sad_soft is moved by BROWS (angled/form down — capability-tested) + a
+  // clear mouth droop; pout_small is moved by the MOUTH with brows near
+  // neutral — meaningfully different sets.
+  assert.ok(get('sad_soft', 'MouthDown') > 0, 'sad_soft turns the mouth down clearly');
+  assert.ok(Math.abs(get('sad_soft', 'BrowLAngle')) > 0, 'sad_soft angles the brows (sad)');
   assert.ok(Math.abs(get('pout_small', 'BrowLAngle')) <= 0.2, 'pout_small brows stay near neutral (not sad)');
   assert.equal(get('angry_pout', 'MouthDown'), 0, 'angry_pout must not droop (angry, not sad)');
   assert.ok(Math.abs(get('angry_pout', 'BrowLAngle')) > Math.abs(get('pout_small', 'BrowLAngle')), 'angry brow sharper than pout brow');
@@ -245,7 +262,7 @@ test('emotional states are separated per the real rig (mouth for negatives, eyes
   assert.ok(get('squint_smile', 'Cheek') > get('small_smile', 'Cheek'), 'squint smile blushes more than small smile');
   assert.ok(eyeOpenOf('squint_smile') < 0.9 && eyeOpenOf('squint_smile') >= 0.7, 'squint_smile clearly narrows the eyes');
   assert.equal(eyeOpenOf('small_smile'), 1.0, 'small smile keeps fully open eyes');
-  assert.equal(get('neutral', 'MouthUp'), 0);
+  assert.equal(get('neutral', 'MouthUp'), -1.0, 'neutral actively flattens the 1.0 dim smile baseline');
   assert.equal(get('neutral', 'MouthDown'), 0);
   // No ambient state ever droops strongly or spams a hard mouth-down.
   for (const id of ['neutral', 'small_smile', 'squint_smile', 'sleepy_soft']) {
@@ -468,64 +485,87 @@ test('AUDIO OFF: latched response face survives and idle timer cannot overwrite 
 });
 
 // ---------------------------------------------------------------------------
-// TEMPORARY capability-test mode — pure checks on the forced faces.
+// FINAL production facial palette (values converted from the mao_pro
+// capability live test). Tests the permanent Stage 3/Stage 4 faces directly
+// so the proven capability values cannot drift back to weak ones.
 // ---------------------------------------------------------------------------
-test('capability mode: every forced face zeroes Cheek (no blush residue)', () => {
-  for (const key of Object.keys(TEMP_CAPABILITY_FACES)) {
-    const merged = { ...ZERO_FACIAL, ...TEMP_CAPABILITY_FACES[key].additive };
-    assert.equal(merged.Cheek, 0, `capface ${key} must explicitly clear blush`);
-  }
-});
-
-test('capability mode: neutral counters the 1.0 MouthUp motion baseline', () => {
-  // The idle motion mtn_01 holds ParamMouthUp = 1.0 (its neutral mouth pose) and
-  // the true max is 1.0, so an ACTIVE neutral that writes MouthUp 0 would leave
-  // the mouth clamped at 1.0 (permanent smile). The cap neutral must apply
-  // MouthUp -1.0 to flatten it, and keep brows/eyes neutral.
-  const n = { ...ZERO_FACIAL, ...TEMP_CAPABILITY_FACES.neutral.additive };
-  assert.equal(n.MouthUp, -1.0, 'neutral counteracts the baseline to flatten the smile');
+test('palette: neutral actively counters the 1.0 MouthUp motion baseline', () => {
+  // Idle motion mtn_01 holds ParamMouthUp = 1.0 (max is 1.0), so an additive 0
+  // leaves the mouth clamped at 1.0 = permanent smile. The permanent neutral
+  // must flatten it with MouthUp -1.0 without looking sad (Down/Angry = 0).
+  const n = mergedFace('neutral');
+  assert.equal(n.MouthUp, -1.0, 'neutral flattens the default smile');
   assert.equal(n.MouthDown, 0);
   assert.equal(n.MouthAngry, 0);
+  assert.equal(n.MouthAngryLine, 0);
   assert.equal(n.BrowLAngle, 0);
-  assert.equal(TEMP_CAPABILITY_FACES.neutral.eyeOpen, 1.0);
+  assert.equal(n.Cheek, 0, 'neutral has no dynamic blush');
+  assert.equal(palEyeOpen('neutral'), 1.0);
 });
 
-test('capability mode: sad is clearly distinct from neutral (mouth droop + sad brows)', () => {
-  const s = { ...ZERO_FACIAL, ...TEMP_CAPABILITY_FACES.sad.additive };
+test('palette: smiles still smile (natural positive faces preserved)', () => {
+  // Only the faces that need to suppress the default smile should counter the
+  // MouthUp baseline. Smiles must keep their positive cues.
+  const smile = mergedFace('small_smile');
+  assert.equal(smile.MouthUp, 0, 'small_smile does not suppress the smile');
+  assert.ok(smile.EyeLSmile > 0 && smile.Cheek > 0, 'small_smile keeps eye-smile + blush');
+  const squint = mergedFace('squint_smile');
+  assert.equal(squint.MouthUp, 0);
+  assert.ok(squint.EyeLSmile > 0.8, 'squint_smile keeps strong eye-smile');
+  assert.ok(palEyeOpen('squint_smile') < 1.0, 'squint_smile narrows the eyes');
+});
+
+test('palette: sad_soft is parametrically distinct from neutral', () => {
+  // Proven capability set: counter smile, clear mouth downturn, sad brows,
+  // softened eyes, no dynamic blush. Not just a paler neutral.
+  const s = mergedFace('sad_soft');
+  const n = mergedFace('neutral');
+  assert.equal(s.MouthUp, -1.0, 'sad counters the smile baseline');
   assert.ok(s.MouthDown > 0.5, 'sad turns the mouth down clearly');
   assert.ok(Math.abs(s.BrowLAngle) > 0.5, 'sad angles brows');
   assert.ok(Math.abs(s.BrowLForm) > 0.5, 'sad shapes/forms brows');
-  assert.ok(TEMP_CAPABILITY_FACES.sad.eyeOpen < 1.0, 'sad slightly softens the eyes');
+  assert.ok(palEyeOpen('sad_soft') < 1.0, 'sad slightly softens the eyes');
   assert.equal(s.Cheek, 0);
+  // sad must differ meaningfully from neutral on mouth + brows + eyes.
+  assert.notEqual(s.MouthDown, n.MouthDown);
+  assert.notEqual(s.BrowLAngle, n.BrowLAngle);
 });
 
-test('capability mode: angry reads angry not sad (pout line, no MouthDown)', () => {
-  const a = { ...ZERO_FACIAL, ...TEMP_CAPABILITY_FACES.angry.additive };
+test('palette: angry_pout reads angry not sad (pout line, no MouthDown)', () => {
+  // Proven capability set: full pout line + furrowed lowered sharp brows +
+  // narrowed angular eyes. MouthDown is 0 so it reads 😡, never 😔.
+  const a = mergedFace('angry_pout');
   assert.equal(a.MouthDown, 0, 'angry must NOT droop the mouth (would read sad)');
+  assert.equal(a.MouthUp, -1.0, 'angry counters the smile baseline');
   assert.equal(a.MouthAngry, 1.0);
   assert.equal(a.MouthAngryLine, 1.0);
   assert.ok(Math.abs(a.BrowLAngle) > 0.5 && Math.abs(a.BrowLForm) > 0.5, 'angry furrows + angles brows');
   assert.equal(a.EyeLForm, 1.0, 'angry uses sharp angular eyes');
-  assert.ok(TEMP_CAPABILITY_FACES.angry.eyeOpen < 0.9, 'angry narrows the eyes');
+  assert.ok(palEyeOpen('angry_pout') < 0.9, 'angry narrows the eyes');
+  assert.equal(a.Cheek, 0);
+  // angry must differ from sad_soft: angry uses pout-line, sad uses mouth-down.
+  const s = mergedFace('sad_soft');
+  assert.notEqual(a.MouthAngry, s.MouthAngry);
+  assert.notEqual(a.MouthDown, s.MouthDown);
 });
 
-test('capability mode: all faces only write owned facial params (no ParamA / Stage-2)', () => {
-  for (const key of Object.keys(TEMP_CAPABILITY_FACES)) {
-    const merged = { ...ZERO_FACIAL, ...TEMP_CAPABILITY_FACES[key].additive };
+test('palette: permanent faces only write owned facial params (no ParamA / Stage-2)', () => {
+  for (const id of ['neutral', 'sad_soft', 'angry_pout', 'pout_small', 'small_smile', 'squint_smile'] as const) {
+    const merged = mergedFace(id);
     for (const forbidden of ['ParamA', 'AngleX', 'AngleY', 'AngleZ', 'BodyAngleX', 'EyeBallX', 'EyeBallY']) {
-      assert.ok(!(forbidden in merged), `capface ${key} must not touch ${forbidden}`);
+      assert.ok(!(forbidden in merged), `${id} must not touch ${forbidden}`);
     }
   }
 });
 
-test('capability mode reset/no-face disables the forced override', () => {
-  // A non-existent or empty capface leaves the bridge OFF: a fresh controller
-  // still schedules normal autonomous faces.
-  const h = makeController();
-  h.controller.setActivity('idle');
-  pump(h, 300);
-  assert.ok(h.controller.snapshot().state !== null, 'normal idle face still schedules when cap mode off');
-  void (0 as never);
+test('palette: pout_small is mouth-driven, distinct from sad_soft', () => {
+  // Cemberut kecil: pout line + slight corner down, MouthDown stays 0 so it is
+  // ngambek, not sad. Brows/eyes near neutral.
+  const p = mergedFace('pout_small');
+  assert.equal(p.MouthDown, 0);
+  assert.ok(p.MouthAngry > 0.5 && p.MouthAngryLine > 0.5, 'pout uses a clear pout line');
+  const s = mergedFace('sad_soft');
+  assert.notEqual(p.MouthDown, s.MouthDown, 'pout must not rely on mouth-droop like sad');
 });
 
 void (0 as never);

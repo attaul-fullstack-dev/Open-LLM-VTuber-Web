@@ -148,7 +148,25 @@ export interface IdleFacialStateWeighted extends IdleFacialState {
 
 export const IDLE_FACIAL_PALETTE: IdleFacialStateWeighted[] = [
   // ---------- reset ----------
-  { id: 'neutral', weight: 30, additive: {}, eyeOpen: NEUTRAL_EYE_OPEN },
+  // TRUE NEUTRAL (live verified). The idle motion mtn_01 holds ParamMouthUp =
+  // 1.0 (its neutral mouth pose) and the true max is 1.0, so an additive 0
+  // leaves the mouth clamped at 1.0 = permanent smile (this caused the old
+  // "neutral still smiles" bug). Actively counter the baseline with MouthUp
+  // -1.0 to flatten it. Brows/eyes stay neutral and Cheek is 0 (no dynamic
+  // blush; the residual pink is base model ART, not a runtime residue).
+  // Never reads as sad because MouthDown/Angry stay 0.
+  {
+    id: 'neutral',
+    weight: 30,
+    additive: {
+      MouthUp: -1.0,
+      MouthDown: 0,
+      MouthAngry: 0,
+      MouthAngryLine: 0,
+      Cheek: 0,
+    },
+    eyeOpen: NEUTRAL_EYE_OPEN,
+  },
   // ---------- subtle positive ----------
   {
     id: 'small_smile',
@@ -182,21 +200,23 @@ export const IDLE_FACIAL_PALETTE: IdleFacialStateWeighted[] = [
   },
   // ---------- negative ladder (sad -> pout -> angry) ----------
   {
-    // Murung / soft sad. Emotion driven by BROWS (lifted inner) + softened
-    // eyes + a mild mouth downturn — reads as light sadness, not exhaustion.
+    // Murung / soft sad — live capability-tested. Emotion driven by BROWS
+    // (angled/form) + softened eyes + a clear mouth downturn, AND counter the
+    // mtn_01 MouthUp smile baseline (MouthUp -1.0) plus MouthDown 0.8 so it
+    // reads unmistakably sad, not neutral. No dynamic blush. Immediately
+    // distinguishable from neutral on a phone screen.
     id: 'sad_soft',
     weight: 7,
     additive: {
-      MouthDown: 0.4,
-      MouthUp: -0.3,
-      BrowLY: 0.22,
-      BrowRY: 0.22,
-      BrowLAngle: 0.15,
-      BrowRAngle: 0.15,
-      EyeLForm: 0.12,
-      EyeRForm: 0.12,
+      MouthUp: -1.0,
+      MouthDown: 0.8,
+      BrowLAngle: -0.8,
+      BrowRAngle: -0.8,
+      BrowLForm: -0.8,
+      BrowRForm: -0.8,
+      Cheek: 0,
     },
-    eyeOpen: 0.97,
+    eyeOpen: 0.92,
   },
   {
     // Cemberut kecil / ngambek. Primarily MOUTH-driven: a clear downward curve
@@ -226,18 +246,17 @@ export const IDLE_FACIAL_PALETTE: IdleFacialStateWeighted[] = [
     id: 'angry_pout',
     weight: 7,
     additive: {
+      MouthUp: -1.0,
       MouthAngry: 1.0,
       MouthAngryLine: 1.0,
-      MouthUp: -1.0,
       MouthDown: 0,
-      BrowLAngle: -0.7,
-      BrowRAngle: -0.7,
-      BrowLForm: -0.6,
-      BrowRForm: -0.6,
-      BrowLY: -0.15,
-      BrowRY: -0.15,
+      BrowLAngle: -0.9,
+      BrowRAngle: -0.9,
+      BrowLForm: -0.9,
+      BrowRForm: -0.9,
       EyeLForm: 1.0,
       EyeRForm: 1.0,
+      Cheek: 0,
     },
     eyeOpen: 0.85,
   },

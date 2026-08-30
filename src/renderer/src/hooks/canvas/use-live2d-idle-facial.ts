@@ -8,12 +8,10 @@ import { setLive2DIdleFacialHook } from '../../../WebSDK/src/lapplive2dfacialhoo
 import {
   IDLE_FACIAL_PALETTE,
   IdleFacialExpressionController,
-  ZERO_FACIAL,
   type IdleFacialAdditive,
   type IdleFacialStateWeighted,
 } from '@/utils/live2d-idle-facial';
 import { responseFaceBus, decideResponseFace } from '@/utils/response-face-bus';
-import { emoDiag } from '@/utils/emodiag';
 
 /**
  * Mili Hidup Stage 3 — Autonomous idle facial micro-expressions.
@@ -46,102 +44,11 @@ interface Live2DIdleFacialApi {
   };
 }
 
-// ---------------------------------------------------------------------------
-// ------ TEMPORARY micro capability-test mode (mao_pro) — remove after test ---
-//
-// Drives ONE forced face at a time via the URL query param `?capface=`:
-//   ?capface=  or absent  → normal Stage 3/4 behavior
-//   ?capface=neutral      → force TRUE NEUTRAL 😐
-//   ?capface=sad          → force CLEAR SAD 🙁
-//   ?capface=angry        → force CLEAR ANGRY/cemberut 😡
-//
-// Values are ADDITIVE on top of the motion baseline. CRITICAL finding: the
-// idle motion mtn_01 holds ParamMouthUp = 1.0 (its neutral mouth pose) AND
-// the true max is 1.0, so a neutral face MUST counter that baseline with
-// MouthUp = -1.0 or the mouth sits clamped at 1.0 and the face reads as a
-// permanent smile. Each set below explicitly zeroes Cheek so switching off a
-// blush face leaves no red-cheek residue.
-//
-// While a cap face is active the controller's autonomous idle face AND the
-// Stage 4 contextual response face are fully bypassed (we never call
-// controller.step()); the Stage 2 head/body/eye movement hook keeps running
-// (separate hook). No network, no LLM, no polling — this is developer-only and
-// deleted before final Stage 6.
-// ---------------------------------------------------------------------------
-export const TEMP_CAPABILITY_FACES: Record<
-  string,
-  { additive: Partial<IdleFacialAdditive>; eyeOpen: number }
-> = {
-  // TRUE NEUTRAL 😐 — counter the 1.0 MouthUp baseline to flatten the smile,
-  // keep brows/eyes at neutral, explicitly clear blush residue.
-  neutral: {
-    additive: {
-      MouthUp: -1.0,
-      BrowLAngle: 0,
-      BrowRAngle: 0,
-      MouthDown: 0,
-      MouthAngry: 0,
-      MouthAngryLine: 0,
-      Cheek: 0,
-    },
-    eyeOpen: 1.0,
-  },
-  // CLEAR SAD 🙁 — mouth downturn + sad brows (lifted inner via form/angle +
-  // soft tired eyes). Mirror the rig's own exp_05 recipe (MouthUp -1, MouthDown
-  // +1, brows angled/form -1) but kept within safe bounds.
-  sad: {
-    additive: {
-      MouthUp: -1.0,
-      MouthDown: 0.8,
-      BrowLAngle: -0.8,
-      BrowRAngle: -0.8,
-      BrowLForm: -0.8,
-      BrowRForm: -0.8,
-      Cheek: 0,
-    },
-    eyeOpen: 0.92,
-  },
-  // CLEAR ANGRY/cemberut 😡 — follow the rig's own angry recipe (exp_08):
-  // pout line full (MouthAngry + AngryLine), NO MouthDown (or it reads sad),
-  // sharp angular eyes (EyeForm), furrowed lowered angry brows + narrowed eyes.
-  angry: {
-    additive: {
-      MouthUp: -1.0,
-      MouthAngry: 1.0,
-      MouthAngryLine: 1.0,
-      MouthDown: 0,
-      BrowLAngle: -0.9,
-      BrowRAngle: -0.9,
-      BrowLForm: -0.9,
-      BrowRForm: -0.9,
-      EyeLForm: 1.0,
-      EyeRForm: 1.0,
-      Cheek: 0,
-    },
-    eyeOpen: 0.85,
-  },
-};
-
-function readCapabilityFace(): keyof typeof TEMP_CAPABILITY_FACES | null {
-  try {
-    const param = new URLSearchParams(window.location.search).get('capface');
-    if (param && Object.prototype.hasOwnProperty.call(TEMP_CAPABILITY_FACES, param)) {
-      return param as keyof typeof TEMP_CAPABILITY_FACES;
-    }
-  } catch {
-    // never break app startup
-  }
-  return null;
-}
-
 export function useLive2DIdleFacial({
   isDragging,
   isMotionPlaying,
 }: UseLive2DIdleFacialOptions): Live2DIdleFacialApi {
   const { activityState } = useAvatarActivityState();
-
-  // TEMPORARY capability-test: read `?capface=` once on reflect.
-  const capFaceRef = useRef<keyof typeof TEMP_CAPABILITY_FACES | null>(readCapabilityFace());
 
   const controllerRef = useRef<IdleFacialExpressionController | null>(null);
   if (controllerRef.current === null) {
@@ -181,7 +88,6 @@ export function useLive2DIdleFacial({
       const wasActive = active.isResponseFaceActive();
       const currentFace = wasActive ? (snap.state ?? null) : null;
       const decision = decideResponseFace(currentFace, faceId);
-      emoDiag({ faceId, reason: `decision:${decision.kind}` });
       switch (decision.kind) {
         case 'keep':
           // Nothing latched and nothing to claim (e.g. fully neutral response).
@@ -190,7 +96,6 @@ export function useLive2DIdleFacial({
           // Real turn end / interruption / cancellation: release back to
           // neutral, letting Stage 3 idle scheduling resume normally.
           active.releaseResponseFace();
-          emoDiag({ release: true, reason: 'release:turn_end' });
           return;
         case 'refresh':
           // No new emotion on this signal: keep the latch and refresh the
@@ -200,7 +105,6 @@ export function useLive2DIdleFacial({
         default: {
           const state = IDLE_FACIAL_PALETTE.find((s: IdleFacialStateWeighted) => s.id === decision.faceId);
           active.claimResponseFace(state ?? null);
-          emoDiag({ claim: true, faceId: state ? state.id : null });
         }
       }
     });
@@ -250,22 +154,7 @@ export function useLive2DIdleFacial({
       }
       const handles = ensureIds();
       if (!handles) return;
-
-      // TEMPORARY capability-test: when active, override the controller
-      // entirely with ONE forced face (bypasses Stage 3 idle random AND the
-      // Stage 4 contextual face). ZERO_FACIAL base + cap offsets guarantees
-      // every owned param is written (Cheek=0 clears blush residue).
-      const capFace = capFaceRef.current;
-      let additive: IdleFacialAdditive;
-      let eyeOpen: number;
-      if (capFace && TEMP_CAPABILITY_FACES[capFace]) {
-        additive = { ...ZERO_FACIAL, ...TEMP_CAPABILITY_FACES[capFace].additive };
-        eyeOpen = TEMP_CAPABILITY_FACES[capFace].eyeOpen;
-      } else {
-        const stepped = active.step(deltaSeconds);
-        additive = stepped.additive;
-        eyeOpen = stepped.eyeOpen;
-      }
+      const { additive, eyeOpen } = active.step(deltaSeconds);
       try {
         // Additive facial micro-expression parameters.
         cubismModel.addParameterValueById(handles.BrowLY, additive.BrowLY);
