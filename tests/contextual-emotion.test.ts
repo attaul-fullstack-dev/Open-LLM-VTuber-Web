@@ -139,6 +139,11 @@ test('strong_blush has stronger dynamic Cheek than the normal smile states', () 
   // Not fever/cartoon: keeps a modest uneasy smile + normal eye openness.
   assert.ok((blush.EyeLSmile ?? 0) > 0, 'strong_blush keeps a modest smile');
   assert.ok(face('strong_blush').eyeOpen >= 0.9, 'strong_blush keeps normally-open eyes');
+  // Distinct from generic joy/small_smile: mouth held back (MouthUp negative)
+  // + slightly lifted shy brows from the blush state itself.
+  assert.ok((blush.MouthUp ?? 0) < 0, 'strong_blush holds the mouth back (shy, not cheerful)');
+  assert.equal((blush.MouthUp ?? 0), -0.5, 'strong_blush MouthUp value is stable');
+  assert.ok((blush.BrowLY ?? 0) > 0, 'strong_blush slightly lifts the brows (shy/flustered)');
 });
 
 test('strong_blush explicitly resets when a non-blush face takes over', () => {
