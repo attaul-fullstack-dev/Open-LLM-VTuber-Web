@@ -283,6 +283,28 @@ test('weighted selection favors calm neutral/subtle-positive over rare negatives
   assert.ok((byId.squint_smile.longIdleWeight ?? byId.squint_smile.weight) < byId.squint_smile.weight, 'squint_smile less frequent during long_idle');
 });
 
+test('high-intensity states (angry_strong, strong_blush) are never selected by random idle', () => {
+  // These are contextual/response-face states only: weight 0 with no
+  // longIdleWeight means both normal idle AND long_idle weighted selection
+  // skip them entirely.
+  const byId = Object.fromEntries(IDLE_FACIAL_PALETTE.map((s) => [s.id, s]));
+  assert.equal(byId.angry_strong.weight, 0, 'angry_strong must not appear during normal idle');
+  assert.equal(byId.strong_blush.weight, 0, 'strong_blush must not appear during normal idle');
+  assert.equal(byId.angry_strong.longIdleWeight ?? 0, 0, 'angry_strong not in long_idle either');
+  assert.equal(byId.strong_blush.longIdleWeight ?? 0, 0, 'strong_blush not in long_idle either');
+  // Empirically: long runs never surface them.
+  for (const activity of ['idle', 'long_idle'] as const) {
+    const h = makeController({ rng: () => Math.random() });
+    h.controller.setActivity(activity);
+    for (let i = 0; i < 200; i += 1) {
+      pump(h, 130);
+      const state = h.controller.snapshot().state;
+      assert.notEqual(state, 'angry_strong');
+      assert.notEqual(state, 'strong_blush');
+    }
+  }
+});
+
 test('production default is weighted-random selection (no debug cycle)', () => {
   // A stock controller (no cycle option) must only ever pick from the palette
   // via weighted random — it never walks any fixed order.

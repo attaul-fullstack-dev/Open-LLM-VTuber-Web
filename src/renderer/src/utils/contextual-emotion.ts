@@ -10,7 +10,7 @@
  * controller then interpolates/applies.
  *
  * Real backend labels (mao_pro `emotionMap` keys, lower-cased): neutral, anger,
- * disgust, fear, joy, smirk, sadness, surprise.
+ * disgust, fear, joy, smirk, sadness, surprise, embarrassed, anger_strong.
  */
 export type ResponseEmotion =
   | 'neutral'
@@ -20,7 +20,9 @@ export type ResponseEmotion =
   | 'joy'
   | 'smirk'
   | 'sadness'
-  | 'surprise';
+  | 'surprise'
+  | 'embarrassed'
+  | 'anger_strong';
 export type FaceId = string;
 
 /**
@@ -30,6 +32,8 @@ export type FaceId = string;
  * - smirk          -> squint_smile  (playful/mischievous response)
  * - sadness        -> sad_soft      (concerned/sad response)
  * - anger          -> angry_pout    (firmly annoyed/mad response)
+ * - anger_strong   -> angry_strong  (genuinely serious/strong anger)
+ * - embarrassed    -> strong_blush  (genuinely flustered/shy response)
  * - disgust        -> pout_small    (mild displeasure; the rig can't do a
  *                                    real "yuck" face, this reads as ngambek)
  * - neutral        -> neutral
@@ -44,6 +48,8 @@ export const CONTEXTUAL_EMOTION_MAP: Record<ResponseEmotion, string> = {
   smirk: 'squint_smile',
   sadness: 'sad_soft',
   anger: 'angry_pout',
+  anger_strong: 'angry_strong',
+  embarrassed: 'strong_blush',
   disgust: 'pout_small',
   fear: 'neutral',
   surprise: 'neutral',

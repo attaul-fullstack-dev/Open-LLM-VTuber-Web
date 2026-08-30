@@ -90,6 +90,71 @@ test('response emotion labels map to the expected semantic faces', () => {
   assert.equal(resolveResponseFaceId({ emotions: ['disgust'] }), 'pout_small');
 });
 
+test('stage4: strong anger and embarrassment map to their high-intensity faces', () => {
+  assert.equal(resolveResponseFaceId({ emotions: ['anger_strong'] }), 'angry_strong');
+  assert.equal(resolveResponseFaceId({ emotions: ['embarrassed'] }), 'strong_blush');
+  // Ordinary anger and playful/smirk must NOT be upgraded to the strong states.
+  assert.equal(resolveResponseFaceId({ emotions: ['anger'] }), 'angry_pout');
+  assert.equal(resolveResponseFaceId({ emotions: ['smirk'] }), 'squint_smile');
+  assert.equal(resolveResponseFaceId({ emotions: ['joy'] }), 'small_smile');
+});
+
+test('new high-intensity states exist in the stage 3 palette', () => {
+  const ids = new Set(IDLE_FACIAL_PALETTE.map((s) => s.id));
+  assert.ok(ids.has('angry_strong'), 'palette must contain angry_strong');
+  assert.ok(ids.has('strong_blush'), 'palette must contain strong_blush');
+});
+
+test('angry_strong is parametrically stronger than angry_pout and not sad/blush', () => {
+  const a = face('angry_strong').additive;
+  const p = face('angry_pout').additive;
+  // Same proven angry recipe (full pout line, no MouthDown).
+  assert.equal(a.MouthDown, 0, 'angry_strong must NOT droop the mouth (would read sad)');
+  assert.equal(a.MouthAngry, 1.0);
+  assert.equal(a.MouthAngryLine, 1.0);
+  // Stronger angry silhouette: sharper brow geometry than angry_pout.
+  assert.ok(Math.abs(a.BrowLAngle ?? 0) > Math.abs(p.BrowLAngle ?? 0), 'angry_strong furrows brows harder');
+  assert.ok(Math.abs(a.BrowLForm ?? 0) > Math.abs(p.BrowLForm ?? 0), 'angry_strong forms brows harder');
+  // Cheek stays 0 so it never reads as shy/blush.
+  assert.equal(a.Cheek, 0, 'angry_strong must not look like a blush state');
+  // Narrower eyes than angry_pout.
+  assert.ok(face('angry_strong').eyeOpen < face('angry_pout').eyeOpen);
+});
+
+test('strong_blush has stronger dynamic Cheek than the normal smile states', () => {
+  const blush = face('strong_blush').additive;
+  const small = face('small_smile').additive;
+  const squint = face('squint_smile').additive;
+  assert.ok((blush.Cheek ?? 0) > (small.Cheek ?? 0), 'strong_blush blushes harder than small_smile');
+  assert.ok((blush.Cheek ?? 0) > (squint.Cheek ?? 0), 'strong_blush blushes harder than squint_smile');
+  // Not anger/sad: mouth stays non-angry (no AngryLine), no MouthDown.
+  assert.equal(blush.MouthDown, 0, 'strong_blush must not look sad');
+  assert.equal(blush.MouthAngry, 0, 'strong_blush must not look angry');
+  assert.equal(blush.MouthAngryLine, 0, 'strong_blush must not look angry');
+  // Not fever/cartoon: keeps a modest uneasy smile + normal eye openness.
+  assert.ok((blush.EyeLSmile ?? 0) > 0, 'strong_blush keeps a modest smile');
+  assert.ok(face('strong_blush').eyeOpen >= 0.9, 'strong_blush keeps normally-open eyes');
+});
+
+test('strong_blush explicitly resets when a non-blush face takes over', () => {
+  const h = makeController();
+  h.c.claimResponseFace(face('strong_blush'));
+  pump(h, 400);
+  assert.equal(h.c.snapshot().state, 'strong_blush');
+  // A non-blush face replaces it: Cheek target returns to that face's value.
+  h.c.claimResponseFace(face('neutral'));
+  pump(h, 400);
+  assert.equal(h.c.snapshot().state, 'neutral');
+  // And releasing back to idle must not carry Cheek residue.
+  h.c.claimResponseFace(face('strong_blush'));
+  pump(h, 300);
+  h.c.releaseResponseFace();
+  pump(h, 400);
+  assert.notEqual(h.c.snapshot().state, 'strong_blush');
+  const cheekAfter = h.c.snapshot().additive.Cheek;
+  assert.ok(Math.abs(cheekAfter) < 0.01, `release clears dynamic blush residue (was ${cheekAfter})`);
+});
+
 test('rig-limited response emotions resolve to neutral (never a wrong face)', () => {
   // mao_pro's Stage 3 params can't express fear/surprise; mapping them to a
   // smile or to sad would be actively wrong, so they stay neutral.

@@ -260,6 +260,54 @@ export const IDLE_FACIAL_PALETTE: IdleFacialStateWeighted[] = [
     },
     eyeOpen: 0.85,
   },
+  // ---------- high-intensity contextual only (weight 0 = never random idle) ----------
+  {
+    // MUCH stronger than angry_pout: full serious anger 😡. Stacks every proven
+    // anger cue toward its safe extreme WITHOUT MouthDown (so it never reads as
+    // sad). Sharper/narrower eyes than angry_pout (eyeOpen ×0.78 vs ×0.85) plus
+    // maximally furrowed, lowered-inward brows (brow angle/form -1.0). The mouth
+    // is already at its capped extreme (MouthAngry/AngryLine 1.0, MouthUp -1),
+    // so the extra intensity comes from eyes + brows. Cheek stays 0 (flushed
+    // cheeks with these brows reads as shy, not furious). Not in autonomous idle.
+    id: 'angry_strong',
+    weight: 0,
+    additive: {
+      MouthUp: -1.0,
+      MouthAngry: 1.0,
+      MouthAngryLine: 1.0,
+      MouthDown: 0,
+      BrowLAngle: -1.0,
+      BrowRAngle: -1.0,
+      BrowLForm: -1.0,
+      BrowRForm: -1.0,
+      EyeLForm: 1.0,
+      EyeRForm: 1.0,
+      Cheek: 0,
+    },
+    eyeOpen: 0.78,
+  },
+  {
+    // Visibly flustered / embarrassed 😳. The rig's own shy recipe (exp_06)
+    // drives Cheek to its true max (1.0) — far stronger than the subtle blush
+    // on small_smile (0.45) / squint_smile (0.5). Keeps a small uneasy smile
+    // (EyeSmile + slight MouthUp counter so it is shy, not yelling), slightly
+    // lifted brows, and normally-open eyes. MouthDown/Angry stay 0 so it never
+    // veers into sad or angry. Not in autonomous idle.
+    id: 'strong_blush',
+    weight: 0,
+    additive: {
+      Cheek: 1.0,
+      MouthUp: -0.5,
+      MouthDown: 0,
+      MouthAngry: 0,
+      MouthAngryLine: 0,
+      EyeLSmile: 0.35,
+      EyeRSmile: 0.35,
+      BrowLY: 0.2,
+      BrowRY: 0.2,
+    },
+    eyeOpen: NEUTRAL_EYE_OPEN,
+  },
   // ---------- long_idle only ----------
   {
     // Calm sleepy-soft. Mainly a gentle EyeOpen ×0.78 with relaxed brows and a
