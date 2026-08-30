@@ -117,8 +117,13 @@ test('angry_strong is parametrically stronger than angry_pout and not sad/blush'
   assert.ok(Math.abs(a.BrowLForm ?? 0) > Math.abs(p.BrowLForm ?? 0), 'angry_strong forms brows harder');
   // Cheek stays 0 so it never reads as shy/blush.
   assert.equal(a.Cheek, 0, 'angry_strong must not look like a blush state');
-  // Narrower eyes than angry_pout.
-  assert.ok(face('angry_strong').eyeOpen < face('angry_pout').eyeOpen);
+  // Eyes: visibly much narrower AND corners pulled down/tense (EyeSmile
+  // negative) — this is the headroom that separates 😡 from angry_pout's 😠.
+  assert.ok(a.EyeLForm === 1.0, 'angry_strong keeps sharp angular eye form');
+  assert.ok((a.EyeLSmile ?? 0) < 0, 'angry_strong pulls eye corners tense/down (EyeSmile negative)');
+  assert.ok((a.EyeRSmile ?? 0) < 0, 'angry_strong pulls right eye corner tense/down');
+  assert.ok(face('angry_strong').eyeOpen < 0.7, 'angry_strong eyes clearly narrower than angry_pout');
+  assert.ok(face('angry_strong').eyeOpen < face('angry_pout').eyeOpen, 'narrower than angry_pout');
 });
 
 test('strong_blush has stronger dynamic Cheek than the normal smile states', () => {

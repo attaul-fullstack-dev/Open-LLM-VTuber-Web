@@ -134,6 +134,24 @@ export const useAudioTask = () => {
       audioBase64, displayText, expressions, emotions, forwarded,
     } = options;
     const face = resolveResponseFaceId({ emotions, expressions });
+    // TEMP angry_strong diagnostic (metadata only; never chat text). Proves
+    // whether a live turn was labelled [anger] or [anger_strong] and what face
+    // was resolved+published for the response.
+    if (face === 'angry_strong' || face === 'angry_pout' || face === 'strong_blush') {
+      try {
+        fetch('/debug/angrydiag', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            emotions: (emotions ?? []).filter(Boolean),
+            faceId: face,
+            activity: 'task_resolve',
+          }),
+        }).catch(() => {});
+      } catch {
+        /* fire-and-forget only */
+      }
+    }
     // A task arriving after a completed lifecycle starts a brand-new turn:
     // beginTurnTask resets the shared per-turn state, and any pending
     // text-only hold from the previous turn is cleared (a stale timer must
