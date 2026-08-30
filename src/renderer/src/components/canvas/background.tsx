@@ -10,7 +10,6 @@ const Background = memo(({ children }: { children?: React.ReactNode }) => {
     backgroundStream, isBackgroundStreaming, startBackgroundCamera, stopBackgroundCamera,
   } = useCamera();
   const { useCameraBackground, backgroundUrl } = useBgUrl();
-
   useEffect(() => {
     if (useCameraBackground) {
       startBackgroundCamera();

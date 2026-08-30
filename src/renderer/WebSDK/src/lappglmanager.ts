@@ -47,7 +47,14 @@ export class LAppGlManager {
       return;
     }
 
-     gl = canvas.getContext("webgl2");
+     gl = canvas.getContext("webgl2", {
+       alpha: true,
+       premultipliedAlpha: true,
+       // Android Chrome may composite a discarded WebGL buffer as a white
+       // frame while pointer-triggered Live2D motions are being prepared.
+       // Retaining the last completed frame prevents that visible flash.
+       preserveDrawingBuffer: true,
+     });
 
      if (!gl) {
        // gl初期化失敗

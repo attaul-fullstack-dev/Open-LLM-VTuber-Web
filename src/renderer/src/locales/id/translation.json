@@ -1,0 +1,183 @@
+{
+  "wsStatus": {
+    "connected": "Terhubung",
+    "connecting": "Menghubungkan",
+    "clickToReconnect": "Ketuk untuk menyambung lagi"
+  },
+  "aiState": {
+    "idle": "siap",
+    "thinking-speaking": "Sedang berpikir",
+    "interrupted": "dihentikan",
+    "loading": "memuat",
+    "listening": "mendengarkan",
+    "waiting": "menunggu"
+  },
+  "thinking": {
+    "elapsed": "{{seconds}} detik",
+    "stuck": "Kayaknya macet nih... ({{seconds}} detik). Coba kirim ulang."
+  },
+  "notification": {
+    "characterLoaded": "Karakter baru dimuat",
+    "characterSwitched": "Karakter diganti",
+    "historyLoaded": "Riwayat dimuat",
+    "newConversation": "Percakapan baru dimulai",
+    "newChatHistory": "Chat baru dibuat",
+    "historyDeleteSuccess": "Riwayat berhasil dihapus",
+    "historyDeleteFail": "Riwayat gagal dihapus",
+    "relationshipResetSuccess": "Hubungan Mili berhasil direset",
+    "relationshipResetFail": "Hubungan Mili gagal direset",
+    "compactSuccess": "Percakapan berhasil diringkas",
+    "compactFail": "Percakapan gagal diringkas",
+    "historyRenameSuccess": "Nama chat berhasil diubah",
+    "historyRenameFail": "Nama chat gagal diubah",
+    "memoryDeleteSuccess": "Fakta berhasil dilupakan",
+    "memoryDeleteFail": "Fakta gagal dilupakan",
+    "memoryResetSuccess": "Ingatan jangka panjang Mili dihapus",
+    "memoryResetFail": "Ingatan Mili gagal dihapus",
+    "characterStateResetSuccess": "Hubungan dan ingatan Mili direset",
+    "characterStateResetFail": "Data karakter Mili gagal direset"
+  },
+  "history": {
+    "chatHistoryList": "Riwayat Chat",
+    "noMessages": "Belum ada pesan",
+    "newChat": "Percakapan Baru",
+    "rename": "Ubah nama chat",
+    "renamePrompt": "Masukkan nama baru untuk chat ini:",
+    "loadOlder": "Muat pesan lama",
+    "compact": "Ringkas percakapan",
+    "compactConfirm": "Ringkas pesan lama untuk konteks AI? Transkrip tetap terlihat dan tidak akan dihapus.",
+    "delete": "Hapus chat"
+  },
+  "toolCall": {
+    "using": "{{name}} sedang memakai {{tool}}",
+    "used": "{{name}} memakai {{tool}}"
+  },
+  "common": {
+    "save": "Simpan",
+    "cancel": "Batal",
+    "settings": "Pengaturan",
+    "close": "Tutup",
+    "accept": "Setuju"
+  },
+  "footer": {
+    "typeYourMessage": "Ketik pesan...",
+    "cameraControl": "Ketuk untuk menyalakan kamera",
+    "cameraStopping": "Ketuk untuk mematikan kamera",
+    "screenControl": "Ketuk untuk membagikan layar",
+    "screenStopping": "Ketuk untuk berhenti membagikan layar"
+  },
+  "sidebar": {
+    "camera": "Kamera",
+    "screen": "Layar",
+    "browser": "Browser",
+    "live": "Live",
+    "noMessages": "Belum ada pesan. Mulai percakapan, yuk!",
+    "noBrowserSession": "Tidak ada sesi browser aktif",
+    "browserSession": "Sesi Browser"
+  },
+  "settings": {
+    "tabs": {
+      "general": "Umum",
+      "live2d": "Live2D",
+      "asr": "ASR",
+      "tts": "TTS",
+      "agent": "Agen",
+      "about": "Tentang"
+    },
+    "general": {
+      "language": "Bahasa",
+      "useCameraBackground": "Gunakan kamera sebagai latar",
+      "showSubtitle": "Tampilkan subtitle",
+      "backgroundImage": "Gambar latar",
+      "customBgUrlPlaceholder": "Masukkan URL gambar",
+      "customBgUrl": "Atau masukkan URL gambar sendiri",
+      "characterPreset": "Preset karakter",
+      "wsUrl": "URL WebSocket",
+      "baseUrl": "URL dasar",
+      "imageCompressionQuality": "Kualitas kompresi gambar",
+      "imageCompressionQualityPlaceholder": "Masukkan kualitas kompresi (0–100)",
+      "imageCompressionQualityHelp": "Kualitas JPEG saat gambar dikirim ke AI. Nilai awal 0,8 untuk mengurangi ukuran data.",
+      "imageMaxWidth": "Lebar maksimum gambar",
+      "imageMaxWidthPlaceholder": "Masukkan lebar maksimum dalam piksel",
+      "imageMaxWidthHelp": "Gambar yang lebih lebar akan diperkecil secara proporsional. Isi 0 agar ukuran tidak dibatasi."
+    },
+    "live2d": {
+      "pointerInteractive": "Interaksi dengan sentuhan",
+      "scrollToResize": "Izinkan scroll untuk mengubah ukuran"
+    },
+    "asr": {
+      "autoStopMic": "Matikan mikrofon saat AI mulai bicara",
+      "autoStopMicDesc": "Mencegah suara AI masuk kembali ke mikrofon",
+      "autoStartMicOnConvEnd": "Nyalakan mikrofon setelah percakapan selesai",
+      "autoStartMicOnConvEndDesc": "Mikrofon otomatis aktif lagi setelah AI selesai bicara",
+      "autoStartMicOn": "Nyalakan mikrofon setelah AI dihentikan",
+      "autoStartMicOnDesc": "Mikrofon otomatis aktif lagi setelah kamu menyela AI",
+      "positiveSpeechThreshold": "Ambang deteksi suara",
+      "positiveSpeechThresholdDesc": "Tingkat keyakinan minimum untuk mendeteksi ucapan",
+      "negativeSpeechThreshold": "Ambang berhenti mendengar",
+      "negativeSpeechThresholdDesc": "Tingkat keyakinan yang membuat deteksi ucapan berhenti",
+      "redemptionFrames": "Jumlah frame konfirmasi",
+      "redemptionFramesDesc": "Jumlah frame berurutan untuk memastikan suara benar-benar terdeteksi"
+    },
+    "agent": {
+      "allowProactiveSpeak": "Izinkan AI berbicara lebih dulu",
+      "idleSecondsToSpeak": "Waktu diam sebelum AI berbicara",
+      "allowButtonTrigger": "Izinkan tombol angkat tangan memanggil AI",
+      "resetRelationship": "Reset hubungan dengan Mili",
+      "resetRelationshipHelp": "Reset hubungan Mili di semua chat. Riwayat, ringkasan, dan ingatan jangka panjang tetap tersimpan.",
+      "resetRelationshipConfirm": "Reset hubungan Mili di semua percakapan? Riwayat chat tidak akan dihapus.",
+      "characterMemory": "Ingatan Jangka Panjang Mili",
+      "characterMemoryHelp": "Fakta yang Mili ingat di semua chat (konteks jangka panjang, bukan transkrip).",
+      "memoryDescription": "Fakta yang Mili ingat tentang kamu di semua percakapan.",
+      "openMemory": "Lihat ingatan Mili",
+      "memoryCount": "{{count}} ingatan tersimpan",
+      "noCharacterMemory": "Belum ada ingatan jangka panjang.",
+      "forgetMemory": "Lupakan fakta ini",
+      "deleteMemoryConfirm": "Hapus fakta ini dari ingatan jangka panjang Mili?",
+      "deleteAllMemory": "Hapus seluruh ingatan Mili",
+      "resetMemory": "Hapus ingatan Mili",
+      "resetMemoryConfirm": "Hapus semua ingatan jangka panjang Mili? Hubungan dan riwayat chat tetap tersimpan.",
+      "resetCharacterState": "Reset hubungan dan ingatan",
+      "resetCharacterStateHelp": "Reset hubungan Mili dan hapus seluruh ingatan jangka panjang di semua chat.",
+      "resetCharacterStateConfirm": "Reset hubungan dan hapus ingatan Mili di semua chat? Riwayat chat tidak akan dihapus."
+    },
+    "about": {
+      "title": "Frontend Open LLM VTuber",
+      "version": "Versi",
+      "projectLinks": "Tautan proyek",
+      "github": "GitHub",
+      "documentation": "Dokumentasi",
+      "license": "Lisensi",
+      "copyright": "Hak cipta",
+      "viewLicense": "Lihat lisensi"
+    }
+  },
+  "group": {
+    "management": "Kelola grup",
+    "yourUuid": "UUID kamu",
+    "inviteMember": "Undang anggota",
+    "enterMemberUuid": "Masukkan UUID anggota",
+    "invite": "Undang",
+    "members": "Anggota",
+    "you": "Kamu",
+    "leaveGroup": "Keluar dari grup",
+    "removeMember": "Keluarkan anggota",
+    "leave": "Keluar"
+  },
+  "error": {
+    "cameraApiNotSupported": "API kamera tidak didukung perangkat ini",
+    "noCameraFound": "Kamera tidak ditemukan",
+    "failedStartCamera": "Kamera gagal dijalankan",
+    "failedStartBackgroundCamera": "Kamera latar gagal dijalankan",
+    "failedStartScreenCapture": "Perekaman layar gagal dijalankan",
+    "failedStartVAD": "Deteksi suara gagal dijalankan",
+    "llmCantHear": "AI tidak dapat mendengar suara kamu.",
+    "audioPlayback": "Audio gagal diputar",
+    "enterValidUuid": "Masukkan UUID yang valid",
+    "cannotDeleteCurrentHistory": "Chat yang sedang aktif tidak dapat dihapus",
+    "failedCapture": "Gagal mengambil gambar dari {{source}}",
+    "failedParseWebSocket": "Pesan WebSocket gagal dibaca",
+    "websocketNotOpen": "WebSocket belum terhubung.",
+    "vadMisfire": "Suara terlalu singkat. Coba bicara lebih keras atau lebih lama."
+  }
+}

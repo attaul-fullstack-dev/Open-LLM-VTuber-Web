@@ -5,6 +5,20 @@
 class AudioManager {
   private currentAudio: HTMLAudioElement | null = null;
   private currentModel: any | null = null;
+  private muted = typeof window !== 'undefined'
+    && window.localStorage.getItem('voiceMuted') === 'true';
+
+  setMuted(muted: boolean) {
+    this.muted = muted;
+    window.localStorage.setItem('voiceMuted', String(muted));
+    if (muted) {
+      this.stopCurrentAudioAndLipSync();
+    }
+  }
+
+  isMuted(): boolean {
+    return this.muted;
+  }
 
   /**
    * Set the current playing audio

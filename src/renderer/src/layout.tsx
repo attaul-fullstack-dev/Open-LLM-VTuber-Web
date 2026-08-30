@@ -1,10 +1,7 @@
 const isElectron = window.api !== undefined;
 
 const getAppHeight = () => {
-  if (typeof window !== 'undefined' && /Mobi|Android/i.test(navigator.userAgent)) {
-    return `${window.innerHeight}px`;
-  }
-  return isElectron ? 'calc(100vh - 30px)' : '100vh';
+  return isElectron ? 'calc(100dvh - 30px)' : '100dvh';
 };
 
 
@@ -18,23 +15,27 @@ export const layoutStyles = {
     overflow: 'hidden',
     position: 'relative',
     display: 'flex',
-    flexDirection: { base: 'column', md: 'row' },
+    flexDirection: 'row',
     mt: isElectron ? '30px' : '0',
   },
   sidebar: {
-    position: 'relative' as const,
-    width: { base: '100%', md: '440px' },
-    height: { base: 'auto', md: '100%' },
+    position: { base: 'fixed', lg: 'relative' } as const,
+    left: 0,
+    top: 0,
+    width: { base: '100vw', lg: '440px' },
+    height: '100%',
     bg: 'gray.800',
     borderRight: '1px solid',
     borderColor: 'whiteAlpha.200',
     overflow: 'hidden',
     flexShrink: 0,
     transition: 'all 0.2s',
+    zIndex: { base: 30, lg: 1 },
+    boxShadow: { base: 'none', lg: 'none' },
   },
   mainContent: {
     flex: 1,
-    height: { base: 'calc(100% - 120px)', md: '100%' },
+    height: '100%',
     position: 'relative',
     display: 'flex',
     flexDirection: 'column',
@@ -51,12 +52,15 @@ export const layoutStyles = {
     willChange: 'transform',
   },
   footer: {
-    width: '100%',
-    height: { base: '100px', md: '120px' },
+    width: { base: 'calc(100% - 24px)', lg: '100%' },
+    height: { base: '66px', lg: '120px' },
     transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
     willChange: 'transform',
-    position: 'relative',
+    position: { base: 'fixed', lg: 'relative' },
+    bottom: { base: 'max(8px, env(safe-area-inset-bottom))', lg: 'auto' },
+    left: { base: '12px', lg: 'auto' },
     zIndex: 1,
+    overflow: 'hidden',
   },
   toggleButton: {
     position: 'absolute',
@@ -85,7 +89,9 @@ export const layoutStyles = {
     zIndex: 10,
   },
   collapsedFooter: {
-    height: { base: '20px', md: '24px' },
+    // Keep the mobile footer's layout box stable. The footer itself slides
+    // down, leaving only its grab handle visible.
+    height: { base: '66px', lg: '24px' },
     transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
   },
   windowsTitleBar: {

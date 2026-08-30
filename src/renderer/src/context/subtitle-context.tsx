@@ -1,6 +1,8 @@
 import {
-  createContext, useState, useMemo, useContext, memo,
+  createContext, useState, useMemo, useContext, memo, useCallback,
 } from 'react';
+
+const SUBTITLE_VISIBILITY_KEY = 'olvShowSubtitle';
 
 /**
  * Subtitle context state interface
@@ -18,15 +20,17 @@ interface SubtitleState {
 
   /** Toggle subtitle visibility */
   setShowSubtitle: (show: boolean) => void
+
+  /** Hide subtitles only for the response that is currently playing */
+  subtitleDismissed: boolean
+  dismissSubtitle: () => void
+  startSubtitleResponse: () => void
 }
 
 /**
  * Default values and constants
  */
-const DEFAULT_SUBTITLE = {
-  text: "Hi, I'm some random AI VTuber. Who the hell are ya? "
-        + 'Ahh, you must be amazed by my awesomeness, right? right?',
-};
+const DEFAULT_SUBTITLE = { text: '' };
 
 /**
  * Create the subtitle context
@@ -43,7 +47,25 @@ export const SubtitleContext = createContext<SubtitleState | null>(null);
 export const SubtitleProvider = memo(({ children }: { children: React.ReactNode }) => {
   // State management
   const [subtitleText, setSubtitleText] = useState<string>(DEFAULT_SUBTITLE.text);
-  const [showSubtitle, setShowSubtitle] = useState<boolean>(true);
+  const [showSubtitle, setShowSubtitleState] = useState<boolean>(() => (
+    localStorage.getItem(SUBTITLE_VISIBILITY_KEY) !== 'false'
+  ));
+  const [subtitleDismissed, setSubtitleDismissed] = useState(false);
+
+  const setShowSubtitle = useCallback((show: boolean) => {
+    setShowSubtitleState(show);
+    localStorage.setItem(SUBTITLE_VISIBILITY_KEY, String(show));
+  }, []);
+
+  const dismissSubtitle = useCallback(() => {
+    setSubtitleDismissed(true);
+    setSubtitleText('');
+  }, []);
+
+  const startSubtitleResponse = useCallback(() => {
+    setSubtitleDismissed(false);
+    setSubtitleText('');
+  }, []);
 
   // Memoized context value
   const contextValue = useMemo(
@@ -52,8 +74,11 @@ export const SubtitleProvider = memo(({ children }: { children: React.ReactNode 
       setSubtitleText,
       showSubtitle,
       setShowSubtitle,
+      subtitleDismissed,
+      dismissSubtitle,
+      startSubtitleResponse,
     }),
-    [subtitleText, showSubtitle],
+    [subtitleText, showSubtitle, subtitleDismissed, dismissSubtitle, startSubtitleResponse],
   );
 
   return (

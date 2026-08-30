@@ -38,6 +38,7 @@ export class LAppView {
 
     // 画面の表示の拡大縮小や移動の変換を行う行列
     this._viewMatrix = new CubismViewMatrix();
+    this._zoomScale = LAppDefine.ViewScale;
   }
 
   /**
@@ -57,7 +58,7 @@ export class LAppView {
     const top: number = LAppDefine.ViewLogicalRight;
 
     this._viewMatrix.setScreenRect(left, right, bottom, top); // デバイスに対応する画面の範囲。 Xの左端、Xの右端、Yの下端、Yの上端
-    this._viewMatrix.scale(LAppDefine.ViewScale, LAppDefine.ViewScale);
+    this._viewMatrix.scale(this._zoomScale, this._zoomScale);
 
     this._deviceToScreen.loadIdentity();
     if (width > height) {
@@ -120,6 +121,19 @@ export class LAppView {
     live2DManager.setViewMatrix(this._viewMatrix);
 
     live2DManager.onUpdate();
+  }
+
+  /** Scale only the Live2D scene. HTML background and controls stay fixed. */
+  public setZoom(scale: number): void {
+    this._zoomScale = Math.max(
+      LAppDefine.ViewMinScale,
+      Math.min(LAppDefine.ViewMaxScale, scale),
+    );
+    this._viewMatrix.scale(this._zoomScale, this._zoomScale);
+  }
+
+  public getZoom(): number {
+    return this._zoomScale;
   }
 
   /**
@@ -287,6 +301,7 @@ export class LAppView {
   _touchManager: TouchManager; // タッチマネージャー
   _deviceToScreen: CubismMatrix44; // デバイスからスクリーンへの行列
   _viewMatrix: CubismViewMatrix; // viewMatrix
+  _zoomScale: number;
   _programId: WebGLProgram; // シェーダID
   _back: LAppSprite; // 背景画像
   // _gear: LAppSprite; // ギア画像

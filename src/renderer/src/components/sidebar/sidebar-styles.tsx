@@ -37,8 +37,11 @@ export const sidebarStyles = {
       left: 0,
       top: 0,
       height: '100%',
-      width: '440px',
-      bg: 'gray.900',
+      width: { base: '100vw', lg: '440px' },
+      // Blur across a full-screen Live2D canvas is expensive on mobile while scrolling.
+      // The almost-opaque background preserves the same visual separation without GPU jank.
+      bg: 'rgba(17, 24, 39, .985)',
+      backdropFilter: { base: 'none', lg: 'blur(12px)' },
       transform: isCollapsed
         ? 'translateX(calc(-100% + 24px))'
         : 'translateX(0)',
@@ -51,17 +54,19 @@ export const sidebarStyles = {
     }),
     toggleButton: {
       position: 'absolute',
-      right: 0,
-      top: 0,
-      width: '24px',
-      height: '100%',
-      display: 'flex',
+      right: { base: '-42px', lg: 0 },
+      top: { base: '16px', lg: 0 },
+      width: { base: '38px', lg: '24px' },
+      height: { base: '38px', lg: '100%' },
+      display: { base: 'none', lg: 'flex' },
       alignItems: 'center',
       justifyContent: 'center',
       cursor: 'pointer',
       color: 'whiteAlpha.700',
       _hover: { color: 'white' },
-      bg: 'transparent',
+      bg: { base: 'blackAlpha.600', lg: 'transparent' },
+      borderRadius: { base: 'full', lg: 'none' },
+      backdropFilter: { base: 'blur(10px)', lg: 'none' },
       transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
       zIndex: 1,
     },
@@ -77,8 +82,23 @@ export const sidebarStyles = {
       width: '100%',
       display: 'flex',
       alignItems: 'center',
-      gap: 1,
-      p: 2,
+      gap: 2,
+      px: { base: 3, lg: 2 },
+      pt: { base: 3, lg: 2 },
+      pb: 2,
+    },
+    headerButton: {
+      variant: 'ghost' as const,
+      minW: { base: '44px', lg: '40px' },
+      width: { base: '44px', lg: '40px' },
+      height: { base: '44px', lg: '40px' },
+      p: 0,
+      borderRadius: { base: '14px', lg: '10px' },
+      color: 'whiteAlpha.800',
+      bg: 'rgba(255,255,255,.035)',
+      border: '1px solid rgba(255,255,255,.04)',
+      _hover: { bg: 'whiteAlpha.100', color: 'white' },
+      _active: { bg: 'whiteAlpha.200' },
     },
   },
 
@@ -86,7 +106,7 @@ export const sidebarStyles = {
     container: {
       flex: 1,
       overflow: 'hidden',
-      px: 4,
+      px: { base: 3, lg: 4 },
       display: 'flex',
       flexDirection: 'column',
     },
@@ -167,36 +187,37 @@ export const sidebarStyles = {
     listContainer: {
       flex: 1,
       overflowY: 'auto',
-      px: 4,
-      py: 2,
+      px: { base: 3, lg: 4 },
+      py: { base: 1, lg: 2 },
       css: commonStyles.scrollbar,
     },
     historyItem: {
-      mb: 4,
-      p: 3,
-      borderRadius: 'md',
-      bg: 'whiteAlpha.50',
-      cursor: 'pointer',
+      mb: 2,
+      px: 3,
+      py: 2.5,
+      borderRadius: 'xl',
+      bg: 'rgba(255,255,255,.045)',
+      border: '1px solid rgba(255,255,255,.06)',
       transition: 'all 0.2s',
       _hover: {
-        bg: 'whiteAlpha.100',
+        bg: 'rgba(255,255,255,.075)',
       },
     },
     historyItemSelected: {
-      bg: 'whiteAlpha.200',
-      borderLeft: '3px solid',
-      borderColor: 'blue.500',
+      bg: 'rgba(59,130,246,.12)',
+      borderColor: 'rgba(96,165,250,.38)',
+      boxShadow: 'inset 3px 0 0 #60a5fa',
     },
-    historyHeader: {
+    historyBody: {
       display: 'flex',
       justifyContent: 'space-between',
-      alignItems: 'center',
-      mb: 2,
+      alignItems: 'flex-start',
+      gap: 2,
     },
     timestamp: {
-      fontSize: 'sm',
-      color: 'whiteAlpha.700',
-      fontFamily: 'mono',
+      fontSize: '11px',
+      color: 'rgba(255,255,255,.58)',
+      mt: 1,
     },
     deleteButton: {
       variant: 'ghost' as const,
@@ -209,30 +230,98 @@ export const sidebarStyles = {
         bg: 'whiteAlpha.200',
       },
     },
-    messagePreview: {
-      fontSize: 'sm',
+    actionButton: {
+      variant: 'ghost' as const,
+      colorScheme: 'whiteAlpha' as const,
+      size: 'sm' as const,
+      color: 'whiteAlpha.700',
+      opacity: 0.8,
+      _hover: {
+        opacity: 1,
+        bg: 'whiteAlpha.200',
+      },
+    },
+    title: {
+      fontSize: '15px',
+      fontWeight: 'semibold',
       color: 'whiteAlpha.900',
+      noOfLines: 1,
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
+      mb: 0.5,
+    },
+    messagePreview: {
+      fontSize: '13px',
+      lineHeight: '1.35',
+      color: 'rgba(255,255,255,.72)',
       noOfLines: 2,
       overflow: 'hidden',
       textOverflow: 'ellipsis',
     },
+    moreButton: {
+      variant: 'ghost' as const,
+      minW: '36px',
+      width: '36px',
+      height: '36px',
+      borderRadius: 'full',
+      bg: 'transparent',
+      color: 'whiteAlpha.600',
+      _hover: { color: 'white', bg: 'whiteAlpha.100' },
+      _active: { color: 'white', bg: 'whiteAlpha.100' },
+      _expanded: { color: 'white', bg: 'whiteAlpha.100' },
+    },
+    menuContent: {
+      bg: 'gray.800',
+      color: 'whiteAlpha.900',
+      borderColor: 'whiteAlpha.200',
+      minW: '190px',
+      boxShadow: 'xl',
+      zIndex: 1800,
+    },
+    menuItem: {
+      color: 'rgba(255,255,255,.92)',
+      bg: 'transparent',
+      _highlighted: {
+        color: 'white',
+        bg: 'whiteAlpha.100',
+      },
+    },
+    menuItemDanger: {
+      color: 'red.300',
+      bg: 'transparent',
+      _highlighted: {
+        color: 'red.200',
+        bg: 'rgba(239,68,68,.12)',
+      },
+      _disabled: {
+        opacity: 0.4,
+      },
+    },
     drawer: {
       content: {
         background: 'var(--chakra-colors-gray-900)',
-        maxWidth: '440px',
+        width: { base: '100vw', lg: '440px' },
+        maxWidth: { base: '100vw', lg: '440px' },
         marginTop: isElectron ? '30px' : '0',
         height: isElectron ? 'calc(100vh - 30px)' : '100vh',
+        borderRight: { base: 'none', lg: '1px solid rgba(255,255,255,.1)' },
+      },
+      header: {
+        minH: { base: '64px', lg: '72px' },
+        px: { base: 4, lg: 6 },
+        py: 4,
+        borderBottom: '1px solid rgba(255,255,255,.08)',
+        alignItems: 'center',
       },
       title: {
         color: 'white',
+        fontSize: { base: '20px', lg: '24px' },
+        fontWeight: 'semibold',
       },
       closeButton: {
         color: 'white',
-      },
-      actionButton: {
-        color: 'white',
-        borderColor: 'white',
-        variant: 'outline' as const,
+        top: { base: '14px', lg: '18px' },
+        insetEnd: { base: '14px', lg: '18px' },
       },
     },
   },
@@ -483,69 +572,86 @@ export const sidebarStyles = {
 export const chatPanelStyles = css`
   .cs-message-list {
     background: var(--chakra-colors-gray-900) !important;
-    padding: var(--chakra-space-4);
+    padding: 12px 10px 22px !important;
   }
   
   .cs-message {
-    margin: 12px 0;
-    // padding-top: 20px !important;
+    margin: 6px 0 !important;
   }
 
   .cs-message__content {
-    background-color: var(--chakra-colors-gray-700) !important;
-    border-radius: var(--chakra-radii-md);
-    padding: 8px !important;
+    background-color: rgba(255, 255, 255, .095) !important;
+    border: 1px solid rgba(255, 255, 255, .055) !important;
+    border-radius: 18px 18px 18px 6px !important;
+    padding: 11px 14px !important;
     color: var(--chakra-colors-white) !important;
-    font-size: 0.95rem !important;
+    font-size: 0.94rem !important;
     line-height: 1.5 !important;
-    margin-top: 4px !important;
+    margin-top: 0 !important;
+    box-shadow: 0 3px 12px rgba(0, 0, 0, .1) !important;
   }
 
   .cs-message__text {
-    padding: 8px 0 !important;
+    padding: 0 !important;
+    white-space: pre-wrap !important;
+    overflow-wrap: anywhere !important;
+    word-break: break-word !important;
   }
 
   .cs-message--outgoing .cs-message__content {
-    background-color: var(--chakra-colors-gray-600) !important;
+    background: linear-gradient(145deg, rgba(124, 92, 255, .92), rgba(91, 72, 210, .92)) !important;
+    border-color: rgba(255, 255, 255, .12) !important;
+    border-radius: 18px 18px 6px 18px !important;
   }
 
   .cs-chat-container {
     background: transparent !important;
-    border: 1px solid var(--chakra-colors-whiteAlpha-200);
-    border-radius: var(--chakra-radii-lg);
-    padding: var(--chakra-space-2);
+    border: 0 !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
   }
 
   .cs-main-container {
     border: none !important;
     background: transparent !important;
-    width: calc(100% - 24px) !important;
+    width: 100% !important;
     margin-left: 0 !important;
   }
 
   .cs-message__sender {
-    position: absolute !important;
-    top: 0 !important;
-    left: 36px !important;
-    font-size: 0.875rem !important;
-    font-weight: 600 !important;
-    color: var(--chakra-colors-whiteAlpha-900) !important;
+    display: none !important;
   }
 
   .cs-message__content-wrapper {
-    max-width: 80%;
-    margin: 0 8px;
+    max-width: min(84%, 680px) !important;
+    margin: 0 6px !important;
+    min-width: 0 !important;
   }
 
   .cs-avatar {
     background-color: var(--chakra-colors-blue-500) !important;
     color: white !important;
-    width: 28px !important;
-    height: 28px !important;
-    font-size: 14px !important;
+    width: 30px !important;
+    min-width: 30px !important;
+    max-width: 30px !important;
+    height: 30px !important;
+    min-height: 30px !important;
+    max-height: 30px !important;
+    flex: 0 0 30px !important;
+    aspect-ratio: 1 / 1 !important;
+    font-size: 13px !important;
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
+    border-radius: 50% !important;
+    overflow: hidden !important;
+  }
+
+  .cs-avatar img,
+  .cs-avatar__image {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
     border-radius: 50% !important;
   }
 
@@ -554,8 +660,45 @@ export const chatPanelStyles = css`
   }
 
   .cs-message__header {
-    display: block !important;
-    visibility: visible !important;
-    opacity: 1 !important;
+    display: none !important;
+  }
+
+  @media (min-width: 1024px) {
+    .cs-message-list {
+      padding: 14px 16px 22px !important;
+    }
+
+    .cs-message {
+      margin: 8px 0 !important;
+    }
+
+    .cs-message__content-wrapper {
+      max-width: 80% !important;
+    }
+  }
+
+  @media (max-width: 430px) {
+    .cs-message-list {
+      padding-inline: 8px !important;
+    }
+
+    .cs-message {
+      margin: 7px 0 !important;
+    }
+
+    .cs-message__content-wrapper {
+      max-width: calc(100% - 48px) !important;
+      margin-inline: 5px !important;
+    }
+
+    .cs-message__content {
+      padding: 11px 13px !important;
+      border-radius: 17px 17px 17px 6px !important;
+      font-size: .95rem !important;
+    }
+
+    .cs-message--outgoing .cs-message__content {
+      border-radius: 17px 17px 6px 17px !important;
+    }
   }
 `;

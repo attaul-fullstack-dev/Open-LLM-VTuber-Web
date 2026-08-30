@@ -61,6 +61,9 @@ interface AiStateContextType {
   };
   backendSynthComplete: boolean;
   setBackendSynthComplete: (complete: boolean) => void;
+  /** Epoch ms when the provider's first token arrived; null while still waiting. */
+  firstTokenAt: number | null;
+  setFirstTokenAt: (at: number | null) => void;
   isIdle: boolean;
   isThinkingSpeaking: boolean;
   isInterrupted: boolean;
@@ -86,6 +89,7 @@ export const AiStateContext = createContext<AiStateContextType | null>(null);
 export function AiStateProvider({ children }: { children: ReactNode }) {
   const [aiState, setAiStateInternal] = useState<AiState>(initialState);
   const [backendSynthComplete, setBackendSynthComplete] = useState(false);
+  const [firstTokenAt, setFirstTokenAt] = useState<number | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   const setAiState = useCallback((newState: AiState | ((currentState: AiState) => AiState)) => {
@@ -146,10 +150,12 @@ export function AiStateProvider({ children }: { children: ReactNode }) {
       setAiState,
       backendSynthComplete,
       setBackendSynthComplete,
+      firstTokenAt,
+      setFirstTokenAt,
       ...stateChecks,
       resetState,
     }),
-    [aiState, setAiState, backendSynthComplete, stateChecks, resetState],
+    [aiState, setAiState, backendSynthComplete, firstTokenAt, stateChecks, resetState],
   );
 
   return (

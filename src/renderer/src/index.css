@@ -2,6 +2,22 @@ body, html {
     margin: 0;
     padding: 0;
     overflow: visible;
-    background-color: transparent;
+    background-color: #07111f;
 }
 
+/* Android Chrome otherwise paints a highlight over the full interactive
+   WebGL surface whenever the user taps the avatar. */
+*, *::before, *::after {
+    -webkit-tap-highlight-color: transparent;
+}
+
+canvas {
+    outline: none;
+    -webkit-tap-highlight-color: transparent;
+}
+
+#root {
+    width: 100%;
+    height: 100%;
+    background: #07111f;
+}

@@ -42,6 +42,10 @@ export const settingStyles = {
       content: {},
       trigger: {
         color: 'whiteAlpha.600',
+        flexShrink: 0,
+        px: { base: 3, lg: 4 },
+        py: { base: 2, lg: 3 },
+        fontSize: { base: 'sm', lg: 'md' },
         _selected: {
           color: 'white',
         },
@@ -53,10 +57,17 @@ export const settingStyles = {
         display: 'flex',
         justifyContent: 'flex-start',
         width: '100%',
+        overflowX: 'auto',
+        overflowY: 'hidden',
+        scrollSnapType: 'x proximity',
         borderBottom: '1px solid',
         borderColor: 'whiteAlpha.200',
-        mb: 4,
+        mb: { base: 3, lg: 4 },
         pl: 0,
+        css: {
+          scrollbarWidth: 'none',
+          '&::-webkit-scrollbar': { display: 'none' },
+        },
       },
     },
     footer: {
@@ -71,8 +82,10 @@ export const settingStyles = {
     },
     drawerContent: {
       bg: 'gray.900',
-      maxWidth: '440px',
-      height: isElectron ? 'calc(100vh - 30px)' : '100vh',
+      width: { base: '84vw', sm: '340px', lg: '440px' },
+      maxWidth: { base: '84vw', sm: '340px', lg: '440px' },
+      height: isElectron ? 'calc(100dvh - 30px)' : '100dvh',
+      overflow: 'hidden',
       borderLeft: '1px solid',
       borderColor: 'whiteAlpha.200',
     },
@@ -82,15 +95,37 @@ export const settingStyles = {
       justifyContent: 'space-between',
       width: '100%',
       position: 'relative',
-      px: 6,
-      py: 4,
+      px: { base: 4, lg: 6 },
+      py: { base: 3, lg: 4 },
     },
     drawerTitle: {
       color: 'white',
-      fontSize: 'lg',
+      fontSize: { base: 'md', lg: 'lg' },
       fontWeight: 'semibold',
     },
+    drawerBody: {
+      px: { base: 4, lg: 6 },
+      pr: { base: 5, lg: 6 },
+      pb: 3,
+      overflowX: 'hidden',
+    },
+    drawerFooter: {
+      px: { base: 4, lg: 6 },
+      pr: { base: 5, lg: 6 },
+      py: { base: 3, lg: 4 },
+      gap: 2,
+      borderTop: '1px solid',
+      borderColor: 'whiteAlpha.200',
+      bg: 'rgba(17, 24, 39, .96)',
+      backdropFilter: 'blur(12px)',
+      '& button': {
+        flex: { base: 1, lg: 'initial' },
+        minW: { base: '84px', lg: '96px' },
+        height: { base: '40px', lg: '44px' },
+      },
+    },
     closeButton: {
+      display: { base: 'none', lg: 'block' },
       position: 'absolute',
       right: 1,
       top: 1,
@@ -101,8 +136,8 @@ export const settingStyles = {
   general: {
     container: {
       align: 'stretch',
-      gap: 6,
-      p: 4,
+      gap: { base: 4, lg: 6 },
+      p: { base: 1, lg: 4 },
     },
     field: {
       label: {
@@ -146,7 +181,8 @@ export const settingStyles = {
     fieldLabel: {
       fontSize: 'sm',
       color: 'whiteAlpha.800',
-      whiteSpace: 'nowrap' as const,
+      whiteSpace: 'normal' as const,
+      lineHeight: '1.35',
     },
     switch: {
       size: 'md' as const,
@@ -167,8 +203,10 @@ export const settingStyles = {
       },
     },
     container: {
-      gap: 8,
+      gap: { base: 5, lg: 8 },
+      width: '100%',
       maxW: 'sm',
+      pr: { base: 1, lg: 0 },
       css: { '--field-label-width': '120px' },
     },
     input: {

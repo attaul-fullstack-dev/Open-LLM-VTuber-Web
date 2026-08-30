@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next';
 import { useChatHistory } from '@/context/chat-history-context';
 import { useWebSocket, HistoryInfo } from '@/context/websocket-context';
 import { toaster } from '@/components/ui/toaster';
+import { useConfig } from '@/context/character-config-context';
+import { setLastHistoryUid } from '@/utils/history-storage';
 
 export const useHistoryDrawer = () => {
   const { t } = useTranslation();
@@ -16,6 +18,7 @@ export const useHistoryDrawer = () => {
     updateHistoryList,
   } = useChatHistory();
   const { sendMessage } = useWebSocket();
+  const { confUid } = useConfig();
 
   const fetchAndSetHistory = (uid: string) => {
     if (!uid || uid === currentHistoryUid) return;
@@ -26,6 +29,7 @@ export const useHistoryDrawer = () => {
     }
 
     setCurrentHistoryUid(uid);
+    setLastHistoryUid(confUid, uid);
     sendMessage({
       type: 'fetch-and-set-history',
       history_uid: uid,
@@ -49,6 +53,26 @@ export const useHistoryDrawer = () => {
     setHistoryList(historyList.filter((history) => history.uid !== uid));
   };
 
+  const renameHistory = (uid: string, currentTitle: string) => {
+    const title = window.prompt(t('history.renamePrompt'), currentTitle || '');
+    if (title === null) return;
+    const trimmed = title.trim();
+    if (!trimmed) return;
+    sendMessage({
+      type: 'rename-history',
+      history_uid: uid,
+      title: trimmed,
+    });
+  };
+
+  const compactConversation = (uid: string) => {
+    if (!window.confirm(t('history.compactConfirm'))) return;
+    sendMessage({
+      type: 'compact-conversation',
+      history_uid: uid,
+    });
+  };
+
   const getLatestMessageContent = (history: HistoryInfo) => {
     if (history.uid === currentHistoryUid && messages.length > 0) {
       const latestMessage = messages[messages.length - 1];
@@ -70,6 +94,8 @@ export const useHistoryDrawer = () => {
     currentHistoryUid,
     fetchAndSetHistory,
     deleteHistory,
+    renameHistory,
+    compactConversation,
     getLatestMessageContent,
   };
 };

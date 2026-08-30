@@ -189,7 +189,11 @@ export class LAppDelegate {
 
       // 画面の初期化
       // 屏幕初始化
-      gl!.clearColor(0.0, 0.0, 0.0, 1.0);
+      // Always start the visible framebuffer transparent. Previously only the
+      // depth buffer was cleared, so stale/white WebGL pixels could flash while
+      // the canvas was resized or a model framebuffer was being rebuilt.
+      gl!.bindFramebuffer(gl!.FRAMEBUFFER, null);
+      gl!.clearColor(0.0, 0.0, 0.0, 0.0);
 
       // 深度テストを有効化
       // 启用深度测试
@@ -201,8 +205,7 @@ export class LAppDelegate {
 
       // カラーバッファや深度バッファをクリアする
       // 清除颜色缓冲区和深度缓冲区
-      // gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-      gl!.clear(gl!.DEPTH_BUFFER_BIT);
+      gl!.clear(gl!.COLOR_BUFFER_BIT | gl!.DEPTH_BUFFER_BIT);
 
       gl!.clearDepth(1.0);
 

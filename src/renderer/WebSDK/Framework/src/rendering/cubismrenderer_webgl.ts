@@ -308,7 +308,15 @@ export class CubismClippingManager_WebGL extends CubismClippingManager<CubismCli
           if (!this._clearedFrameBufferFlags.at(clipContext._bufferIndex)) {
             // マスクをクリアする
             // (仮仕様) 1が無効（描かれない）領域、0が有効（描かれる）領域。（シェーダーCd*Csで0に近い値をかけてマスクを作る。1をかけると何も起こらない）
-            this.gl.clearColor(1.0, 1.0, 1.0, 1.0);
+            const hasMaskFramebuffer = this.gl.getParameter(
+              this.gl.FRAMEBUFFER_BINDING
+            ) !== null;
+            this.gl.clearColor(
+              hasMaskFramebuffer ? 1.0 : 0.0,
+              hasMaskFramebuffer ? 1.0 : 0.0,
+              hasMaskFramebuffer ? 1.0 : 0.0,
+              hasMaskFramebuffer ? 1.0 : 0.0
+            );
             this.gl.clear(this.gl.COLOR_BUFFER_BIT);
             this._clearedFrameBufferFlags.set(clipContext._bufferIndex, true);
           }
@@ -785,7 +793,15 @@ export class CubismRenderer_WebGL extends CubismRenderer {
 
           // マスクをクリアする
           // (仮仕様) 1が無効（描かれない）領域、0が有効（描かれる）領域。（シェーダーCd*Csで0に近い値をかけてマスクを作る。1をかけると何も起こらない）
-          this.gl.clearColor(1.0, 1.0, 1.0, 1.0);
+          const hasMaskFramebuffer = this.gl.getParameter(
+            this.gl.FRAMEBUFFER_BINDING
+          ) !== null;
+          this.gl.clearColor(
+            hasMaskFramebuffer ? 1.0 : 0.0,
+            hasMaskFramebuffer ? 1.0 : 0.0,
+            hasMaskFramebuffer ? 1.0 : 0.0,
+            hasMaskFramebuffer ? 1.0 : 0.0
+          );
           this.gl.clear(this.gl.COLOR_BUFFER_BIT);
         }
 

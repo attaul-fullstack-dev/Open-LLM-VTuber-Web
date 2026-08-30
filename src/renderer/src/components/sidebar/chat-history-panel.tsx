@@ -5,8 +5,7 @@
 /* eslint-disable import/order */
 /* eslint-disable import/no-extraneous-dependencies */
 /* eslint-disable react/require-default-props */
-import React, { useEffect } from 'react';
-import { Box, Spinner, Flex, Text, Icon } from '@chakra-ui/react';
+import { Box, Spinner, Flex, Text, Icon, Button } from '@chakra-ui/react';
 import { sidebarStyles, chatPanelStyles } from './sidebar-styles';
 import { MainContainer, ChatContainer, MessageList as ChatMessageList, Message as ChatMessage, Avatar as ChatAvatar } from '@chatscope/chat-ui-kit-react';
 import '@chatscope/chat-ui-kit-styles/dist/default/styles.min.css';
@@ -16,20 +15,39 @@ import { useConfig } from '@/context/character-config-context';
 import { useWebSocket } from '@/context/websocket-context';
 import { FaTools, FaCheck, FaTimes } from 'react-icons/fa';
 import { useTranslation } from 'react-i18next';
+import { useEffect, useMemo, useState } from 'react';
+import { cleanChatDisplayText } from '@/utils/clean-display-text';
+
+const MESSAGE_RENDER_BATCH = 48;
 
 // Main component
 function ChatHistoryPanel(): JSX.Element {
   const { t } = useTranslation();
-  const { messages } = useChatHistory(); // Get messages directly from context
+  const { messages, currentHistoryUid } = useChatHistory(); // Get messages directly from context
   const { confName } = useConfig();
   const { baseUrl } = useWebSocket();
   const userName = "Me";
 
-  const validMessages = messages.filter((msg) => msg.content || // Keep messages with content
+  const validMessages = useMemo(() => messages.filter((msg) => msg.content || // Keep messages with content
      (msg.type === 'tool_call_status' && msg.status === 'running') || // Keep running tools
      (msg.type === 'tool_call_status' && msg.status === 'completed') || // Keep completed tools
      (msg.type === 'tool_call_status' && msg.status === 'error'), // Keep error tools
-  );
+  ), [messages]);
+  const [visibleMessageCount, setVisibleMessageCount] = useState(MESSAGE_RENDER_BATCH);
+
+  // A different conversation should start light, even when its transcript is huge.
+  useEffect(() => {
+    setVisibleMessageCount(MESSAGE_RENDER_BATCH);
+  }, [currentHistoryUid]);
+
+  const hasOlderMessages = validMessages.length > visibleMessageCount;
+  const renderedMessages = hasOlderMessages
+    ? validMessages.slice(-visibleMessageCount)
+    : validMessages;
+
+  const loadOlderMessages = () => {
+    setVisibleMessageCount((current) => Math.min(current + MESSAGE_RENDER_BATCH, validMessages.length));
+  };
 
   return (
     <Box
@@ -41,6 +59,19 @@ function ChatHistoryPanel(): JSX.Element {
       <MainContainer>
         <ChatContainer>
           <ChatMessageList>
+            {hasOlderMessages && (
+              <Box display="flex" justifyContent="center" py="2">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  color="whiteAlpha.800"
+                  _hover={{ bg: 'whiteAlpha.100', color: 'white' }}
+                  onClick={loadOlderMessages}
+                >
+                  {t('history.loadOlder')}
+                </Button>
+              </Box>
+            )}
             {validMessages.length === 0 ? (
               <Box
                 display="flex"
@@ -53,7 +84,7 @@ function ChatHistoryPanel(): JSX.Element {
                 {t('sidebar.noMessages')}
               </Box>
             ) : (
-              validMessages.map((msg) => {
+              renderedMessages.map((msg) => {
                 // Check if it's a tool call message
                 if (msg.type === 'tool_call_status') {
                   return (
@@ -68,8 +99,9 @@ function ChatHistoryPanel(): JSX.Element {
                         {...sidebarStyles.toolCallIndicator.icon}
                       />
                       <Text {...sidebarStyles.toolCallIndicator.text}>
-                        {/* {msg.tool_name}: {msg.status === 'running' ? 'Running...' : msg.content} */}
-                        {msg.status === "running" ? `${msg.name} is using tool ${msg.tool_name}` : `${msg.name} used tool ${msg.tool_name}`}
+                        {msg.status === "running"
+                          ? t('toolCall.using', { name: msg.name, tool: msg.tool_name })
+                          : t('toolCall.used', { name: msg.name, tool: msg.tool_name })}
                       </Text>
                       {/* Show spinner if running, checkmark if completed, maybe error icon? */}
                       {msg.status === "running" && (
@@ -100,7 +132,7 @@ function ChatHistoryPanel(): JSX.Element {
                   <ChatMessage
                     key={msg.id}
                     model={{
-                      message: msg.content,
+                      message: cleanChatDisplayText(msg.content),
                       sentTime: msg.timestamp,
                       sender: msg.role === 'ai'
                         ? (msg.name || confName || 'AI')

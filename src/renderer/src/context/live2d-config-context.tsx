@@ -88,9 +88,7 @@ interface Live2DConfigState {
  * Default values and constants
  */
 const DEFAULT_CONFIG = {
-  modelInfo: {
-    scrollToResize: true,
-  } as ModelInfo | undefined,
+  modelInfo: undefined as ModelInfo | undefined,
   isLoading: false,
 };
 
@@ -117,6 +115,10 @@ export function Live2DConfigProvider({ children }: { children: React.ReactNode }
     },
   );
 
+  // Old builds could persist a partial object without a model URL. Treat it as
+  // unset so the Live2D SDK never constructs "undefined/undefined.model3.json".
+  const validModelInfo = modelInfo?.url ? modelInfo : undefined;
+
   // const [modelInfo, setModelInfoState] = useState<ModelInfo | undefined>(DEFAULT_CONFIG.modelInfo);
 
   const setModelInfo = (info: ModelInfo | undefined) => {
@@ -126,7 +128,8 @@ export function Live2DConfigProvider({ children }: { children: React.ReactNode }
     }
 
     // Always use the scale defined in the incoming info object (from config)
-    const finalScale = Number(info.kScale || 0.5) * 2;
+    const mobileScaleFactor = window.innerWidth < 768 ? 1.45 : 2;
+    const finalScale = Number(info.kScale || 0.5) * mobileScaleFactor;
     console.log("Setting model info with default scale:", finalScale);
 
     setModelInfoState({
@@ -135,22 +138,22 @@ export function Live2DConfigProvider({ children }: { children: React.ReactNode }
       pointerInteractive:
         "pointerInteractive" in info
           ? info.pointerInteractive
-          : (modelInfo?.pointerInteractive ?? true),
+          : (validModelInfo?.pointerInteractive ?? true),
       scrollToResize:
         "scrollToResize" in info
           ? info.scrollToResize
-          : (modelInfo?.scrollToResize ?? true),
+          : (validModelInfo?.scrollToResize ?? true),
     });
   };
 
   const contextValue = useMemo(
     () => ({
-      modelInfo,
+      modelInfo: validModelInfo,
       setModelInfo,
       isLoading,
       setIsLoading,
     }),
-    [modelInfo, isLoading, setIsLoading],
+    [validModelInfo, isLoading, setIsLoading],
   );
 
   return (

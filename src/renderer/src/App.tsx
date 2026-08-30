@@ -1,7 +1,8 @@
 /* eslint-disable no-shadow */
 // import { StrictMode } from 'react';
-import { Box, Flex, ChakraProvider, defaultSystem } from "@chakra-ui/react";
+import { Box, Flex, ChakraProvider, defaultSystem, IconButton } from "@chakra-ui/react";
 import { useState, useEffect, useRef } from "react";
+import { FiMenu, FiX } from "react-icons/fi";
 // import Canvas from './components/canvas/canvas'; // Likely unused now
 import Sidebar from "./components/sidebar/sidebar";
 import Footer from "./components/footer/footer";
@@ -28,10 +29,12 @@ import "@chatscope/chat-ui-kit-styles/dist/default/styles.min.css";
 import Background from "./components/canvas/background";
 import WebSocketStatus from "./components/canvas/ws-status";
 import Subtitle from "./components/canvas/subtitle";
+import ThinkingStatus from "./components/canvas/thinking-status";
 import { ModeProvider, useMode } from "./context/mode-context";
+import { AvatarActivityProvider } from "./context/avatar-activity-context";
 
 function AppContent(): JSX.Element {
-  const [showSidebar, setShowSidebar] = useState(true);
+  const [showSidebar, setShowSidebar] = useState(() => window.innerWidth >= 1024);
   const [isFooterCollapsed, setIsFooterCollapsed] = useState(false);
   const { mode } = useMode();
   const isElectron = window.api !== undefined;
@@ -61,8 +64,10 @@ function AppContent(): JSX.Element {
   const live2dBaseStyle = {
     position: "absolute" as const,
     overflow: "hidden",
-    transition: "all 0.3s ease-in-out", // Optional transition
     pointerEvents: "auto" as const,
+    backgroundColor: "transparent",
+    transform: "translateZ(0)",
+    backfaceVisibility: "hidden" as const,
   };
 
   // Define styles specifically for the "window" mode, using responsive syntax
@@ -72,12 +77,12 @@ function AppContent(): JSX.Element {
     height: `calc(100% - ${isElectron ? "30px" : "0px"})`,
     zIndex: 5, // Ensure it's layered correctly below UI but above background
     left: {
-      base: "0px", // Column layout (base): Start from left edge
-      md: sidebarVisible ? "440px" : "24px", // Row layout (md+): Offset by sidebar width
+      base: "0px",
+      lg: sidebarVisible ? "440px" : "24px",
     },
     width: {
-      base: "100%", // Column layout (base): Full width
-      md: `calc(100% - ${sidebarVisible ? "440px" : "24px"})`, // Row layout (md+): Adjust width based on sidebar
+      base: "100%",
+      lg: `calc(100% - ${sidebarVisible ? "440px" : "24px"})`,
     },
   });
 
@@ -110,8 +115,20 @@ function AppContent(): JSX.Element {
           {isElectron && <TitleBar />}
           {/* Apply styles by spreading */}
           <Flex {...layoutStyles.appContainer}>
+            {showSidebar && (
+              <Box
+                display={{ base: "block", lg: "none" }}
+                position="fixed"
+                inset="0"
+                bg="blackAlpha.600"
+                backdropFilter="blur(3px)"
+                zIndex={25}
+                onClick={() => setShowSidebar(false)}
+              />
+            )}
             <Box
               {...layoutStyles.sidebar}
+              display={{ base: showSidebar ? "block" : "none", lg: "block" }}
               {...(!showSidebar && { width: "24px" })}
             >
               <Sidebar
@@ -121,22 +138,45 @@ function AppContent(): JSX.Element {
             </Box>
             <Box {...layoutStyles.mainContent}>
               <Background />
-              <Box position="absolute" top="20px" left="20px" zIndex={10}>
+              <IconButton
+                aria-label={showSidebar ? "Close menu" : "Open menu"}
+                display={{ base: "flex", lg: "none" }}
+                position="absolute"
+                top="14px"
+                right="14px"
+                zIndex={40}
+                width="44px"
+                height="44px"
+                borderRadius="full"
+                color="white"
+                bg="rgba(8, 15, 28, .68)"
+                backdropFilter="blur(14px)"
+                border="1px solid rgba(255,255,255,.14)"
+                onClick={() => setShowSidebar(!showSidebar)}
+              >
+                {showSidebar ? <FiX /> : <FiMenu />}
+              </IconButton>
+              <Box position="absolute" top={{ base: "14px", lg: "20px" }} left={{ base: "14px", lg: "20px" }} zIndex={10} transform={{ base: "scale(.72)", lg: "none" }} transformOrigin="top left">
                 <WebSocketStatus />
               </Box>
               <Box
                 position="absolute"
-                bottom={isFooterCollapsed ? "39px" : "135px"}
+                bottom={isFooterCollapsed
+                  ? "39px"
+                  : { base: "calc(84px + env(safe-area-inset-bottom, 0px))", lg: "135px" }}
                 left="50%"
                 transform="translateX(-50%)"
                 zIndex={10}
-                width="60%"
+                width={{ base: "calc(100% - 24px)", lg: "min(760px, 60%)" }}
               >
                 <Subtitle />
+                <ThinkingStatus />
               </Box>
               <Box
                 {...layoutStyles.footer}
-                zIndex={10}
+                // Keep the fixed mobile controls above the interactive
+                // Live2D canvas so their touch events are never intercepted.
+                zIndex={50}
                 {...(isFooterCollapsed && layoutStyles.collapsedFooter)}
               >
                 <Footer
@@ -175,24 +215,26 @@ function AppWithGlobalStyles(): JSX.Element {
           <CharacterConfigProvider>
             <ChatHistoryProvider>
               <AiStateProvider>
-                <ProactiveSpeakProvider>
-                  <Live2DConfigProvider>
-                    <SubtitleProvider>
-                      <VADProvider>
-                        <BgUrlProvider>
-                          <GroupProvider>
-                            <BrowserProvider>
-                              <WebSocketHandler>
-                                <Toaster />
-                                <AppContent />
-                              </WebSocketHandler>
-                            </BrowserProvider>
-                          </GroupProvider>
-                        </BgUrlProvider>
-                      </VADProvider>
-                    </SubtitleProvider>
-                  </Live2DConfigProvider>
-                </ProactiveSpeakProvider>
+                <AvatarActivityProvider>
+                  <ProactiveSpeakProvider>
+                    <Live2DConfigProvider>
+                      <SubtitleProvider>
+                        <VADProvider>
+                          <BgUrlProvider>
+                            <GroupProvider>
+                              <BrowserProvider>
+                                <WebSocketHandler>
+                                  <Toaster />
+                                  <AppContent />
+                                </WebSocketHandler>
+                              </BrowserProvider>
+                            </GroupProvider>
+                          </BgUrlProvider>
+                        </VADProvider>
+                      </SubtitleProvider>
+                    </Live2DConfigProvider>
+                  </ProactiveSpeakProvider>
+                </AvatarActivityProvider>
               </AiStateProvider>
             </ChatHistoryProvider>
           </CharacterConfigProvider>

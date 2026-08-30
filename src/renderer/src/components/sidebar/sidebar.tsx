@@ -51,7 +51,12 @@ const ModeMenu = memo(({ setMode, currentMode, isElectron }: {
   isElectron: boolean
 }) => (
   <Menu.Root>
-    <Menu.Trigger as={Button} aria-label="Mode Menu" title="Change Mode">
+    <Menu.Trigger
+      as={Button}
+      aria-label="Mode Menu"
+      title="Change Mode"
+      {...sidebarStyles.sidebar.headerButton}
+    >
       <FiLayers />
     </Menu.Trigger>
     <Menu.Positioner>
@@ -83,24 +88,24 @@ const ModeMenu = memo(({ setMode, currentMode, isElectron }: {
 ModeMenu.displayName = 'ModeMenu';
 
 const HeaderButtons = memo(({ onSettingsOpen, onNewHistory, setMode, currentMode, isElectron }: HeaderButtonsProps) => (
-  <Box display="flex" gap={1}>
-    <Button onClick={onSettingsOpen}>
+  <Box display="flex" gap={{ base: 2, lg: 1 }}>
+    <Button onClick={onSettingsOpen} {...sidebarStyles.sidebar.headerButton}>
       <FiSettings />
     </Button>
 
     <GroupDrawer>
-      <Button>
+      <Button {...sidebarStyles.sidebar.headerButton}>
         <FiUsers />
       </Button>
     </GroupDrawer>
 
     <HistoryDrawer>
-      <Button>
+      <Button {...sidebarStyles.sidebar.headerButton}>
         <FiClock />
       </Button>
     </HistoryDrawer>
 
-    <Button onClick={onNewHistory}>
+    <Button onClick={onNewHistory} {...sidebarStyles.sidebar.headerButton}>
       <FiPlus />
     </Button>
 
@@ -128,7 +133,9 @@ const SidebarContent = memo(({
       />
     </Box>
     <ChatHistoryPanel />
-    <BottomTab />
+    <Box display={{ base: 'none', lg: 'block' }}>
+      <BottomTab />
+    </Box>
   </Box>
 ));
 

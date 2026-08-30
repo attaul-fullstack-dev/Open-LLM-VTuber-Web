@@ -107,6 +107,8 @@ export const useLive2DModel = ({
   const mouseDownTimeRef = useRef<number>(0);
   const mouseDownPosRef = useRef<Position>({ x: 0, y: 0 }); // Screen coords at mousedown
   const isPotentialTapRef = useRef<boolean>(false); // Flag for ongoing potential tap/drag action
+  // Track active pointers so a second finger (pinch zoom) cancels the gesture.
+  const activePointersRef = useRef<Set<number>>(new Set());
   // ---
 
   useEffect(() => {
@@ -202,7 +204,7 @@ export const useLive2DModel = ({
     return { x, y };
   }, [getCanvasScale]);
 
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
     const adapter = (window as any).getLAppAdapter?.();
     if (!adapter || !canvasRef.current) return;
 
@@ -210,12 +212,26 @@ export const useLive2DModel = ({
     const view = LAppDelegate.getInstance().getView();
     if (!view || !model) return;
 
+    // Track the pointer; a second finger means pinch-zoom, not drag.
+    activePointersRef.current.add(e.pointerId);
+    if (activePointersRef.current.size > 1) {
+      isPotentialTapRef.current = false;
+      setIsDragging(false);
+      return;
+    }
+
+    try {
+      (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+    } catch {
+      // ignore
+    }
+
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left; // Screen X relative to canvas
     const y = e.clientY - rect.top; // Screen Y relative to canvas
 
-    // --- Check if click is on model ---
+    // --- Check if press is on model ---
     const scale = canvas.width / canvas.clientWidth;
     const scaledX = x * scale;
     const scaledY = y * scale;
@@ -241,10 +257,17 @@ export const useLive2DModel = ({
     }
   }, [canvasRef, modelInfo]);
 
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+  const handlePointerMove = useCallback((e: React.PointerEvent) => {
     const adapter = (window as any).getLAppAdapter?.();
     const view = LAppDelegate.getInstance().getView();
     const model = adapter?.getModel();
+
+    // Pinch (2+ pointers) is owned by the zoom layer; never drag during it.
+    if (activePointersRef.current.size > 1) {
+      isPotentialTapRef.current = false;
+      if (isDragging) setIsDragging(false);
+      return;
+    }
 
     // --- Start Drag Logic ---
     if (isPotentialTapRef.current && adapter && view && model && canvasRef.current) {
@@ -333,7 +356,8 @@ export const useLive2DModel = ({
     // --- End Pet Hover Logic ---
   }, [isPet, isDragging, electronApi, canvasRef]);
 
-  const handleMouseUp = useCallback((e: React.MouseEvent) => {
+  const handlePointerUp = useCallback((e: React.PointerEvent) => {
+    activePointersRef.current.delete(e.pointerId);
     const adapter = (window as any).getLAppAdapter?.();
     const model = adapter?.getModel();
     const view = LAppDelegate.getInstance().getView();
@@ -384,21 +408,16 @@ export const useLive2DModel = ({
     isPotentialTapRef.current = false;
   }, [isDragging, canvasRef, modelInfo]);
 
-  const handleMouseLeave = useCallback(() => {
-    if (isDragging) {
-      // If dragging and mouse leaves, treat it like a mouse up to end drag
-      handleMouseUp({} as React.MouseEvent); // Pass a dummy event or adjust handleMouseUp signature
-    }
-    // Reset potential tap if mouse leaves before mouse up
-    if (isPotentialTapRef.current) {
-      isPotentialTapRef.current = false;
-    }
+  const handlePointerCancel = useCallback(() => {
+    activePointersRef.current.clear();
+    setIsDragging(false);
+    isPotentialTapRef.current = false;
     // --- Pet Hover Logic (Unchanged) ---
     if (isPet && electronApi && isHoveringModelRef.current) {
       isHoveringModelRef.current = false;
       electronApi.ipcRenderer.send('update-component-hover', 'live2d-model', false);
     }
-  }, [isPet, isDragging, electronApi, handleMouseUp]);
+  }, [isPet, electronApi]);
 
   useEffect(() => {
     if (!isPet && electronApi && isHoveringModelRef.current) {
@@ -533,10 +552,10 @@ Live2DDebug.playRandomMotion("")  // Play random motion from default group
     position,
     isDragging,
     handlers: {
-      onMouseDown: handleMouseDown,
-      onMouseMove: handleMouseMove,
-      onMouseUp: handleMouseUp,
-      onMouseLeave: handleMouseLeave,
+      onPointerDown: handlePointerDown,
+      onPointerMove: handlePointerMove,
+      onPointerUp: handlePointerUp,
+      onPointerCancel: handlePointerCancel,
     },
   };
 };

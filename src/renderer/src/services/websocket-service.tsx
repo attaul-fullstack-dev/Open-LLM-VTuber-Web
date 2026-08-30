@@ -6,6 +6,7 @@ import { ModelInfo } from '@/context/live2d-config-context';
 import { HistoryInfo } from '@/context/websocket-context';
 import { ConfigFile } from '@/context/character-config-context';
 import { toaster } from '@/components/ui/toaster';
+import { markWebSocketSend } from '@/utils/chat-latency';
 
 export interface DisplayText {
   text: string;
@@ -44,6 +45,7 @@ export interface Message {
 
 export interface Actions {
   expressions?: string[] | number [];
+  emotions?: (string | null)[] | null;
   pictures?: string[];
   sounds?: string[];
 }
@@ -71,7 +73,17 @@ export interface MessageEvent {
   success?: boolean;
   histories?: HistoryInfo[];
   configs?: ConfigFile[];
+  title?: string;
+  memories?: {
+    text: string;
+    added_at: string;
+    explicit?: boolean;
+  }[];
+  error?: string;
   message?: string;
+  event?: string;
+  request_id?: string;
+  metrics?: Record<string, unknown>;
   members?: string[];
   is_owner?: boolean;
   client_uid?: string;
@@ -116,6 +128,14 @@ class WebSocketService {
 
   private currentState: 'CONNECTING' | 'OPEN' | 'CLOSING' | 'CLOSED' = 'CLOSED';
 
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
+  private reconnectAttempt = 0;
+
+  private currentUrl: string | null = null;
+
+  private explicitlyDisconnected = false;
+
   static getInstance() {
     if (!WebSocketService.instance) {
       WebSocketService.instance = new WebSocketService();
@@ -133,29 +153,62 @@ class WebSocketService {
     this.sendMessage({
       type: 'fetch-history-list',
     });
-    this.sendMessage({
-      type: 'create-new-history',
-    });
+  }
+
+  private clearReconnectTimer() {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+  }
+
+  private scheduleReconnect() {
+    if (
+      this.explicitlyDisconnected
+      || !this.currentUrl
+      || this.reconnectTimer
+      || this.ws?.readyState === WebSocket.OPEN
+      || this.ws?.readyState === WebSocket.CONNECTING
+    ) return;
+
+    // One bounded retry timer prevents reconnect storms while still recovering
+    // automatically after a backend restart or brief mobile-network drop.
+    const delayMs = Math.min(1000 * (2 ** this.reconnectAttempt), 10000);
+    this.reconnectAttempt += 1;
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      if (this.currentUrl && !this.explicitlyDisconnected) {
+        this.connect(this.currentUrl);
+      }
+    }, delayMs);
   }
 
   connect(url: string) {
+    this.currentUrl = url;
+    this.explicitlyDisconnected = false;
+    this.clearReconnectTimer();
+
     if (this.ws?.readyState === WebSocket.CONNECTING ||
         this.ws?.readyState === WebSocket.OPEN) {
-      this.disconnect();
+      this.ws.close();
     }
 
     try {
-      this.ws = new WebSocket(url);
+      const socket = new WebSocket(url);
+      this.ws = socket;
       this.currentState = 'CONNECTING';
       this.stateSubject.next('CONNECTING');
 
-      this.ws.onopen = () => {
+      socket.onopen = () => {
+        if (this.ws !== socket) return;
+        this.reconnectAttempt = 0;
         this.currentState = 'OPEN';
         this.stateSubject.next('OPEN');
         this.initializeConnection();
       };
 
-      this.ws.onmessage = (event) => {
+      socket.onmessage = (event) => {
+        if (this.ws !== socket) return;
         try {
           const message = JSON.parse(event.data);
           this.messageSubject.next(message);
@@ -169,33 +222,54 @@ class WebSocketService {
         }
       };
 
-      this.ws.onclose = () => {
+      socket.onclose = () => {
+        // Ignore a late close event from a socket superseded by connect().
+        if (this.ws !== socket) return;
+        this.ws = null;
         this.currentState = 'CLOSED';
         this.stateSubject.next('CLOSED');
+        this.scheduleReconnect();
       };
 
-      this.ws.onerror = () => {
-        this.currentState = 'CLOSED';
-        this.stateSubject.next('CLOSED');
+      socket.onerror = () => {
+        if (this.ws !== socket) return;
+        // Browsers normally follow this with `close`; closing explicitly makes
+        // that lifecycle deterministic without starting a second retry timer.
+        socket.close();
       };
     } catch (error) {
       console.error('Failed to connect to WebSocket:', error);
       this.currentState = 'CLOSED';
       this.stateSubject.next('CLOSED');
+      this.ws = null;
+      this.scheduleReconnect();
     }
   }
 
-  sendMessage(message: object) {
+  sendMessage(message: object): boolean {
     if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify(message));
+      const outgoing = { ...message } as Record<string, unknown>;
+      if (outgoing.type === 'text-input' && typeof outgoing.request_id === 'string') {
+        outgoing.client_websocket_send_ms = markWebSocketSend(outgoing.request_id);
+      }
+      try {
+        this.ws.send(JSON.stringify(outgoing));
+        return true;
+      } catch (error) {
+        console.warn('WebSocket send failed; reconnecting.', error);
+        this.ws.close();
+      }
     } else {
-      console.warn('WebSocket is not open. Unable to send message:', message);
+      const messageType = 'type' in message ? String(message.type) : 'unknown';
+      console.warn('WebSocket is not open. Unable to send message type:', messageType);
       toaster.create({
         title: getTranslation()('error.websocketNotOpen'),
         type: 'error',
         duration: 2000,
       });
     }
+    this.scheduleReconnect();
+    return false;
   }
 
   onMessage(callback: (message: MessageEvent) => void) {
@@ -207,8 +281,12 @@ class WebSocketService {
   }
 
   disconnect() {
+    this.explicitlyDisconnected = true;
+    this.clearReconnectTimer();
     this.ws?.close();
     this.ws = null;
+    this.currentState = 'CLOSED';
+    this.stateSubject.next('CLOSED');
   }
 
   getCurrentState() {

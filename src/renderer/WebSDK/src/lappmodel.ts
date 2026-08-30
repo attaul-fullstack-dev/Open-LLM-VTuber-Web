@@ -38,6 +38,8 @@ import {
 } from "@framework/utils/cubismdebug";
 
 import * as LAppDefine from "./lappdefine";
+import { getLive2DIdleApplyHook } from "./lapplive2didlehook";
+import { getLive2DIdleFacialHook } from "./lapplive2dfacialhook";
 import { frameBuffer, LAppDelegate } from "./lappdelegate";
 import { canvas, gl } from "./lappglmanager";
 import { LAppPal } from "./lapppal";
@@ -632,6 +634,30 @@ export class LAppModel extends CubismUserModel {
     // ポーズの設定
     if (this._pose != null) {
       this._pose.updateParameters(this._model, deltaTimeSeconds);
+    }
+
+    // 自動アイドルモーション用の加算オフセット（無ければ何もしない）
+    // Dipanggil PALING AKHIR — tepat sebelum model.update() — supaya tidak
+    // ada tahap lain (physics/pose/breath) yang menimpa nilai additif ini.
+    if (!this.applyIdleOffsets) {
+      // Auto-link the currently active idle hook so a freshly loaded model
+      // (character switch / reconnect) keeps the behavior without polling.
+      this.applyIdleOffsets = getLive2DIdleApplyHook();
+    }
+    if (this.applyIdleOffsets) {
+      this.applyIdleOffsets(this._model, deltaTimeSeconds);
+    }
+
+    // Stage 3 — autonomous idle facial micro-expressions. Runs AFTER the Stage
+    // 2 movement hook (and after physics/pose/breath/lipsync) so neither the
+    // movement offsets nor any earlier face-affecting system can overwrite it;
+    // it owns brows/mouth/eye-smile, never ParamA (lip-sync) nor the Stage 2
+    // movement params, so the two hooks coexist without fighting.
+    if (!this.applyIdleFacial) {
+      this.applyIdleFacial = getLive2DIdleFacialHook();
+    }
+    if (this.applyIdleFacial) {
+      this.applyIdleFacial(this._model, deltaTimeSeconds);
     }
 
     this._model.update();
@@ -1342,4 +1368,25 @@ export class LAppModel extends CubismUserModel {
   _allMotionCount: number; // モーション総数
   _wavFileHandler: LAppWavFileHandler; //wavファイルハンドラ
   _consistency: boolean; // MOC3一貫性チェック管理用
+
+  /**
+   * Stage 2 — Safe autonomous idle motion.
+   *
+   * Optional per-frame additive offsets, consumed by the existing render loop
+   * right here. `null` (the default) keeps behavior identical to before; only
+   * the React idle-behavior adapter assigns a function. Each frame the offset
+   * is added to the head/body/eye parameters so breathing, drag, motion,
+   * expression and physics all keep working underneath.
+   */
+  public applyIdleOffsets: ((cubismModel: any, deltaTimeSeconds: number) => void) | null = null;
+
+  /**
+   * Stage 3 — Safe autonomous idle facial micro-expressions.
+   *
+   * Consumed by `LAppModel._update` after the Stage 2 movement hook. It owns
+   * facial parameters only (brows, mouth shape, eye-smile, blush) and never
+   * touches ParamA / lip-sync vowels or the Stage 2 movement parameters. When
+   * unset (no adapter mounted / unsupported character) behaves as a no-op.
+   */
+  public applyIdleFacial: ((cubismModel: any, deltaTimeSeconds: number) => void) | null = null;
 }

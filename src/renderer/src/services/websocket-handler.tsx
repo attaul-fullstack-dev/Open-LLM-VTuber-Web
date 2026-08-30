@@ -21,15 +21,25 @@ import { useLocalStorage } from '@/hooks/utils/use-local-storage';
 import { useGroup } from '@/context/group-context';
 import { useInterrupt } from '@/hooks/utils/use-interrupt';
 import { useBrowser } from '@/context/browser-context';
+import { markBackendLatencyEvent, markFrontendPayload } from '@/utils/chat-latency';
+import {
+  clearLastHistoryUid,
+  decideHistoryResume,
+  getLastHistoryUid,
+  setLastHistoryUid,
+} from '@/utils/history-storage';
+import { subtitlePlaybackCoordinator } from '@/utils/subtitle-playback';
 
 function WebSocketHandler({ children }: { children: React.ReactNode }) {
   const { t } = useTranslation();
   const [wsState, setWsState] = useState<string>('CLOSED');
   const [wsUrl, setWsUrl] = useLocalStorage<string>('wsUrl', defaultWsUrl);
   const [baseUrl, setBaseUrl] = useLocalStorage<string>('baseUrl', defaultBaseUrl);
-  const { aiState, setAiState, backendSynthComplete, setBackendSynthComplete } = useAiState();
+  const {
+    aiState, setAiState, backendSynthComplete, setBackendSynthComplete, setFirstTokenAt,
+  } = useAiState();
   const { setModelInfo } = useLive2DConfig();
-  const { setSubtitleText } = useSubtitle();
+  const { setSubtitleText, startSubtitleResponse } = useSubtitle();
   const { clearResponse, setForceNewMessage, appendHumanMessage, appendOrUpdateToolCallMessage } = useChatHistory();
   const { addAudioTask } = useAudioTask();
   const bgUrlContext = useBgUrl();
@@ -38,6 +48,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
   const { setSelfUid, setGroupMembers, setIsOwner } = useGroup();
   const { startMic, stopMic, autoStartMicOnConvEnd } = useVAD();
   const autoStartMicOnConvEndRef = useRef(autoStartMicOnConvEnd);
+  const activeConfUidRef = useRef('');
   const { interrupt } = useInterrupt();
   const { setBrowserViewData } = useBrowser();
 
@@ -68,7 +79,13 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
         break;
       case 'conversation-chain-start':
         setAiState('thinking-speaking');
+        // The dedicated thinking indicator owns the waiting state now; the
+        // subtitle only carries real response text.
+        setFirstTokenAt(null);
         audioTaskQueue.clearQueue();
+        // Invalidate any late playback event from the previous response.
+        subtitlePlaybackCoordinator.startResponse();
+        startSubtitleResponse();
         clearResponse();
         break;
       case 'conversation-chain-end':
@@ -89,10 +106,10 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
       default:
         console.warn('Unknown control command:', controlText);
     }
-  }, [setAiState, clearResponse, setForceNewMessage, startMic, stopMic]);
+  }, [setAiState, setSubtitleText, clearResponse, setForceNewMessage, startMic, stopMic, startSubtitleResponse, t]);
 
   const handleWebSocketMessage = useCallback((message: MessageEvent) => {
-    console.log('Received message from server:', message);
+    console.debug('WebSocket event received:', message.type);
     switch (message.type) {
       case 'control':
         if (message.text) {
@@ -105,19 +122,25 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
           setConfName(message.conf_name);
         }
         if (message.conf_uid) {
+          activeConfUidRef.current = message.conf_uid;
           setConfUid(message.conf_uid);
           console.log('confUid', message.conf_uid);
         }
         if (message.client_uid) {
           setSelfUid(message.client_uid);
         }
-        setPendingModelInfo(message.model_info);
-        // setModelInfo(message.model_info);
-        // We don't know when the confRef in live2d-config-context will be updated, so we set a delay here for convenience
-        if (message.model_info && !message.model_info.url.startsWith("http")) {
-          const modelUrl = baseUrl + message.model_info.url;
-          // eslint-disable-next-line no-param-reassign
-          message.model_info.url = modelUrl;
+        // Normalize a valid model before queueing it. Do not mutate the
+        // WebSocket payload and never pass an incomplete model into the SDK.
+        if (message.model_info?.url) {
+          const normalizedModelInfo = {
+            ...message.model_info,
+            url: message.model_info.url.startsWith("http")
+              ? message.model_info.url
+              : baseUrl + message.model_info.url,
+          };
+          setPendingModelInfo(normalizedModelInfo);
+        } else {
+          console.warn("Ignored Live2D model info without a URL");
         }
 
         setAiState('idle');
@@ -125,6 +148,19 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
       case 'full-text':
         if (message.text) {
           setSubtitleText(message.text);
+        }
+        break;
+      case 'latency-event':
+        markBackendLatencyEvent(
+          message.request_id,
+          message.event,
+          message.metrics,
+        );
+        if (message.event === 'first-token') {
+          // Raw provider token is available now. Remove the waiting indicator
+          // immediately; sentence segmentation/TTS may continue independently.
+          setFirstTokenAt(Date.now());
+          setSubtitleText('');
         }
         break;
       case 'config-files':
@@ -145,7 +181,6 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
         // setModelInfo(undefined);
 
         wsService.sendMessage({ type: 'fetch-history-list' });
-        wsService.sendMessage({ type: 'create-new-history' });
         break;
       case 'background-files':
         if (message.files) {
@@ -153,16 +188,27 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
         }
         break;
       case 'audio':
+        markFrontendPayload(
+          message.request_id,
+          'audio',
+          Boolean(message.display_text?.text),
+        );
         if (aiState === 'interrupted' || aiState === 'listening') {
-          console.log('Audio playback intercepted. Sentence:', message.display_text?.text);
+          console.debug('Audio playback intercepted', {
+            display_characters: message.display_text?.text?.length || 0,
+          });
         } else {
-          console.log("actions", message.actions);
+          console.debug('Audio payload received', {
+            has_actions: Boolean(message.actions),
+            display_characters: message.display_text?.text?.length || 0,
+          });
           addAudioTask({
             audioBase64: message.audio || '',
             volumes: message.volumes || [],
             sliceLength: message.slice_length || 0,
             displayText: message.display_text || null,
             expressions: message.actions?.expressions || null,
+            emotions: message.actions?.emotions || null,
             forwarded: message.forwarded || false,
           });
         }
@@ -180,8 +226,10 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
       case 'new-history-created':
         setAiState('idle');
         setSubtitleText(t('notification.newConversation'));
+        window.setTimeout(() => setSubtitleText(''), 1800);
         // No need to open mic here
         if (message.history_uid) {
+          setLastHistoryUid(activeConfUidRef.current, message.history_uid);
           setCurrentHistoryUid(message.history_uid);
           setMessages([]);
           const newHistory: HistoryInfo = {
@@ -198,6 +246,10 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
         }
         break;
       case 'history-deleted':
+        if (message.success && message.history_uid
+            && getLastHistoryUid(activeConfUidRef.current) === message.history_uid) {
+          clearLastHistoryUid(activeConfUidRef.current);
+        }
         toaster.create({
           title: message.success
             ? t('notification.historyDeleteSuccess')
@@ -206,16 +258,96 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
           duration: 2000,
         });
         break;
+      case 'relationship-reset':
+        toaster.create({
+          title: message.success
+            ? t('notification.relationshipResetSuccess')
+            : t('notification.relationshipResetFail'),
+          type: message.success ? 'success' : 'error',
+          duration: 2500,
+        });
+        break;
+      case 'compact-result':
+        toaster.create({
+          title: message.success
+            ? t('notification.compactSuccess')
+            : t('notification.compactFail'),
+          description: message.success ? undefined : (message.error || undefined),
+          type: message.success ? 'success' : 'error',
+          duration: 2500,
+        });
+        break;
+      case 'history-renamed':
+        if (message.success && message.history_uid && message.title) {
+          setHistoryList((prev: HistoryInfo[]) => prev.map((history) => (
+            history.uid === message.history_uid
+              ? { ...history, title: message.title }
+              : history
+          )));
+        }
+        toaster.create({
+          title: message.success
+            ? t('notification.historyRenameSuccess')
+            : t('notification.historyRenameFail'),
+          type: message.success ? 'success' : 'error',
+          duration: 2000,
+        });
+        break;
+      case 'character-memory':
+        // The memory list is consumed by the Agent settings panel.
+        break;
+      case 'character-memory-deleted':
+        toaster.create({
+          title: message.success
+            ? t('notification.memoryDeleteSuccess')
+            : t('notification.memoryDeleteFail'),
+          type: message.success ? 'success' : 'error',
+          duration: 2000,
+        });
+        break;
+      case 'character-memory-reset':
+        toaster.create({
+          title: message.success
+            ? t('notification.memoryResetSuccess')
+            : t('notification.memoryResetFail'),
+          type: message.success ? 'success' : 'error',
+          duration: 2000,
+        });
+        break;
+      case 'character-state-reset':
+        toaster.create({
+          title: message.success
+            ? t('notification.characterStateResetSuccess')
+            : t('notification.characterStateResetFail'),
+          type: message.success ? 'success' : 'error',
+          duration: 2000,
+        });
+        break;
       case 'history-list':
         if (message.histories) {
           setHistoryList(message.histories);
-          if (message.histories.length > 0) {
-            setCurrentHistoryUid(message.histories[0].uid);
+          const confUidForHistory = activeConfUidRef.current;
+          const rememberedUid = getLastHistoryUid(confUidForHistory);
+          const decision = decideHistoryResume(
+            message.histories.map((history) => history.uid),
+            rememberedUid,
+          );
+
+          if (decision.type === 'resume') {
+            setLastHistoryUid(confUidForHistory, decision.uid);
+            setCurrentHistoryUid(decision.uid);
+            wsService.sendMessage({
+              type: 'fetch-and-set-history',
+              history_uid: decision.uid,
+            });
+          } else {
+            if (rememberedUid) clearLastHistoryUid(confUidForHistory);
+            wsService.sendMessage({ type: 'create-new-history' });
           }
         }
         break;
       case 'user-input-transcription':
-        console.log('user-input-transcription: ', message.text);
+        console.debug('User transcription received', { length: message.text?.length || 0 });
         if (message.text) {
           appendHumanMessage(message.text);
         }
@@ -228,7 +360,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
         });
         break;
       case 'group-update':
-        console.log('Received group-update:', message.members);
+        console.debug('Group update received', { memberCount: message.members?.length || 0 });
         if (message.members) {
           setGroupMembers(message.members);
         }
@@ -267,7 +399,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
         if (message.tool_id && message.tool_name && message.status) {
           // If there's browser view data included, store it in the browser context
           if (message.browser_view) {
-            console.log('Browser view data received:', message.browser_view);
+            console.debug('Browser view data received');
             setBrowserViewData(message.browser_view);
           }
 
@@ -283,7 +415,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
             timestamp: message.timestamp || new Date().toISOString(),
           });
         } else {
-          console.warn('Received incomplete tool_call_status message:', message);
+          console.warn('Received incomplete tool_call_status message');
         }
         break;
       default:
