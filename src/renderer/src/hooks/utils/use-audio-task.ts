@@ -13,6 +13,7 @@ import { useWebSocket } from '@/context/websocket-context';
 import { DisplayText } from '@/services/websocket-service';
 import { resolveResponseFaceId } from '@/utils/contextual-emotion';
 import { responseFaceBus } from '@/utils/response-face-bus';
+import { emoDiag } from '@/utils/emodiag';
 import {
   createTurnState,
   beginTurnTask,
@@ -134,6 +135,20 @@ export const useAudioTask = () => {
       audioBase64, displayText, expressions, emotions, forwarded,
     } = options;
     const face = resolveResponseFaceId({ emotions, expressions });
+    // TEMPORARY emotion diagnostic: resolved contextual face id + raw emotion
+    // metadata + whether this task carries real audio. See emodiag.ts (metadata only).
+    emoDiag({
+      faceId: face,
+      emotions,
+      expressions,
+      hasAudio: !!audioBase64,
+    });
+    // Diagnostik sementara — resentment yang jujur: publish ini TIDAK berarti
+    // face di-claim. Subscriber (idle-facial) menjalankan turn-level latch via
+    // decideResponseFace: sentence tanpa marker yang resolve ke 'neutral' hanya
+    // REFRESH (keep latch), bukan claim. Log 'decision:...' di subscriber yang
+    // otoritatif; baris ini hanya menanda respon yang masuk.
+    emoDiag({ incoming: face, on: 'task' });
     // A task arriving after a completed lifecycle starts a brand-new turn:
     // beginTurnTask resets the shared per-turn state, and any pending
     // text-only hold from the previous turn is cleared (a stale timer must

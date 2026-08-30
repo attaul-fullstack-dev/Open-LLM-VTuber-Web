@@ -12,6 +12,7 @@ import {
   type IdleFacialStateWeighted,
 } from '@/utils/live2d-idle-facial';
 import { responseFaceBus, decideResponseFace } from '@/utils/response-face-bus';
+import { emoDiag } from '@/utils/emodiag';
 
 /**
  * Mili Hidup Stage 3 — Autonomous idle facial micro-expressions.
@@ -88,6 +89,7 @@ export function useLive2DIdleFacial({
       const wasActive = active.isResponseFaceActive();
       const currentFace = wasActive ? (snap.state ?? null) : null;
       const decision = decideResponseFace(currentFace, faceId);
+      emoDiag({ faceId, reason: `decision:${decision.kind}` });
       switch (decision.kind) {
         case 'keep':
           // Nothing latched and nothing to claim (e.g. fully neutral response).
@@ -96,6 +98,7 @@ export function useLive2DIdleFacial({
           // Real turn end / interruption / cancellation: release back to
           // neutral, letting Stage 3 idle scheduling resume normally.
           active.releaseResponseFace();
+          emoDiag({ release: true, reason: 'release:turn_end' });
           return;
         case 'refresh':
           // No new emotion on this signal: keep the latch and refresh the
@@ -105,6 +108,7 @@ export function useLive2DIdleFacial({
         default: {
           const state = IDLE_FACIAL_PALETTE.find((s: IdleFacialStateWeighted) => s.id === decision.faceId);
           active.claimResponseFace(state ?? null);
+          emoDiag({ claim: true, faceId: state ? state.id : null });
         }
       }
     });
