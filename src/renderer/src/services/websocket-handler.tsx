@@ -23,6 +23,10 @@ import { useInterrupt } from '@/hooks/utils/use-interrupt';
 import { useBrowser } from '@/context/browser-context';
 import { markBackendLatencyEvent, markFrontendPayload } from '@/utils/chat-latency';
 import {
+  getLive2DAppearanceModel,
+  getStoredLive2DAppearance,
+} from '@/utils/live2d-appearances';
+import {
   clearLastHistoryUid,
   decideHistoryResume,
   getLastHistoryUid,
@@ -58,10 +62,18 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (pendingModelInfo && confUid) {
-      setModelInfo(pendingModelInfo);
+      // A selected appearance is a visual preference only. Keep Mili's
+      // backend character, chat, and relationship state unchanged while
+      // restoring that skin after reconnects and refreshes.
+      const appearance = getStoredLive2DAppearance();
+      setModelInfo(
+        appearance
+          ? getLive2DAppearanceModel(appearance, baseUrl)
+          : pendingModelInfo,
+      );
       setPendingModelInfo(undefined);
     }
-  }, [pendingModelInfo, setModelInfo, confUid]);
+  }, [pendingModelInfo, setModelInfo, confUid, baseUrl]);
 
   const {
     setCurrentHistoryUid, setMessages, setHistoryList,

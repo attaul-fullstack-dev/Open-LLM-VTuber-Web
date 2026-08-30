@@ -102,6 +102,9 @@
       "imageMaxWidthHelp": "Gambar yang lebih lebar akan diperkecil secara proporsional. Isi 0 agar ukuran tidak dibatasi."
     },
     "live2d": {
+      "appearance": "Tampilan Live2D",
+      "appearanceMili": "Mili",
+      "appearanceShizuku": "Shizuku",
       "pointerInteractive": "Interaksi dengan sentuhan",
       "scrollToResize": "Izinkan scroll untuk mengubah ukuran"
     },

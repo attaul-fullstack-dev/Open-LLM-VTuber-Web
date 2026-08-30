@@ -45,6 +45,9 @@ export interface ModelInfo {
   /** Scale factor */
   kScale: number;
 
+  /** Unscaled model factor used to keep mobile scale adjustments idempotent. */
+  baseKScale?: number;
+
   /** Initial X position shift */
   initialXshift: number;
 
@@ -127,14 +130,17 @@ export function Live2DConfigProvider({ children }: { children: React.ReactNode }
       return;
     }
 
-    // Always use the scale defined in the incoming info object (from config)
+    // Apply the mobile adjustment only from an explicit base scale. This avoids
+    // compounding the scale when a settings change reuses the current model.
     const mobileScaleFactor = window.innerWidth < 768 ? 1.45 : 2;
-    const finalScale = Number(info.kScale || 0.5) * mobileScaleFactor;
+    const baseKScale = Number(info.baseKScale ?? info.kScale ?? 0.5);
+    const finalScale = baseKScale * mobileScaleFactor;
     console.log("Setting model info with default scale:", finalScale);
 
     setModelInfoState({
       ...info,
       kScale: finalScale,
+      baseKScale,
       pointerInteractive:
         "pointerInteractive" in info
           ? info.pointerInteractive
