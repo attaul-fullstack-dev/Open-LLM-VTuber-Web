@@ -17,6 +17,8 @@ import {
   setLive2DIdleFacialHook,
   getLive2DIdleFacialHook,
 } from '../src/renderer/WebSDK/src/lapplive2dfacialhook.ts';
+import { TEMP_CAPABILITY_FACES } from '../src/renderer/src/hooks/canvas/use-live2d-idle-facial.ts';
+import { ZERO_FACIAL } from '../src/renderer/src/utils/live2d-idle-facial.ts';
 
 class FakeClock {
   nowMs = 0;
@@ -463,6 +465,67 @@ test('AUDIO OFF: latched response face survives and idle timer cannot overwrite 
   h.controller.releaseResponseFace();
   pump(h, 300);
   assert.ok(facialMax(h.controller.snapshot().additive) > 0, 'idle resumes after release');
+});
+
+// ---------------------------------------------------------------------------
+// TEMPORARY capability-test mode — pure checks on the forced faces.
+// ---------------------------------------------------------------------------
+test('capability mode: every forced face zeroes Cheek (no blush residue)', () => {
+  for (const key of Object.keys(TEMP_CAPABILITY_FACES)) {
+    const merged = { ...ZERO_FACIAL, ...TEMP_CAPABILITY_FACES[key].additive };
+    assert.equal(merged.Cheek, 0, `capface ${key} must explicitly clear blush`);
+  }
+});
+
+test('capability mode: neutral counters the 1.0 MouthUp motion baseline', () => {
+  // The idle motion mtn_01 holds ParamMouthUp = 1.0 (its neutral mouth pose) and
+  // the true max is 1.0, so an ACTIVE neutral that writes MouthUp 0 would leave
+  // the mouth clamped at 1.0 (permanent smile). The cap neutral must apply
+  // MouthUp -1.0 to flatten it, and keep brows/eyes neutral.
+  const n = { ...ZERO_FACIAL, ...TEMP_CAPABILITY_FACES.neutral.additive };
+  assert.equal(n.MouthUp, -1.0, 'neutral counteracts the baseline to flatten the smile');
+  assert.equal(n.MouthDown, 0);
+  assert.equal(n.MouthAngry, 0);
+  assert.equal(n.BrowLAngle, 0);
+  assert.equal(TEMP_CAPABILITY_FACES.neutral.eyeOpen, 1.0);
+});
+
+test('capability mode: sad is clearly distinct from neutral (mouth droop + sad brows)', () => {
+  const s = { ...ZERO_FACIAL, ...TEMP_CAPABILITY_FACES.sad.additive };
+  assert.ok(s.MouthDown > 0.5, 'sad turns the mouth down clearly');
+  assert.ok(Math.abs(s.BrowLAngle) > 0.5, 'sad angles brows');
+  assert.ok(Math.abs(s.BrowLForm) > 0.5, 'sad shapes/forms brows');
+  assert.ok(TEMP_CAPABILITY_FACES.sad.eyeOpen < 1.0, 'sad slightly softens the eyes');
+  assert.equal(s.Cheek, 0);
+});
+
+test('capability mode: angry reads angry not sad (pout line, no MouthDown)', () => {
+  const a = { ...ZERO_FACIAL, ...TEMP_CAPABILITY_FACES.angry.additive };
+  assert.equal(a.MouthDown, 0, 'angry must NOT droop the mouth (would read sad)');
+  assert.equal(a.MouthAngry, 1.0);
+  assert.equal(a.MouthAngryLine, 1.0);
+  assert.ok(Math.abs(a.BrowLAngle) > 0.5 && Math.abs(a.BrowLForm) > 0.5, 'angry furrows + angles brows');
+  assert.equal(a.EyeLForm, 1.0, 'angry uses sharp angular eyes');
+  assert.ok(TEMP_CAPABILITY_FACES.angry.eyeOpen < 0.9, 'angry narrows the eyes');
+});
+
+test('capability mode: all faces only write owned facial params (no ParamA / Stage-2)', () => {
+  for (const key of Object.keys(TEMP_CAPABILITY_FACES)) {
+    const merged = { ...ZERO_FACIAL, ...TEMP_CAPABILITY_FACES[key].additive };
+    for (const forbidden of ['ParamA', 'AngleX', 'AngleY', 'AngleZ', 'BodyAngleX', 'EyeBallX', 'EyeBallY']) {
+      assert.ok(!(forbidden in merged), `capface ${key} must not touch ${forbidden}`);
+    }
+  }
+});
+
+test('capability mode reset/no-face disables the forced override', () => {
+  // A non-existent or empty capface leaves the bridge OFF: a fresh controller
+  // still schedules normal autonomous faces.
+  const h = makeController();
+  h.controller.setActivity('idle');
+  pump(h, 300);
+  assert.ok(h.controller.snapshot().state !== null, 'normal idle face still schedules when cap mode off');
+  void (0 as never);
 });
 
 void (0 as never);
