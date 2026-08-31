@@ -25,13 +25,16 @@ export const useVoiceOutput = () => {
   const setVoiceOutputEnabled = useCallback((enabled: boolean) => {
     saveVoiceOutputEnabled(enabled);
     setVoiceOutputEnabledState(enabled);
-    // Inform the backend so it starts/stops audio synthesis.
+    // Reflect into the shared audio manager so any already-streamed audio is
+    // skipped while OFF (the per-segment gate). On the OFF transition the flag
+    // setter also stops the currently-playing audio + lip sync immediately.
+    audioManager.setVoiceOutputEnabled(enabled);
+    // Inform the backend so it stops/starts audio synthesis.
     sendMessage({ type: 'voice-output-toggle', enabled });
-    // Turning OFF while audio is playing: stop current playback and clear any
-    // pending queued audio safely (same primitives the interruption path uses).
+    // Turning OFF while a response is streaming: clear any pending queued
+    // audio safely (same primitive the interruption path uses).
     if (!enabled) {
       audioTaskQueue.clearQueue();
-      audioManager.stopCurrentAudioAndLipSync();
     }
   }, [sendMessage]);
 
