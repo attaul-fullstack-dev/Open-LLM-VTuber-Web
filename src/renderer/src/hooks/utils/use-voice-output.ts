@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { audioManager } from '@/utils/audio-manager';
 import { audioTaskQueue } from '@/utils/task-queue';
 import { useWebSocket } from '@/context/websocket-context';
@@ -21,6 +21,16 @@ export const useVoiceOutput = () => {
   const [voiceOutputEnabled, setVoiceOutputEnabledState] = useState<boolean>(
     loadVoiceOutputEnabled,
   );
+
+  // On mount, the shared audio manager starts with its baked-in default
+  // (enabled). Re-initialize its runtime gate from the persisted value so a
+  // saved-OFF setting survives a page reload and the frontend playback gate
+  // always matches persistence (offered by the same shared manager used by the
+  // per-segment skip in use-audio-task). Uses the flag setter so any leftover
+  // queued/speaking state is also stopped when the persisted state is OFF.
+  useEffect(() => {
+    audioManager.setVoiceOutputEnabled(loadVoiceOutputEnabled());
+  }, []);
 
   const setVoiceOutputEnabled = useCallback((enabled: boolean) => {
     saveVoiceOutputEnabled(enabled);

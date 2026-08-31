@@ -1,6 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { audioManager } from '@/utils/audio-manager';
+import {
+  loadVoiceOutputEnabled,
+  saveVoiceOutputEnabled,
+} from '@/utils/voice-output-preference';
 
 // Minimal localStorage stub for the singleton's initial muted read.
 const storage = new Map<string, string>();
@@ -80,4 +84,42 @@ test('turning voice output OFF releases PCM lip-sync data on the model', () => {
   audioManager.setVoiceOutputEnabled(false);
 
   assert.equal(released, true, 'releasePcmData should be called when stopping');
+});
+
+test('reload persistence: saved OFF re-inits the runtime gate OFF, then toggle ON restores audio', () => {
+  // The pure persistence helpers mirror what the reconnect-sync in
+  // WebSocketHandler sends to the backend on WS OPEN.
+  storage.clear();
+  saveVoiceOutputEnabled(false);
+
+  // Simulate page-reload mount: the hook now re-initializes the shared
+  // audioManager gate from the persisted value (matching the saved OFF).
+  audioManager.setVoiceOutputEnabled(loadVoiceOutputEnabled());
+  assert.equal(audioManager.isVoiceOutputEnabled(), false, 'runtime gate OFF after reload/init');
+  assert.equal(audioManager.shouldSkipPlayback(), true, 'received audio is skipped after reload while saved OFF');
+
+  // The backend sync value sent on reconnect equals the persisted value.
+  assert.equal(loadVoiceOutputEnabled(), false, 'websocket sync (backend) value is OFF');
+
+  // User toggles Voice Output back to ON.
+  saveVoiceOutputEnabled(true);
+  audioManager.setVoiceOutputEnabled(loadVoiceOutputEnabled());
+  assert.equal(audioManager.isVoiceOutputEnabled(), true, 'runtime gate ON after toggle');
+  assert.equal(loadVoiceOutputEnabled(), true, 'websocket sync (backend) value is ON after toggle');
+  assert.equal(audioManager.shouldSkipPlayback(), false, 'subsequent audio is NOT skipped after reload->ON');
+});
+
+test('ordinary ON->OFF->ON without reload still restores playback', () => {
+  audioManager.setMuted(false);
+  audioManager.setVoiceOutputEnabled(true);
+
+  // OFF
+  audioManager.setVoiceOutputEnabled(false);
+  assert.equal(audioManager.isVoiceOutputEnabled(), false);
+  assert.equal(audioManager.shouldSkipPlayback(), true);
+
+  // back to ON
+  audioManager.setVoiceOutputEnabled(true);
+  assert.equal(audioManager.isVoiceOutputEnabled(), true);
+  assert.equal(audioManager.shouldSkipPlayback(), false);
 });
