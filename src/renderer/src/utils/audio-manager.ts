@@ -7,6 +7,10 @@ class AudioManager {
   private currentModel: any | null = null;
   private muted = typeof window !== 'undefined'
     && window.localStorage.getItem('voiceMuted') === 'true';
+  // Voice Output (TTS) master flag: distinct from `muted` (quick speaker).
+  // When false, playback is skipped for any audio (including already-streamed
+  // segments) AND the backend stops synthesizing. Defaults to enabled.
+  private voiceOutputEnabled = true;
 
   setMuted(muted: boolean) {
     this.muted = muted;
@@ -18,6 +22,28 @@ class AudioManager {
 
   isMuted(): boolean {
     return this.muted;
+  }
+
+  setVoiceOutputEnabled(enabled: boolean) {
+    this.voiceOutputEnabled = enabled;
+    if (!enabled) {
+      // VOICE-OFF is stronger than mute: also stop whatever is currently
+      // playing and clear pending lip-sync / playback state.
+      this.stopCurrentAudioAndLipSync();
+    }
+  }
+
+  isVoiceOutputEnabled(): boolean {
+    return this.voiceOutputEnabled;
+  }
+
+  /**
+   * Whether a segment should skip audible playback. True when the quick
+   * speaker mute is on OR Voice Output (TTS) is off. This gate is re-checked
+   * per segment, so already-generated queued audio never plays after toggle.
+   */
+  shouldSkipPlayback(): boolean {
+    return this.muted || !this.voiceOutputEnabled;
   }
 
   /**

@@ -19,6 +19,8 @@
       "language": "语言",
       "useCameraBackground": "使用摄像头背景",
       "showSubtitle": "显示字幕",
+      "voiceOutput": "语音输出（TTS）",
+      "voiceOutputHelp": "关闭时 Mili 仅以文字回复，不再生成语音音频。这与快捷扬声器静音不同。",
       "backgroundImage": "背景图片",
       "customBgUrlPlaceholder": "输入图片URL",
       "customBgUrl": "或输入自定义背景URL",

@@ -88,6 +88,8 @@
       "language": "Bahasa",
       "useCameraBackground": "Gunakan kamera sebagai latar",
       "showSubtitle": "Tampilkan subtitle",
+      "voiceOutput": "Keluaran Suara (TTS)",
+      "voiceOutputHelp": "Saat OFF, Mili menjawab hanya berupa teks dan tidak ada audio suara yang dibuat. Ini berbeda dari tombol bisukan speaker cepat.",
       "backgroundImage": "Gambar latar",
       "customBgUrlPlaceholder": "Masukkan URL gambar",
       "customBgUrl": "Atau masukkan URL gambar sendiri",

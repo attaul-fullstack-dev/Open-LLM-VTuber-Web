@@ -29,6 +29,7 @@ import {
   setLastHistoryUid,
 } from '@/utils/history-storage';
 import { subtitlePlaybackCoordinator } from '@/utils/subtitle-playback';
+import { loadVoiceOutputEnabled } from '@/utils/voice-output-preference';
 
 function WebSocketHandler({ children }: { children: React.ReactNode }) {
   const { t } = useTranslation();
@@ -426,6 +427,14 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     wsService.connect(wsUrl);
   }, [wsUrl]);
+
+  // Re-apply the persisted Voice Output setting to the backend whenever the
+  // connection (re)opens, so a reload/reconnect keeps the same TTS state.
+  useEffect(() => {
+    if (wsState !== 'OPEN') return;
+    const enabled = loadVoiceOutputEnabled();
+    wsService.sendMessage({ type: 'voice-output-toggle', enabled });
+  }, [wsState]);
 
   useEffect(() => {
     const stateSubscription = wsService.onStateChange(setWsState);

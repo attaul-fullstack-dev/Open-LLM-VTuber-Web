@@ -170,8 +170,8 @@ export const useAudioTask = () => {
     try {
       // Process audio if available
       if (audioBase64) {
-        if (audioManager.isMuted()) {
-          console.log('[AudioManager] Voice playback skipped because sound is muted');
+        if (audioManager.shouldSkipPlayback()) {
+          console.log('[AudioManager] Voice playback skipped (muted or Voice Output OFF)');
           if (subtitleTicket && !isSubtitleDismissed) {
             const subtitle = subtitlePlaybackCoordinator.activateWithoutPlayback(subtitleTicket);
             if (subtitle !== null) updateSubtitle(subtitle);
