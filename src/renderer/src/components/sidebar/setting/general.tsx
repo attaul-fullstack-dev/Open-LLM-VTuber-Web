@@ -6,6 +6,7 @@ import { settingStyles } from "./setting-styles";
 import { useConfig } from "@/context/character-config-context";
 import { useGeneralSettings } from "@/hooks/sidebar/setting/use-general-settings";
 import { useWebSocket } from "@/context/websocket-context";
+import { useVoiceOutput } from "@/hooks/utils/use-voice-output";
 import { SelectField, SwitchField, InputField } from "./common";
 
 interface GeneralProps {
@@ -53,6 +54,7 @@ function General({ onSave, onCancel }: GeneralProps): JSX.Element {
   const bgUrlContext = useBgUrl();
   const { confName, setConfName } = useConfig();
   const { wsUrl, setWsUrl, baseUrl, setBaseUrl } = useWebSocket();
+  const { voiceOutputEnabled, setVoiceOutputEnabled } = useVoiceOutput();
   const collections = useCollections();
 
   const {
@@ -98,6 +100,13 @@ function General({ onSave, onCancel }: GeneralProps): JSX.Element {
         label={t("settings.general.showSubtitle")}
         checked={showSubtitle}
         onChange={setShowSubtitle}
+      />
+
+      <SwitchField
+        label={t("settings.general.voiceOutput")}
+        checked={voiceOutputEnabled}
+        onChange={setVoiceOutputEnabled}
+        help={t("settings.general.voiceOutputHelp")}
       />
 
       {!settings.useCameraBackground && (
