@@ -21,6 +21,8 @@
       "showSubtitle": "显示字幕",
       "voiceOutput": "语音输出（TTS）",
       "voiceOutputHelp": "关闭时 Mili 仅以文字回复，不再生成语音音频。这与快捷扬声器静音不同。",
+      "lifeState": "Mili 生活状态",
+      "lifeStateHelp": "开启时，小浮窗会实时显示 Mili 的模拟生活状态（只读）。关闭仅隐藏面板，不会停止模拟。",
       "backgroundImage": "背景图片",
       "customBgUrlPlaceholder": "输入图片URL",
       "customBgUrl": "或输入自定义背景URL",

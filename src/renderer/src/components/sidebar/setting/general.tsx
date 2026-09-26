@@ -7,6 +7,7 @@ import { useConfig } from "@/context/character-config-context";
 import { useGeneralSettings } from "@/hooks/sidebar/setting/use-general-settings";
 import { useWebSocket } from "@/context/websocket-context";
 import { useVoiceOutput } from "@/hooks/utils/use-voice-output";
+import { useLifeState } from "@/context/life-state-context";
 import { SelectField, SwitchField, InputField } from "./common";
 
 interface GeneralProps {
@@ -55,6 +56,7 @@ function General({ onSave, onCancel }: GeneralProps): JSX.Element {
   const { confName, setConfName } = useConfig();
   const { wsUrl, setWsUrl, baseUrl, setBaseUrl } = useWebSocket();
   const { voiceOutputEnabled, setVoiceOutputEnabled } = useVoiceOutput();
+  const { enabled: lifeStateEnabled, setEnabled: setLifeStateEnabled } = useLifeState();
   const collections = useCollections();
 
   const {
@@ -107,6 +109,13 @@ function General({ onSave, onCancel }: GeneralProps): JSX.Element {
         checked={voiceOutputEnabled}
         onChange={setVoiceOutputEnabled}
         help={t("settings.general.voiceOutputHelp")}
+      />
+
+      <SwitchField
+        label={t("settings.general.lifeState")}
+        checked={lifeStateEnabled}
+        onChange={setLifeStateEnabled}
+        help={t("settings.general.lifeStateHelp")}
       />
 
       {!settings.useCameraBackground && (

@@ -32,6 +32,8 @@ import Subtitle from "./components/canvas/subtitle";
 import ThinkingStatus from "./components/canvas/thinking-status";
 import { ModeProvider, useMode } from "./context/mode-context";
 import { AvatarActivityProvider } from "./context/avatar-activity-context";
+import { LifeStateProvider } from "./context/life-state-context";
+import { LifeStateWidget } from "./components/canvas/life-state-widget";
 
 function AppContent(): JSX.Element {
   const [showSidebar, setShowSidebar] = useState(() => window.innerWidth >= 1024);
@@ -159,6 +161,9 @@ function AppContent(): JSX.Element {
               <Box position="absolute" top={{ base: "14px", lg: "20px" }} left={{ base: "14px", lg: "20px" }} zIndex={10} transform={{ base: "scale(.72)", lg: "none" }} transformOrigin="top left">
                 <WebSocketStatus />
               </Box>
+              {/* Optional floating Life State observability overlay (Stage 7).
+                  Absolute overlay only: never affects chat layout or sizing. */}
+              <LifeStateWidget />
               <Box
                 position="absolute"
                 bottom={isFooterCollapsed
@@ -218,7 +223,8 @@ function AppWithGlobalStyles(): JSX.Element {
                 <AvatarActivityProvider>
                   <ProactiveSpeakProvider>
                     <Live2DConfigProvider>
-                      <SubtitleProvider>
+                      <LifeStateProvider>
+                        <SubtitleProvider>
                         <VADProvider>
                           <BgUrlProvider>
                             <GroupProvider>
@@ -232,6 +238,7 @@ function AppWithGlobalStyles(): JSX.Element {
                           </BgUrlProvider>
                         </VADProvider>
                       </SubtitleProvider>
+                      </LifeStateProvider>
                     </Live2DConfigProvider>
                   </ProactiveSpeakProvider>
                 </AvatarActivityProvider>

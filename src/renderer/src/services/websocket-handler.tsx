@@ -30,6 +30,7 @@ import {
 } from '@/utils/history-storage';
 import { subtitlePlaybackCoordinator } from '@/utils/subtitle-playback';
 import { loadVoiceOutputEnabled } from '@/utils/voice-output-preference';
+import { useLifeState } from '@/context/life-state-context';
 
 function WebSocketHandler({ children }: { children: React.ReactNode }) {
   const { t } = useTranslation();
@@ -52,6 +53,12 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
   const activeConfUidRef = useRef('');
   const { interrupt } = useInterrupt();
   const { setBrowserViewData } = useBrowser();
+  const { enabled: lifeStateEnabled, setSnapshot: setLifeSnapshot } = useLifeState();
+  const lifeStateEnabledRef = useRef(lifeStateEnabled);
+
+  useEffect(() => {
+    lifeStateEnabledRef.current = lifeStateEnabled;
+  }, [lifeStateEnabled]);
 
   useEffect(() => {
     autoStartMicOnConvEndRef.current = autoStartMicOnConvEnd;
@@ -388,9 +395,26 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
             return currentState;
           });
         }
+        // Event-driven Life State refresh (widget visible only): no polling.
+        if (lifeStateEnabledRef.current) {
+          wsService.sendMessage({ type: 'fetch-world-state' });
+        }
         break;
       case 'force-new-message':
         setForceNewMessage(true);
+        break;
+      case 'world-state':
+        // Authoritative World/Life snapshot for the observability widget.
+        setLifeSnapshot({
+          location: message.location,
+          activity: message.activity,
+          energy: message.energy,
+          mood: message.mood,
+          time_context: message.time_context,
+          activity_started_at: message.activity_started_at,
+          last_update_at: message.last_update_at,
+          error: message.error,
+        });
         break;
       case 'interrupt-signal':
         // Handle forwarded interrupt
