@@ -31,6 +31,7 @@ import {
 import { subtitlePlaybackCoordinator } from '@/utils/subtitle-playback';
 import { loadVoiceOutputEnabled } from '@/utils/voice-output-preference';
 import { useLifeState } from '@/context/life-state-context';
+import { getUserTimezone } from '@/utils/user-timezone';
 
 function WebSocketHandler({ children }: { children: React.ReactNode }) {
   const { t } = useTranslation();
@@ -347,10 +348,11 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
             wsService.sendMessage({
               type: 'fetch-and-set-history',
               history_uid: decision.uid,
+              timezone: getUserTimezone(),
             });
           } else {
             if (rememberedUid) clearLastHistoryUid(confUidForHistory);
-            wsService.sendMessage({ type: 'create-new-history' });
+            wsService.sendMessage({ type: 'create-new-history', timezone: getUserTimezone() });
           }
         }
         break;
@@ -396,8 +398,10 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
           });
         }
         // Event-driven Life State refresh (widget visible only): no polling.
+        // The user timezone travels with the request so reconnects and
+        // fresh sessions still derive time_context locally.
         if (lifeStateEnabledRef.current) {
-          wsService.sendMessage({ type: 'fetch-world-state' });
+          wsService.sendMessage({ type: 'fetch-world-state', timezone: getUserTimezone() });
         }
         break;
       case 'force-new-message':
@@ -454,10 +458,15 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
 
   // Re-apply the persisted Voice Output setting to the backend whenever the
   // connection (re)opens, so a reload/reconnect keeps the same TTS state.
+  // Same moment refreshes the Life State snapshot (widget visible only) so
+  // reconnects always re-derive time_context with the current user timezone.
   useEffect(() => {
     if (wsState !== 'OPEN') return;
     const enabled = loadVoiceOutputEnabled();
     wsService.sendMessage({ type: 'voice-output-toggle', enabled });
+    if (lifeStateEnabledRef.current) {
+      wsService.sendMessage({ type: 'fetch-world-state', timezone: getUserTimezone() });
+    }
   }, [wsState]);
 
   useEffect(() => {

@@ -38,6 +38,46 @@ export const LIFE_STATE_MAX_HEIGHT = 520;
 // Minimum visible strip (px) kept inside the viewport (boundary protection).
 export const LIFE_STATE_VISIBLE_STRIP = 80;
 
+/** Single active pointer tracked for drag/pinch gestures. */
+export interface LifeStatePointer {
+  id: number;
+  x: number;
+  y: number;
+}
+
+/** Distance between two pointers (px). Zero when degenerate. */
+export function pinchDistance(
+  a: LifeStatePointer,
+  b: LifeStatePointer,
+): number {
+  const dx = a.x - b.x;
+  const dy = a.y - b.y;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+/**
+ * Size after a pinch gesture (pure, unit-testable).
+ * Scales the gesture-start size by the finger-distance ratio, then clamps
+ * to the readable widget bounds. Pinch out grows, pinch in shrinks.
+ */
+export function pinchResizedSize(
+  startDistance: number,
+  currentDistance: number,
+  startSize: LifeStateSize,
+): LifeStateSize {
+  if (!Number.isFinite(startDistance) || startDistance <= 0) {
+    return clampLifeStateSize(startSize);
+  }
+  const ratio =
+    Number.isFinite(currentDistance) && currentDistance > 0
+      ? currentDistance / startDistance
+      : 1;
+  return clampLifeStateSize({
+    width: startSize.width * ratio,
+    height: startSize.height * ratio,
+  });
+}
+
 export const DEFAULT_LIFE_STATE_PREFS: LifeStatePreferences = {
   enabled: true,
   position: null,

@@ -8,6 +8,8 @@ import {
   clampLifeStatePosition,
   clampLifeStateSize,
   loadLifeStatePreferences,
+  pinchDistance,
+  pinchResizedSize,
   saveLifeStatePreferences,
 } from "@/utils/life-state-preference";
 
@@ -59,4 +61,32 @@ test("position clamp keeps a visible strip inside the viewport", () => {
   assert.ok(clamped.x <= 1280 - 80 && clamped.y <= 800 - 80);
   const kept = clampLifeStatePosition({ x: 100, y: 100 }, 1280, 800);
   assert.deepEqual(kept, { x: 100, y: 100 });
+});
+
+test("pinch distance is symmetric and zero for identical points", () => {
+  assert.equal(pinchDistance({ id: 1, x: 0, y: 0 }, { id: 2, x: 3, y: 4 }), 5);
+  assert.equal(
+    pinchDistance({ id: 1, x: 10, y: 10 }, { id: 2, x: 10, y: 10 }),
+    0,
+  );
+});
+
+test("pinch out grows, pinch in shrinks", () => {
+  const start = { width: 232, height: 200 };
+  const grown = pinchResizedSize(100, 150, start);
+  assert.ok(grown.width > start.width && grown.height > start.height);
+  const shrunk = pinchResizedSize(150, 100, start);
+  assert.ok(shrunk.width < start.width && shrunk.height < start.height);
+});
+
+test("pinch respects min/max bounds", () => {
+  const tiny = pinchResizedSize(100, 5, { width: 232, height: 200 });
+  assert.ok(tiny.width >= LIFE_STATE_MIN_WIDTH);
+  const huge = pinchResizedSize(10, 1000, { width: 232, height: 200 });
+  assert.ok(huge.width <= LIFE_STATE_MAX_WIDTH);
+});
+
+test("degenerate pinch distance keeps current size", () => {
+  const start = { width: 232, height: 200 };
+  assert.deepEqual(pinchResizedSize(0, 50, start), start);
 });

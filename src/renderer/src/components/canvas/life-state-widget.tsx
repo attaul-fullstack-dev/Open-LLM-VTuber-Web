@@ -3,11 +3,16 @@ import { Box, Text, IconButton, HStack } from "@chakra-ui/react";
 import { FiRefreshCw, FiMove } from "react-icons/fi";
 import { useLifeState } from "@/context/life-state-context";
 import { useWebSocket } from "@/context/websocket-context";
+import { getUserTimezone } from "@/utils/user-timezone";
 import {
   LIFE_STATE_MIN_WIDTH,
   LIFE_STATE_MIN_HEIGHT,
   LIFE_STATE_MAX_WIDTH,
   LIFE_STATE_MAX_HEIGHT,
+  pinchDistance,
+  pinchResizedSize,
+  type LifeStatePointer,
+  type LifeStateSize,
 } from "@/utils/life-state-preference";
 
 function formatLocalTime(iso: string | undefined): string {
@@ -51,15 +56,23 @@ export function LifeStateWidget() {
   const { sendMessage } = useWebSocket();
   const boxRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<{
+    pointerId: number;
     startX: number;
     startY: number;
     baseX: number;
     baseY: number;
   } | null>(null);
+  // Active pointers on the widget (touch + mouse unified via Pointer Events).
+  const pointersRef = useRef<Map<number, LifeStatePointer>>(new Map());
+  // Two-pointer pinch state. While set, drag is suppressed.
+  const pinchRef = useRef<{
+    startDistance: number;
+    startSize: LifeStateSize;
+  } | null>(null);
   const sizeTimer = useRef<number | null>(null);
 
   const refresh = useCallback(() => {
-    sendMessage({ type: "fetch-world-state" });
+    sendMessage({ type: "fetch-world-state", timezone: getUserTimezone() });
   }, [sendMessage]);
 
   // Fetch authoritative snapshot when the widget becomes visible.
@@ -89,53 +102,141 @@ export function LifeStateWidget() {
     };
   }, [setSize, enabled]);
 
-  const onDragStart = useCallback(
+  // Header press-and-hold starts a one-finger drag. Works identically for
+  // mouse and touch: no hover, no click-click, no release required to move.
+  const onHeaderPointerDown = useCallback(
     (event: React.PointerEvent) => {
+      if (pinchRef.current) return;
       if (!boxRef.current) return;
       const rect = boxRef.current.getBoundingClientRect();
       dragRef.current = {
+        pointerId: event.pointerId,
         startX: event.clientX,
         startY: event.clientY,
         baseX: position?.x ?? rect.left,
         baseY: position?.y ?? rect.top,
       };
-      (event.target as HTMLElement).setPointerCapture?.(event.pointerId);
     },
     [position],
   );
 
-  const onDragMove = useCallback((event: React.PointerEvent) => {
+  const applyDragMove = useCallback((clientX: number, clientY: number) => {
     const drag = dragRef.current;
-    if (!drag || !boxRef.current) return;
+    const node = boxRef.current;
+    if (!drag || !node) return;
     const next = {
-      x: drag.baseX + (event.clientX - drag.startX),
-      y: drag.baseY + (event.clientY - drag.startY),
+      x: drag.baseX + (clientX - drag.startX),
+      y: drag.baseY + (clientY - drag.startY),
     };
     // Live clamp: keep the panel inside the viewport at all times.
-    const rect = boxRef.current.getBoundingClientRect();
+    const rect = node.getBoundingClientRect();
     next.x = Math.min(
       Math.max(next.x, 80 - rect.width),
       window.innerWidth - 80,
     );
     next.y = Math.min(Math.max(next.y, 0), window.innerHeight - 80);
-    boxRef.current.style.left = `${next.x}px`;
-    boxRef.current.style.top = `${next.y}px`;
-    boxRef.current.style.right = "auto";
+    node.style.left = `${next.x}px`;
+    node.style.top = `${next.y}px`;
+    node.style.right = "auto";
     dragRef.current = {
       ...drag,
       baseX: next.x,
       baseY: next.y,
-      startX: event.clientX,
-      startY: event.clientY,
+      startX: clientX,
+      startY: clientY,
     };
   }, []);
 
-  const onDragEnd = useCallback(() => {
-    if (!boxRef.current || !dragRef.current) return;
-    const rect = boxRef.current.getBoundingClientRect();
-    setPosition({ x: Math.round(rect.left), y: Math.round(rect.top) });
-    dragRef.current = null;
-  }, [setPosition]);
+  const finishDrag = useCallback(
+    (pointerId: number) => {
+      if (!boxRef.current || !dragRef.current) return;
+      if (dragRef.current.pointerId !== pointerId) return;
+      const rect = boxRef.current.getBoundingClientRect();
+      setPosition({ x: Math.round(rect.left), y: Math.round(rect.top) });
+      dragRef.current = null;
+    },
+    [setPosition],
+  );
+
+  // Box-level pointer tracking unifies mouse + touch. Capture on the box
+  // (currentTarget) so moves keep flowing during press-and-hold slides.
+  const onBoxPointerDown = useCallback((event: React.PointerEvent) => {
+    const node = boxRef.current;
+    if (!node) return;
+    node.setPointerCapture?.(event.pointerId);
+    pointersRef.current.set(event.pointerId, {
+      id: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+    });
+    if (pointersRef.current.size === 2) {
+      // Second finger down: enter pinch mode, cancel any drag so a
+      // pinch is never mistaken for a drag.
+      const [a, b] = [...pointersRef.current.values()];
+      const rect = node.getBoundingClientRect();
+      dragRef.current = null;
+      pinchRef.current = {
+        startDistance: pinchDistance(a, b),
+        startSize: { width: rect.width, height: rect.height },
+      };
+    }
+  }, []);
+
+  const onBoxPointerMove = useCallback(
+    (event: React.PointerEvent) => {
+      const tracked = pointersRef.current.get(event.pointerId);
+      if (!tracked) {
+        // Pointer not tracked (e.g. started outside): drag only if a
+        // header-initiated drag is already in progress for this pointer.
+        if (dragRef.current?.pointerId === event.pointerId) {
+          applyDragMove(event.clientX, event.clientY);
+        }
+        return;
+      }
+      tracked.x = event.clientX;
+      tracked.y = event.clientY;
+      const pinch = pinchRef.current;
+      if (pinch && pointersRef.current.size >= 2) {
+        const [a, b] = [...pointersRef.current.values()];
+        const next = pinchResizedSize(
+          pinch.startDistance,
+          pinchDistance(a, b),
+          pinch.startSize,
+        );
+        const node = boxRef.current;
+        if (node) {
+          node.style.width = `${next.width}px`;
+          node.style.height = `${next.height}px`;
+        }
+        return;
+      }
+      if (dragRef.current?.pointerId === event.pointerId) {
+        applyDragMove(event.clientX, event.clientY);
+      }
+    },
+    [applyDragMove],
+  );
+
+  const onBoxPointerUp = useCallback(
+    (event: React.PointerEvent) => {
+      pointersRef.current.delete(event.pointerId);
+      if (pinchRef.current && pointersRef.current.size < 2) {
+        // Pinch finished: persist the live size, then require a fresh
+        // header press for any further drag (no accidental drag resume).
+        const node = boxRef.current;
+        pinchRef.current = null;
+        if (node) {
+          const rect = node.getBoundingClientRect();
+          setSize({
+            width: Math.round(rect.width),
+            height: Math.round(rect.height),
+          });
+        }
+      }
+      finishDrag(event.pointerId);
+    },
+    [finishDrag, setSize],
+  );
 
   if (!enabled) return null;
 
@@ -159,6 +260,14 @@ export function LifeStateWidget() {
       border="1px solid rgba(255,255,255,0.14)"
       borderRadius="md"
       p={2}
+      // touch-action none scopes gesture control to the widget only:
+      // press-and-hold drag + two-finger pinch work on touch without the
+      // browser stealing the gesture, while scrolling elsewhere is untouched.
+      touchAction="none"
+      onPointerDown={onBoxPointerDown}
+      onPointerMove={onBoxPointerMove}
+      onPointerUp={onBoxPointerUp}
+      onPointerCancel={onBoxPointerUp}
       style={
         position
           ? { left: position.x, top: position.y }
@@ -169,10 +278,8 @@ export function LifeStateWidget() {
         justify="space-between"
         mb={1}
         cursor="move"
-        onPointerDown={onDragStart}
-        onPointerMove={onDragMove}
-        onPointerUp={onDragEnd}
-        onPointerCancel={onDragEnd}
+        touchAction="none"
+        onPointerDown={onHeaderPointerDown}
         userSelect="none"
       >
         <HStack gap={1}>
