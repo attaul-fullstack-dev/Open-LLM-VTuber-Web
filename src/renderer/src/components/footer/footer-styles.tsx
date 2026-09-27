@@ -3,12 +3,6 @@ import { miliTokens } from '@/theme/design-tokens';
 
 interface FooterStyles {
   container: (isCollapsed: boolean) => SystemStyleObject
-  toggleButton: SystemStyleObject
-  /** Slim row above the bar: status text left, interrupt ghost right. */
-  utilityRow: SystemStyleObject
-  statusText: SystemStyleObject
-  /** Ghost control on the utility row (outside the composer bar). */
-  utilityButton: SystemStyleObject
   /** Single unified composer bar. Grows vertically with multi-line input. */
   composerBar: SystemStyleObject
   /** 1px warm-neutral separator between composer sections. */
@@ -33,12 +27,13 @@ export const footerStyles: {
 } = {
   footer: {
     container: (isCollapsed) => ({
-      bg: isCollapsed ? 'transparent' : { base: miliTokens.color.elevated, lg: miliTokens.color.background },
-      backdropFilter: { base: miliTokens.blur.bar, lg: 'none' },
-      borderRadius: isCollapsed ? 'none' : { base: miliTokens.radius.lg, lg: '0' },
-      border: isCollapsed ? 'none' : { base: '1px solid', lg: 'none' },
-      borderColor: isCollapsed ? undefined : { base: miliTokens.color.borderStrong, lg: undefined },
-      borderTop: isCollapsed ? undefined : { base: undefined, lg: `1px solid ${miliTokens.color.border}` },
+      // The composer is a single visual unit: no panel background, border,
+      // radius, shadow or blur on the wrapper. Positioning, safe-area
+      // padding and the collapse transform are preserved.
+      bg: 'transparent',
+      backdropFilter: 'none',
+      borderRadius: 'none',
+      border: 'none',
       transform: isCollapsed
         ? { base: 'translateY(calc(100% - 10px))', lg: 'translateY(calc(100% - 24px))' }
         : 'translateY(0)',
@@ -51,47 +46,8 @@ export const footerStyles: {
       overflow: 'hidden',
       px: { base: '1.5', lg: '4' },
       pb: { base: '1.5', lg: '3' },
-      boxShadow: isCollapsed ? 'none' : { base: miliTokens.shadow.float, lg: 'none' },
+      boxShadow: 'none',
     }),
-    toggleButton: {
-      height: { base: '7px', lg: '20px' },
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      cursor: 'pointer',
-      color: miliTokens.color.textMuted,
-      _hover: { color: miliTokens.color.textPrimary },
-      bg: 'transparent',
-      transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-    },
-    utilityRow: {
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      px: { base: '6px', lg: '2px' },
-      pb: '2px',
-      minH: '26px',
-      maxW: { base: '100%', lg: '760px' },
-      mx: { base: '0', lg: 'auto' },
-      // When the status text hides (thinking pill takes over), keep
-      // the interrupt button pinned right.
-      '& > :last-child': { marginLeft: 'auto' },
-    },
-    statusText: {
-      fontSize: miliTokens.font.xs,
-      color: miliTokens.color.textSecondary,
-      whiteSpace: 'nowrap',
-      overflow: 'hidden',
-      textOverflow: 'ellipsis',
-    },
-    utilityButton: {
-      flexShrink: 0,
-      borderRadius: 'full',
-      color: miliTokens.color.textSecondary,
-      bg: 'transparent',
-      _hover: { bg: miliTokens.color.surface, color: miliTokens.color.textPrimary },
-      _active: { bg: miliTokens.color.surface },
-    },
     composerBar: {
       display: 'flex',
       alignItems: 'center',
@@ -187,9 +143,10 @@ export const footerStyles: {
         border: 'none',
       },
       resize: 'none',
-      // Auto-expand is driven by scrollHeight in the component; the bar
-      // grows between one line and this cap, then scrolls internally.
-      minHeight: { base: '40px', lg: '42px' },
+      // minHeight 0: scrollHeight then reports the exact content height, so
+      // a single line is always exactly one line-height tall and centered
+      // by the bar (a CSS minimum would pad slack below the text).
+      minHeight: '0',
       maxHeight: '132px',
       lineHeight: '1.45',
       whiteSpace: 'pre-wrap',

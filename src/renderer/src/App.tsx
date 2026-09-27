@@ -184,7 +184,7 @@ function AppContent(): JSX.Element {
                 position="absolute"
                 bottom={isFooterCollapsed
                   ? "39px"
-                  : { base: "calc(104px + env(safe-area-inset-bottom, 0px))", lg: "135px" }}
+                  : { base: "calc(74px + env(safe-area-inset-bottom, 0px))", lg: "86px" }}
                 left="50%"
                 transform="translateX(-50%)"
                 zIndex={10}

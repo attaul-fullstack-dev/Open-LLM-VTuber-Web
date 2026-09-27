@@ -3,15 +3,13 @@ import {
   Box, Textarea, IconButton,
 } from '@chakra-ui/react';
 import {
-  FiPlus, FiMic, FiMicOff, FiVolume2, FiVolumeX, FiArrowUp, FiChevronDown,
+  FiPlus, FiMic, FiMicOff, FiVolume2, FiVolumeX, FiArrowUp,
 } from 'react-icons/fi';
-import { IoHandRightSharp } from 'react-icons/io5';
 import {
   memo, RefObject, useEffect, useRef, useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
 import { footerStyles } from './footer-styles';
-import AIStateIndicator from './ai-state-indicator';
 import { useFooter } from '@/hooks/footer/use-footer';
 import { audioManager } from '@/utils/audio-manager';
 import { useAvatarActivityState } from '@/context/avatar-activity-context';
@@ -19,11 +17,6 @@ import { useAvatarActivityState } from '@/context/avatar-activity-context';
 // Type definitions
 interface FooterProps {
   isCollapsed?: boolean
-  onToggle?: () => void
-}
-
-interface ToggleButtonProps {
-  isCollapsed: boolean
   onToggle?: () => void
 }
 
@@ -47,20 +40,6 @@ interface ComposerBarProps {
 const INPUT_MAX_HEIGHT = 132;
 
 // Reusable components
-const ToggleButton = memo(({ isCollapsed, onToggle }: ToggleButtonProps) => (
-  <Box
-    {...footerStyles.footer.toggleButton}
-    onClick={onToggle}
-    style={{
-      transform: isCollapsed ? 'rotate(180deg)' : 'rotate(0deg)',
-    }}
-  >
-    <FiChevronDown />
-  </Box>
-));
-
-ToggleButton.displayName = 'ToggleButton';
-
 // Single unified composer bar: + | input | speaker | mic | SEND.
 // All icons come from one Feather set for consistent stroke. Behavior
 // (handlers, refs, send flow) is untouched; only visuals + auto-expand.
@@ -82,18 +61,14 @@ const ComposerBar = memo(({
   const { t } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Auto-expand: grow with content between one line and INPUT_MAX_HEIGHT.
-  // Width, icons and bar position never change, so typing cannot jitter.
-  // An empty box falls back to the CSS single-line min-height: an empty
-  // textarea reports a larger scrollHeight quirk (44px vs 40px filled),
-  // which would shift the bar by 4px the moment typing starts.
+  // Auto-expand: the element is sized to its exact content height
+  // (minHeight 0, so scrollHeight is never padded by a CSS minimum).
+  // One line is always exactly one line-height tall and therefore
+  // vertically centered by the bar's alignItems center; width, icons
+  // and bar position never change, so typing cannot jitter.
   useEffect(() => {
     const el = inputRef.current;
     if (!el) return;
-    if (!value) {
-      el.style.height = '';
-      return;
-    }
     el.style.height = 'auto';
     el.style.height = `${Math.min(el.scrollHeight, INPUT_MAX_HEIGHT)}px`;
   }, [value, inputRef]);
@@ -163,8 +138,11 @@ const ComposerBar = memo(({
 
 ComposerBar.displayName = 'ComposerBar';
 
-// Main component
-function Footer({ isCollapsed = false, onToggle }: FooterProps): JSX.Element {
+// Main component.
+// The composer is a single visual unit: only the bar renders. The legacy
+// header (chevron toggle, status text, interrupt button) is intentionally
+// not rendered; all behavior hooks stay wired so no logic is lost.
+function Footer({ isCollapsed = false }: FooterProps): JSX.Element {
   const [soundOn, setSoundOn] = useState(() => !audioManager.isMuted());
   const { endAllSpeaking } = useAvatarActivityState();
   const {
@@ -173,7 +151,6 @@ function Footer({ isCollapsed = false, onToggle }: FooterProps): JSX.Element {
     handleKeyPress,
     handleCompositionStart,
     handleCompositionEnd,
-    handleInterrupt,
     handleMicToggle,
     micOn,
     handleSend,
@@ -191,42 +168,22 @@ function Footer({ isCollapsed = false, onToggle }: FooterProps): JSX.Element {
 
   return (
     <Box {...footerStyles.footer.container(isCollapsed)}>
-      <ToggleButton isCollapsed={isCollapsed} onToggle={onToggle} />
-
       {!isCollapsed && (
-        <>
-          <Box {...footerStyles.footer.utilityRow}>
-            <AIStateIndicator />
-            <IconButton
-              aria-label="Interrupt"
-              title="Interrupt"
-              variant="ghost"
-              {...footerStyles.footer.utilityButton}
-              width={{ base: '32px', lg: '36px' }}
-              minW={{ base: '32px', lg: '36px' }}
-              height={{ base: '28px', lg: '32px' }}
-              onClick={handleInterrupt}
-            >
-              <IoHandRightSharp size="15" />
-            </IconButton>
-          </Box>
-
-          <ComposerBar
-            value={inputValue}
-            onChange={handleInputChange}
-            onKeyDown={handleKeyPress}
-            onCompositionStart={handleCompositionStart}
-            onCompositionEnd={handleCompositionEnd}
-            micOn={micOn}
-            soundOn={soundOn}
-            onMicToggle={handleMicToggle}
-            onSoundToggle={handleSoundToggle}
-            onSend={handleSend}
-            onFileSelect={handleFileSelect}
-            attachmentCount={attachmentCount}
-            inputRef={inputRef}
-          />
-        </>
+        <ComposerBar
+          value={inputValue}
+          onChange={handleInputChange}
+          onKeyDown={handleKeyPress}
+          onCompositionStart={handleCompositionStart}
+          onCompositionEnd={handleCompositionEnd}
+          micOn={micOn}
+          soundOn={soundOn}
+          onMicToggle={handleMicToggle}
+          onSoundToggle={handleSoundToggle}
+          onSend={handleSend}
+          onFileSelect={handleFileSelect}
+          attachmentCount={attachmentCount}
+          inputRef={inputRef}
+        />
       )}
     </Box>
   );
