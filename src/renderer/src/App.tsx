@@ -4,6 +4,7 @@ import { Box, Flex, ChakraProvider, defaultSystem, IconButton } from "@chakra-ui
 import { useState, useEffect, useRef } from "react";
 import { FiMenu, FiX } from "react-icons/fi";
 import { miliTokens } from "./theme/design-tokens";
+import { resolveComposerCollapsed } from "./utils/composer-visibility";
 // import Canvas from './components/canvas/canvas'; // Likely unused now
 import Sidebar from "./components/sidebar/sidebar";
 import Footer from "./components/footer/footer";
@@ -39,6 +40,9 @@ import { LifeStateWidget } from "./components/canvas/life-state-widget";
 function AppContent(): JSX.Element {
   const [showSidebar, setShowSidebar] = useState(() => window.innerWidth >= 1024);
   const [isFooterCollapsed, setIsFooterCollapsed] = useState(false);
+  // Mobile breakpoint mirrors layout.tsx (base < lg = 1024px). On mobile the
+  // sidebar is a full-screen overlay; the composer must collapse under it.
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 1024);
   const { mode } = useMode();
   const isElectron = window.api !== undefined;
   const live2dContainerRef = useRef<HTMLDivElement>(null);
@@ -47,11 +51,20 @@ function AppContent(): JSX.Element {
     const handleResize = () => {
       const vh = window.innerHeight * 0.01;
       document.documentElement.style.setProperty("--vh", `${vh}px`);
+      setIsMobile(window.innerWidth < 1024);
     };
     handleResize();
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
+
+  // Overlay open => composer collapsed. Closing the overlay restores the
+  // user's own collapsed state (never forces an expand). Pure derivation:
+  // no extra state, no loop, draft text untouched (Footer stays mounted).
+  const composerCollapsed = resolveComposerCollapsed(
+    isFooterCollapsed,
+    isMobile && showSidebar,
+  );
 
     
   document.documentElement.style.overflow = 'hidden';
@@ -185,10 +198,10 @@ function AppContent(): JSX.Element {
                 // Keep the fixed mobile controls above the interactive
                 // Live2D canvas so their touch events are never intercepted.
                 zIndex={50}
-                {...(isFooterCollapsed && layoutStyles.collapsedFooter)}
+                {...(composerCollapsed && layoutStyles.collapsedFooter)}
               >
                 <Footer
-                  isCollapsed={isFooterCollapsed}
+                  isCollapsed={composerCollapsed}
                   onToggle={() => setIsFooterCollapsed(!isFooterCollapsed)}
                 />
               </Box>
