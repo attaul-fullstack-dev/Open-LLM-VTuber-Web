@@ -5,8 +5,14 @@ interface FooterStyles {
   container: (isCollapsed: boolean) => SystemStyleObject
   /** Single unified composer bar. Grows vertically with multi-line input. */
   composerBar: SystemStyleObject
+  /** Expanded mode: same container, text on top, control row at bottom. */
+  composerBarExpanded: SystemStyleObject
+  /** Bottom control row of the expanded composer. Fixed height. */
+  controlRow: SystemStyleObject
   /** 1px warm-neutral separator between composer sections. */
   divider: SystemStyleObject
+  /** Short separator inside the bottom control row (never a tall wall). */
+  dividerShort: SystemStyleObject
   attachButton: (hasAttachment: boolean) => SystemStyleObject
   soundButton: (soundOn: boolean) => SystemStyleObject
   micButton: (micOn: boolean) => SystemStyleObject
@@ -65,11 +71,47 @@ export const footerStyles: {
       borderRadius: '20px',
       overflow: 'hidden',
     },
+    composerBarExpanded: {
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'stretch',
+      width: '100%',
+      minW: '0',
+      maxW: { base: '100%', lg: '760px' },
+      mx: { base: '0', lg: 'auto' },
+      px: '6px',
+      pt: '12px',
+      pb: '6px',
+      gap: '0',
+      bg: composer.bg,
+      border: '1px solid',
+      borderColor: composer.border,
+      borderRadius: '20px',
+      overflow: 'hidden',
+    },
+    controlRow: {
+      display: 'flex',
+      alignItems: 'center',
+      width: '100%',
+      minW: '0',
+      minHeight: '52px',
+      gap: '0',
+      flexShrink: 0,
+    },
     divider: {
       flexShrink: 0,
       width: '1px',
-      alignSelf: 'stretch',
-      my: '12px',
+      // Fixed short height, never stretched by the textarea: tall wrapped
+      // text must not turn these into full-height walls.
+      height: '32px',
+      alignSelf: 'center',
+      bg: composer.divider,
+    },
+    dividerShort: {
+      flexShrink: 0,
+      width: '1px',
+      height: '24px',
+      alignSelf: 'center',
       bg: composer.divider,
     },
     attachButton: (hasAttachment) => ({

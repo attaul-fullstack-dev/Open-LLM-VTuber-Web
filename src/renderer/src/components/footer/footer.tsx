@@ -10,6 +10,7 @@ import {
 } from 'react';
 import { useTranslation } from 'react-i18next';
 import { footerStyles } from './footer-styles';
+import { getComposerMode } from '@/utils/composer-visibility';
 import { useFooter } from '@/hooks/footer/use-footer';
 import { audioManager } from '@/utils/audio-manager';
 import { useAvatarActivityState } from '@/context/avatar-activity-context';
@@ -63,9 +64,9 @@ const ComposerBar = memo(({
 
   // Auto-expand: the element is sized to its exact content height
   // (minHeight 0, so scrollHeight is never padded by a CSS minimum).
-  // One line is always exactly one line-height tall and therefore
-  // vertically centered by the bar's alignItems center; width, icons
-  // and bar position never change, so typing cannot jitter.
+  // Compact stays exactly one line-height tall and centered by the bar;
+  // expanded text fills the upper area while the control row anchors
+  // the bottom. Width and bottom edge never move, so no jitter.
   useEffect(() => {
     const el = inputRef.current;
     if (!el) return;
@@ -73,8 +74,10 @@ const ComposerBar = memo(({
     el.style.height = `${Math.min(el.scrollHeight, INPUT_MAX_HEIGHT)}px`;
   }, [value, inputRef]);
 
-  return (
-    <Box {...footerStyles.footer.composerBar}>
+  const expanded = getComposerMode(value) === 'expanded';
+
+  const attachControl = (
+    <>
       <IconButton
         aria-label="Attach file"
         variant="ghost"
@@ -93,45 +96,86 @@ const ComposerBar = memo(({
           event.target.value = '';
         }}
       />
+    </>
+  );
+
+  const inputControl = (
+    <Textarea
+      ref={inputRef}
+      rows={1}
+      value={value}
+      onChange={onChange}
+      onKeyDown={onKeyDown}
+      onCompositionStart={onCompositionStart}
+      onCompositionEnd={onCompositionEnd}
+      placeholder={t('footer.typeYourMessage')}
+      {...footerStyles.footer.input}
+      flex={expanded ? 'none' : '1'}
+      width={expanded ? '100%' : undefined}
+      minW="0"
+    />
+  );
+
+  const soundControl = (
+    <IconButton
+      aria-label={soundOn ? 'Mute avatar voice' : 'Enable avatar voice'}
+      variant="ghost"
+      {...footerStyles.footer.soundButton(soundOn)}
+      onClick={onSoundToggle}
+    >
+      {soundOn ? <FiVolume2 size="20" /> : <FiVolumeX size="20" />}
+    </IconButton>
+  );
+
+  const micControl = (
+    <IconButton
+      aria-label={micOn ? 'Mute microphone' : 'Enable microphone'}
+      variant="ghost"
+      {...footerStyles.footer.micButton(micOn)}
+      onClick={onMicToggle}
+    >
+      {micOn ? <FiMic size="20" /> : <FiMicOff size="20" />}
+    </IconButton>
+  );
+
+  const sendControl = (
+    <IconButton
+      aria-label="Send message"
+      {...footerStyles.footer.sendButton}
+      onClick={onSend}
+    >
+      <FiArrowUp size="21" strokeWidth={2.5} />
+    </IconButton>
+  );
+
+  // Expanded: text occupies the upper area, controls anchor at the bottom
+  // of the SAME container. Short dividers only — never tall walls.
+  if (expanded) {
+    return (
+      <Box {...footerStyles.footer.composerBarExpanded}>
+        {inputControl}
+        <Box {...footerStyles.footer.controlRow}>
+          {attachControl}
+          <Box flex="1" minW="0" />
+          {soundControl}
+          <Box {...footerStyles.footer.dividerShort} />
+          {micControl}
+          {sendControl}
+        </Box>
+      </Box>
+    );
+  }
+
+  return (
+    <Box {...footerStyles.footer.composerBar}>
+      {attachControl}
       <Box {...footerStyles.footer.divider} />
-      <Textarea
-        ref={inputRef}
-        rows={1}
-        value={value}
-        onChange={onChange}
-        onKeyDown={onKeyDown}
-        onCompositionStart={onCompositionStart}
-        onCompositionEnd={onCompositionEnd}
-        placeholder={t('footer.typeYourMessage')}
-        {...footerStyles.footer.input}
-        flex="1"
-        minW="0"
-      />
+      {inputControl}
       <Box {...footerStyles.footer.divider} />
-      <IconButton
-        aria-label={soundOn ? 'Mute avatar voice' : 'Enable avatar voice'}
-        variant="ghost"
-        {...footerStyles.footer.soundButton(soundOn)}
-        onClick={onSoundToggle}
-      >
-        {soundOn ? <FiVolume2 size="20" /> : <FiVolumeX size="20" />}
-      </IconButton>
+      {soundControl}
       <Box {...footerStyles.footer.divider} />
-      <IconButton
-        aria-label={micOn ? 'Mute microphone' : 'Enable microphone'}
-        variant="ghost"
-        {...footerStyles.footer.micButton(micOn)}
-        onClick={onMicToggle}
-      >
-        {micOn ? <FiMic size="20" /> : <FiMicOff size="20" />}
-      </IconButton>
-      <IconButton
-        aria-label="Send message"
-        {...footerStyles.footer.sendButton}
-        onClick={onSend}
-      >
-        <FiArrowUp size="21" strokeWidth={2.5} />
-      </IconButton>
+      {micControl}
+      {sendControl}
     </Box>
   );
 });
