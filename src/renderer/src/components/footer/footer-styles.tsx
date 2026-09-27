@@ -5,10 +5,6 @@ interface FooterStyles {
   container: (isCollapsed: boolean) => SystemStyleObject
   /** Single unified composer bar. Grows vertically with multi-line input. */
   composerBar: SystemStyleObject
-  /** Expanded mode: same container, text on top, control row at bottom. */
-  composerBarExpanded: SystemStyleObject
-  /** Bottom control row of the expanded composer. Fixed height. */
-  controlRow: SystemStyleObject
   /** 1px warm-neutral separator between composer sections. */
   divider: SystemStyleObject
   /** Short separator inside the bottom control row (never a tall wall). */
@@ -18,6 +14,8 @@ interface FooterStyles {
   micButton: (micOn: boolean) => SystemStyleObject
   sendButton: SystemStyleObject
   input: SystemStyleObject
+  /** Expanded-mode textarea padding: comfortable inset inside the surface. */
+  inputExpanded: SystemStyleObject
 }
 
 interface AIIndicatorStyles {
@@ -62,41 +60,14 @@ export const footerStyles: {
       maxW: { base: '100%', lg: '760px' },
       mx: { base: '0', lg: 'auto' },
       minHeight: { base: '54px', lg: '58px' },
-      px: { base: '4px', lg: '8px' },
-      py: { base: '5px', lg: '6px' },
+      px: { base: miliTokens.space[1], lg: miliTokens.space[2] },
+      py: { base: miliTokens.space[1.5], lg: miliTokens.space[1.5] },
       gap: '0',
       bg: composer.bg,
       border: '1px solid',
       borderColor: composer.border,
       borderRadius: '20px',
       overflow: 'hidden',
-    },
-    composerBarExpanded: {
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'stretch',
-      width: '100%',
-      minW: '0',
-      maxW: { base: '100%', lg: '760px' },
-      mx: { base: '0', lg: 'auto' },
-      px: '6px',
-      pt: '12px',
-      pb: '6px',
-      gap: '0',
-      bg: composer.bg,
-      border: '1px solid',
-      borderColor: composer.border,
-      borderRadius: '20px',
-      overflow: 'hidden',
-    },
-    controlRow: {
-      display: 'flex',
-      alignItems: 'center',
-      width: '100%',
-      minW: '0',
-      minHeight: '52px',
-      gap: '0',
-      flexShrink: 0,
     },
     divider: {
       flexShrink: 0,
@@ -194,6 +165,13 @@ export const footerStyles: {
       whiteSpace: 'pre-wrap',
       overflowY: 'auto',
       overflowX: 'hidden',
+    },
+    inputExpanded: {
+      // Full-width text zone: inset from the container edge for a
+      // comfortable reading column aligned with the control row below.
+      px: '10px',
+      // Clearance above the control row without a divider line.
+      pb: miliTokens.space[2],
     },
   },
   aiIndicator: {

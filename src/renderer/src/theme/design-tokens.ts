@@ -43,6 +43,7 @@ export const miliTokens = {
   /** Base spacing unit = 4px. */
   space: {
     1: '4px',
+    1.5: '6px',
     2: '8px',
     3: '12px',
     4: '16px',

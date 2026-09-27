@@ -46,7 +46,7 @@ export const canvasStyles = {
       backgroundColor: miliTokens.color.elevated,
       width: 'fit-content',
       marginInline: 'auto',
-      padding: { base: '12px 42px 12px 17px', lg: '15px 46px 15px 26px' },
+      padding: { base: '10px 40px 10px 16px', lg: '15px 46px 15px 26px' },
       borderRadius: { base: miliTokens.radius.lg, lg: miliTokens.radius.lg },
       minWidth: { base: 'auto', lg: '60%' },
       maxWidth: { base: '92vw', lg: 'min(760px, 92%)' },
