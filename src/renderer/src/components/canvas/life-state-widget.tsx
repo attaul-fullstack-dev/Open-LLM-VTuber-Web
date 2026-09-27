@@ -1,9 +1,13 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useReducer, useRef } from "react";
 import { Box, Text, IconButton, HStack } from "@chakra-ui/react";
 import { FiRefreshCw, FiMove } from "react-icons/fi";
 import { useLifeState } from "@/context/life-state-context";
 import { useWebSocket } from "@/context/websocket-context";
-import { getUserTimezone } from "@/utils/user-timezone";
+import {
+  getUserTimezone,
+  formatUserClock,
+  userTimeZoneLabel,
+} from "@/utils/user-timezone";
 import {
   LIFE_STATE_MIN_WIDTH,
   LIFE_STATE_MIN_HEIGHT,
@@ -53,7 +57,7 @@ function Row({ label, value }: { label: string; value: string }) {
 export function LifeStateWidget() {
   const { enabled, snapshot, position, setPosition, size, setSize } =
     useLifeState();
-  const { sendMessage } = useWebSocket();
+  const { sendMessage, wsState } = useWebSocket();
   const boxRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<{
     pointerId: number;
@@ -70,15 +74,45 @@ export function LifeStateWidget() {
     startSize: LifeStateSize;
   } | null>(null);
   const sizeTimer = useRef<number | null>(null);
+  // Minute clock tick (single pending timeout, Stage-1 style: no interval).
+  const [, forceClockTick] = useReducer((x: number) => x + 1, 0);
+  // Latest socket state for the refresh guard without re-firing effects.
+  const wsStateRef = useRef(wsState);
+  wsStateRef.current = wsState;
 
   const refresh = useCallback(() => {
+    // Never send while connecting/reconnecting: sendMessage itself toasts
+    // error.websocketNotOpen on failure, which would be a false error here.
+    // The reconnect lifecycle (ws OPEN effect) owns the first fetch.
+    if (wsStateRef.current !== "OPEN") return;
     sendMessage({ type: "fetch-world-state", timezone: getUserTimezone() });
   }, [sendMessage]);
 
-  // Fetch authoritative snapshot when the widget becomes visible.
+  // Fetch authoritative snapshot when the widget becomes visible and the
+  // socket is already open. On fresh connects the ws OPEN effect fetches.
   useEffect(() => {
     if (enabled) refresh();
   }, [enabled, refresh]);
+
+  // Keep the CURRENT TIME row fresh on minute boundaries while visible.
+  // One pending timeout at a time; cleared when hidden/unmounted.
+  useEffect(() => {
+    if (!enabled) return;
+    let timer: number | null = null;
+    const schedule = () => {
+      const now = new Date();
+      const delay =
+        60000 - (now.getSeconds() * 1000 + now.getMilliseconds()) + 50;
+      timer = window.setTimeout(() => {
+        forceClockTick();
+        schedule();
+      }, delay);
+    };
+    schedule();
+    return () => {
+      if (timer !== null) window.clearTimeout(timer);
+    };
+  }, [enabled]);
 
   // Persist resizes (debounced trailing write, not a loop).
   useEffect(() => {
@@ -241,6 +275,9 @@ export function LifeStateWidget() {
   if (!enabled) return null;
 
   const energy = typeof snapshot?.energy === "number" ? snapshot.energy : null;
+  // Same zone the backend uses for time_context; re-read each render so the
+  // clock row always matches the active session timezone.
+  const userTz = getUserTimezone();
 
   return (
     <Box
@@ -260,25 +297,26 @@ export function LifeStateWidget() {
       border="1px solid rgba(255,255,255,0.14)"
       borderRadius="md"
       p={2}
-      // touch-action none scopes gesture control to the widget only:
-      // press-and-hold drag + two-finger pinch work on touch without the
-      // browser stealing the gesture, while scrolling elsewhere is untouched.
-      touchAction="none"
       onPointerDown={onBoxPointerDown}
       onPointerMove={onBoxPointerMove}
       onPointerUp={onBoxPointerUp}
       onPointerCancel={onBoxPointerUp}
-      style={
-        position
+      style={{
+        // touchAction none (inline style: guaranteed CSS) scopes gesture
+        // control to the widget only: press-and-hold drag + two-finger
+        // pinch anywhere on the panel work on touch without the browser
+        // stealing the gesture, while scrolling elsewhere is untouched.
+        touchAction: "none",
+        ...(position
           ? { left: position.x, top: position.y }
-          : { right: "12px", top: "64px" }
-      }
+          : { right: "12px", top: "64px" }),
+      }}
     >
       <HStack
         justify="space-between"
         mb={1}
         cursor="move"
-        touchAction="none"
+        style={{ touchAction: "none" }}
         onPointerDown={onHeaderPointerDown}
         userSelect="none"
       >
@@ -325,6 +363,10 @@ export function LifeStateWidget() {
           <Row label="Mood" value={snapshot.mood ?? "—"} />
           <Row label="Location" value={snapshot.location ?? "—"} />
           <Row label="Time" value={snapshot.time_context ?? "—"} />
+          <Row
+            label="Current Time"
+            value={`${formatUserClock(new Date(), userTz)} ${userTimeZoneLabel(userTz)}`}
+          />
           <Row
             label="Started"
             value={formatLocalTime(snapshot.activity_started_at)}
