@@ -170,3 +170,13 @@ export function saveLifeStatePreferences(prefs: LifeStatePreferences): void {
     console.error("Error saving life state preferences:", error);
   }
 }
+
+/**
+ * Guard for Life State fetches: only send while the shared socket is OPEN.
+ * sendMessage itself toasts error.websocketNotOpen on failure, so callers
+ * must skip (not send) while connecting/reconnecting. The reconnect
+ * lifecycle (ws OPEN effect) owns the first fetch after (re)connect.
+ */
+export function canFetchLifeState(wsState: string | null | undefined): boolean {
+  return wsState === "OPEN";
+}

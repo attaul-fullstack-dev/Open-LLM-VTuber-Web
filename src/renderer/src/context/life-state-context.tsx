@@ -15,16 +15,8 @@ import {
 } from "@/utils/life-state-preference";
 
 /** Authoritative backend snapshot (read-only mirror, never edited locally). */
-export interface LifeStateSnapshot {
-  location?: string;
-  activity?: string;
-  energy?: number;
-  mood?: string;
-  time_context?: string;
-  activity_started_at?: string;
-  last_update_at?: string;
-  error?: string;
-}
+export type { LifeStateSnapshot } from "@/utils/life-state-sync";
+import type { LifeStateSnapshot } from "@/utils/life-state-sync";
 
 interface LifeStateState {
   /** Widget visibility (persisted). OFF hides display only. */

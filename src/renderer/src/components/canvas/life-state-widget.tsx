@@ -15,6 +15,7 @@ import {
   LIFE_STATE_MAX_HEIGHT,
   applyDragDelta,
   applyResizeDelta,
+  canFetchLifeState,
   clampLifeStatePosition,
 } from "@/utils/life-state-preference";
 
@@ -133,7 +134,7 @@ export function LifeStateWidget() {
     // Never send while connecting/reconnecting: sendMessage itself toasts
     // error.websocketNotOpen on failure, which would be a false error here.
     // The reconnect lifecycle (ws OPEN effect) owns the first fetch.
-    if (wsStateRef.current !== "OPEN") return;
+    if (!canFetchLifeState(wsStateRef.current)) return;
     sendMessage({ type: "fetch-world-state", timezone: getUserTimezone() });
   }, [sendMessage]);
 

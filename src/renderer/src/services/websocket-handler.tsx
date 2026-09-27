@@ -31,6 +31,7 @@ import {
 import { subtitlePlaybackCoordinator } from '@/utils/subtitle-playback';
 import { loadVoiceOutputEnabled } from '@/utils/voice-output-preference';
 import { useLifeState } from '@/context/life-state-context';
+import { toLifeSnapshot } from '@/utils/life-state-sync';
 import { getUserTimezone } from '@/utils/user-timezone';
 
 function WebSocketHandler({ children }: { children: React.ReactNode }) {
@@ -409,16 +410,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
         break;
       case 'world-state':
         // Authoritative World/Life snapshot for the observability widget.
-        setLifeSnapshot({
-          location: message.location,
-          activity: message.activity,
-          energy: message.energy,
-          mood: message.mood,
-          time_context: message.time_context,
-          activity_started_at: message.activity_started_at,
-          last_update_at: message.last_update_at,
-          error: message.error,
-        });
+        setLifeSnapshot(toLifeSnapshot(message));
         break;
       case 'interrupt-signal':
         // Handle forwarded interrupt
