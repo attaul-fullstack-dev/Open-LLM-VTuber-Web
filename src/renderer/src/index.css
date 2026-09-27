@@ -2,7 +2,7 @@ body, html {
     margin: 0;
     padding: 0;
     overflow: visible;
-    background-color: #07111f;
+    background-color: #07111F;
 }
 
 /* Android Chrome otherwise paints a highlight over the full interactive
@@ -19,5 +19,5 @@ canvas {
 #root {
     width: 100%;
     height: 100%;
-    background: #07111f;
+    background: #07111F;
 }

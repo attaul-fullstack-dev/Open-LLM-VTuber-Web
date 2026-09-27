@@ -3,6 +3,7 @@
 import { Box, Flex, ChakraProvider, defaultSystem, IconButton } from "@chakra-ui/react";
 import { useState, useEffect, useRef } from "react";
 import { FiMenu, FiX } from "react-icons/fi";
+import { miliTokens } from "./theme/design-tokens";
 // import Canvas from './components/canvas/canvas'; // Likely unused now
 import Sidebar from "./components/sidebar/sidebar";
 import Footer from "./components/footer/footer";
@@ -150,10 +151,12 @@ function AppContent(): JSX.Element {
                 width="44px"
                 height="44px"
                 borderRadius="full"
-                color="white"
-                bg="rgba(8, 15, 28, .68)"
-                backdropFilter="blur(14px)"
-                border="1px solid rgba(255,255,255,.14)"
+                color={miliTokens.color.textSecondary}
+                bg="rgba(10, 18, 32, 0.6)"
+                backdropFilter={miliTokens.blur.card}
+                border="1px solid"
+                borderColor={miliTokens.color.border}
+                _hover={{ color: miliTokens.color.textPrimary }}
                 onClick={() => setShowSidebar(!showSidebar)}
               >
                 {showSidebar ? <FiX /> : <FiMenu />}
@@ -168,7 +171,7 @@ function AppContent(): JSX.Element {
                 position="absolute"
                 bottom={isFooterCollapsed
                   ? "39px"
-                  : { base: "calc(84px + env(safe-area-inset-bottom, 0px))", lg: "135px" }}
+                  : { base: "calc(104px + env(safe-area-inset-bottom, 0px))", lg: "135px" }}
                 left="50%"
                 transform="translateX(-50%)"
                 zIndex={10}

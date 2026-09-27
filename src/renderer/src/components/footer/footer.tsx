@@ -1,6 +1,6 @@
 /* eslint-disable react/require-default-props */
 import {
-  Box, Textarea, IconButton, HStack,
+  Box, Textarea, IconButton,
 } from '@chakra-ui/react';
 import {
   BsMicFill, BsMicMuteFill, BsPaperclip, BsVolumeUpFill, BsVolumeMuteFill,
@@ -12,7 +12,6 @@ import {
 } from 'react';
 import { FiSend } from 'react-icons/fi';
 import { useTranslation } from 'react-i18next';
-import { InputGroup } from '@/components/ui/input-group';
 import { footerStyles } from './footer-styles';
 import AIStateIndicator from './ai-state-indicator';
 import { useFooter } from '@/hooks/footer/use-footer';
@@ -30,22 +29,17 @@ interface ToggleButtonProps {
   onToggle?: () => void
 }
 
-interface ActionButtonsProps {
-  micOn: boolean
-  soundOn: boolean
-  onMicToggle: () => void
-  onSoundToggle: () => void
-  onInterrupt: () => void
-}
-
-interface MessageInputProps {
+interface ComposerBarProps {
   value: string
   onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void
   onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void
   onCompositionStart: () => void
   onCompositionEnd: () => void
-  soundOn?: boolean
-  onSoundToggle?: () => void
+  micOn: boolean
+  soundOn: boolean
+  onMicToggle: () => void
+  onSoundToggle: () => void
+  onSend: () => void
   onFileSelect?: (files: FileList | null) => void
   attachmentCount?: number
   inputRef: RefObject<HTMLTextAreaElement>
@@ -56,7 +50,6 @@ const ToggleButton = memo(({ isCollapsed, onToggle }: ToggleButtonProps) => (
   <Box
     {...footerStyles.footer.toggleButton}
     onClick={onToggle}
-    color="whiteAlpha.500"
     style={{
       transform: isCollapsed ? 'rotate(180deg)' : 'rotate(0deg)',
     }}
@@ -67,127 +60,87 @@ const ToggleButton = memo(({ isCollapsed, onToggle }: ToggleButtonProps) => (
 
 ToggleButton.displayName = 'ToggleButton';
 
-const ActionButtons = memo(({
-  micOn, soundOn, onMicToggle, onSoundToggle, onInterrupt,
-}: ActionButtonsProps) => (
-  <HStack gap={2}>
-    <IconButton
-      bg={micOn ? 'green.500' : 'red.500'}
-      {...footerStyles.footer.actionButton}
-      onClick={onMicToggle}
-    >
-      {micOn ? <BsMicFill /> : <BsMicMuteFill />}
-    </IconButton>
-    <IconButton
-      aria-label={soundOn ? 'Mute avatar voice' : 'Enable avatar voice'}
-      bg={soundOn ? 'blue.500' : 'gray.600'}
-      {...footerStyles.footer.actionButton}
-      onClick={onSoundToggle}
-    >
-      {soundOn ? <BsVolumeUpFill /> : <BsVolumeMuteFill />}
-    </IconButton>
-    <IconButton
-      aria-label="Raise hand"
-      bg="yellow.500"
-      {...footerStyles.footer.actionButton}
-      onClick={onInterrupt}
-    >
-      <IoHandRightSharp size="24" />
-    </IconButton>
-  </HStack>
-));
-
-ActionButtons.displayName = 'ActionButtons';
-
-const MessageInput = memo(({
+// Single unified composer bar: attach | input | sound | mic | send.
+// Same controls on mobile and desktop, only sizes differ.
+const ComposerBar = memo(({
   value,
   onChange,
   onKeyDown,
   onCompositionStart,
   onCompositionEnd,
+  micOn,
   soundOn,
+  onMicToggle,
   onSoundToggle,
+  onSend,
   onFileSelect,
   attachmentCount = 0,
   inputRef,
-}: MessageInputProps) => {
+}: ComposerBarProps) => {
   const { t } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   return (
-    <InputGroup flex={1} minW="0" height="100%">
-      <Box
-        display="flex"
-        alignItems="center"
-        width="100%"
-        minW="0"
-        height={{ base: '52px', lg: '80px' }}
-        px={{ base: '1', lg: '1' }}
-        bg={{ base: 'rgba(255,255,255,.09)', lg: 'gray.700' }}
-        border="1px solid"
-        borderColor={{ base: 'whiteAlpha.100', lg: 'transparent' }}
-        borderRadius={{ base: '26px', lg: '12px' }}
-        overflow="hidden"
+    <Box {...footerStyles.footer.composerBar}>
+      <IconButton
+        aria-label="Attach file"
+        variant="ghost"
+        {...footerStyles.footer.ghostButton}
+        color={attachmentCount ? '#B9A8FF' : undefined}
+        onClick={() => fileInputRef.current?.click()}
       >
-        <IconButton
-          aria-label="Attach file"
-          variant="ghost"
-          flexShrink={0}
-          width={{ base: '34px', lg: '40px' }}
-          minW={{ base: '34px', lg: '40px' }}
-          height={{ base: '34px', lg: '40px' }}
-          borderRadius="full"
-          color={attachmentCount ? 'purple.300' : 'whiteAlpha.700'}
-          bg="transparent"
-          onClick={() => fileInputRef.current?.click()}
-        >
-          <BsPaperclip size="20" />
-        </IconButton>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          hidden
-          onChange={(event) => {
-            onFileSelect?.(event.target.files);
-            event.target.value = '';
-          }}
-        />
-        <Textarea
-          ref={inputRef}
-          rows={1}
-          value={value}
-          onChange={onChange}
-          onKeyDown={onKeyDown}
-          onCompositionStart={onCompositionStart}
-          onCompositionEnd={onCompositionEnd}
-          placeholder={t('footer.typeYourMessage')}
-          {...footerStyles.footer.input}
-          flex="1"
-          minW="0"
-        />
-        {onSoundToggle && (
-          <IconButton
-            aria-label={soundOn ? 'Mute avatar voice' : 'Enable avatar voice'}
-            flexShrink={0}
-            width={{ base: '32px', lg: '40px' }}
-            minW={{ base: '32px', lg: '40px' }}
-            height={{ base: '32px', lg: '40px' }}
-            borderRadius="full"
-            color={soundOn ? 'blue.300' : 'whiteAlpha.500'}
-            bg="transparent"
-            _hover={{ bg: 'whiteAlpha.100' }}
-            onClick={onSoundToggle}
-          >
-            {soundOn ? <BsVolumeUpFill size="17" /> : <BsVolumeMuteFill size="17" />}
-          </IconButton>
-        )}
-      </Box>
-    </InputGroup>
+        <BsPaperclip size="19" />
+      </IconButton>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        hidden
+        onChange={(event) => {
+          onFileSelect?.(event.target.files);
+          event.target.value = '';
+        }}
+      />
+      <Textarea
+        ref={inputRef}
+        rows={1}
+        value={value}
+        onChange={onChange}
+        onKeyDown={onKeyDown}
+        onCompositionStart={onCompositionStart}
+        onCompositionEnd={onCompositionEnd}
+        placeholder={t('footer.typeYourMessage')}
+        {...footerStyles.footer.input}
+        flex="1"
+        minW="0"
+      />
+      <IconButton
+        aria-label={soundOn ? 'Mute avatar voice' : 'Enable avatar voice'}
+        variant="ghost"
+        {...footerStyles.footer.ghostButton}
+        onClick={onSoundToggle}
+      >
+        {soundOn ? <BsVolumeUpFill size="17" /> : <BsVolumeMuteFill size="17" />}
+      </IconButton>
+      <IconButton
+        aria-label={micOn ? 'Mute microphone' : 'Enable microphone'}
+        {...footerStyles.footer.micButton(micOn)}
+        onClick={onMicToggle}
+      >
+        {micOn ? <BsMicFill /> : <BsMicMuteFill />}
+      </IconButton>
+      <IconButton
+        aria-label="Send message"
+        {...footerStyles.footer.sendButton}
+        onClick={onSend}
+      >
+        <FiSend size="19" />
+      </IconButton>
+    </Box>
   );
 });
 
-MessageInput.displayName = 'MessageInput';
+ComposerBar.displayName = 'ComposerBar';
 
 // Main component
 function Footer({ isCollapsed = false, onToggle }: FooterProps): JSX.Element {
@@ -219,66 +172,41 @@ function Footer({ isCollapsed = false, onToggle }: FooterProps): JSX.Element {
     <Box {...footerStyles.footer.container(isCollapsed)}>
       <ToggleButton isCollapsed={isCollapsed} onToggle={onToggle} />
 
-      <Box display={{ base: 'none', lg: 'block' }} pt="0" px="4">
-        <HStack width="100%" gap={4}>
-          <Box>
-            <Box mb="1.5">
-              <AIStateIndicator />
-            </Box>
-            <ActionButtons
-              micOn={micOn}
-              soundOn={soundOn}
-              onMicToggle={handleMicToggle}
-              onSoundToggle={handleSoundToggle}
-              onInterrupt={handleInterrupt}
-            />
+      {!isCollapsed && (
+        <>
+          <Box {...footerStyles.footer.utilityRow}>
+            <AIStateIndicator />
+            <IconButton
+              aria-label="Interrupt"
+              title="Interrupt"
+              variant="ghost"
+              {...footerStyles.footer.ghostButton}
+              width={{ base: '32px', lg: '36px' }}
+              minW={{ base: '32px', lg: '36px' }}
+              height={{ base: '28px', lg: '32px' }}
+              onClick={handleInterrupt}
+            >
+              <IoHandRightSharp size="15" />
+            </IconButton>
           </Box>
 
-          <MessageInput
+          <ComposerBar
             value={inputValue}
             onChange={handleInputChange}
             onKeyDown={handleKeyPress}
             onCompositionStart={handleCompositionStart}
             onCompositionEnd={handleCompositionEnd}
-            onFileSelect={handleFileSelect}
-            attachmentCount={attachmentCount}
-            inputRef={inputRef}
-          />
-        </HStack>
-      </Box>
-
-      <Box display={{ base: 'block', lg: 'none' }} px="1.5" pb="1.5">
-        <HStack width="100%" gap="1.5">
-          <IconButton
-            aria-label={micOn ? 'Mute microphone' : 'Enable microphone'}
-            bg={micOn ? 'green.500' : 'red.500'}
-            {...footerStyles.footer.actionButton}
-            onClick={handleMicToggle}
-          >
-            {micOn ? <BsMicFill /> : <BsMicMuteFill />}
-          </IconButton>
-          <MessageInput
-            value={inputValue}
-            onChange={handleInputChange}
-            onKeyDown={handleKeyPress}
-            onCompositionStart={handleCompositionStart}
-            onCompositionEnd={handleCompositionEnd}
+            micOn={micOn}
             soundOn={soundOn}
+            onMicToggle={handleMicToggle}
             onSoundToggle={handleSoundToggle}
+            onSend={handleSend}
             onFileSelect={handleFileSelect}
             attachmentCount={attachmentCount}
             inputRef={inputRef}
           />
-          <IconButton
-            aria-label="Send message"
-            bg="purple.500"
-            {...footerStyles.footer.actionButton}
-            onClick={handleSend}
-          >
-            <FiSend size="21" />
-          </IconButton>
-        </HStack>
-      </Box>
+        </>
+      )}
     </Box>
   );
 }

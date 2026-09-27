@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useReducer, useRef } from "react";
 import { Box, Text, IconButton, HStack } from "@chakra-ui/react";
 import { FiRefreshCw, FiMove } from "react-icons/fi";
+import { miliTokens } from "@/theme/design-tokens";
 import { useLifeState } from "@/context/life-state-context";
 import { useWebSocket } from "@/context/websocket-context";
 import {
@@ -69,8 +70,8 @@ function ResizeGrip({
         bottom="5px"
         width="14px"
         height="14px"
-        borderRight="2px solid rgba(255,255,255,0.55)"
-        borderBottom="2px solid rgba(255,255,255,0.55)"
+        borderRight={`2px solid ${miliTokens.color.textMuted}`}
+        borderBottom={`2px solid ${miliTokens.color.textMuted}`}
         borderBottomRightRadius="4px"
       />
       <Box
@@ -79,8 +80,8 @@ function ResizeGrip({
         bottom="10px"
         width="8px"
         height="8px"
-        borderRight="2px solid rgba(255,255,255,0.3)"
-        borderBottom="2px solid rgba(255,255,255,0.3)"
+        borderRight={`2px solid ${miliTokens.color.borderStrong}`}
+        borderBottom={`2px solid ${miliTokens.color.borderStrong}`}
         borderBottomRightRadius="3px"
       />
     </Box>
@@ -359,10 +360,11 @@ export function LifeStateWidget() {
       width={`${LIFE_STATE_BASE_WIDTH}px`}
       maxWidth="calc(100vw - 16px)"
       overflow="auto"
-      bg="rgba(8, 15, 28, 0.82)"
-      backdropFilter="blur(12px)"
-      border="1px solid rgba(255,255,255,0.14)"
-      borderRadius="md"
+      bg={miliTokens.color.elevated}
+      backdropFilter={miliTokens.blur.card}
+      border="1px solid"
+      borderColor={miliTokens.color.border}
+      borderRadius={miliTokens.radius.md}
       p={2}
       pb={6}
       onPointerDown={onPanelPointerDown}
@@ -392,7 +394,7 @@ export function LifeStateWidget() {
         userSelect="none"
       >
         <HStack gap={1}>
-          <FiMove size={12} color="rgba(255,255,255,0.5)" />
+          <FiMove size={12} color={miliTokens.color.textMuted} />
           <Text
             fontSize="11px"
             fontWeight="bold"

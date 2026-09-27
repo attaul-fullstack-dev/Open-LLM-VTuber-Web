@@ -1,11 +1,18 @@
 import { SystemStyleObject } from '@chakra-ui/react';
+import { miliTokens } from '@/theme/design-tokens';
 
 interface FooterStyles {
   container: (isCollapsed: boolean) => SystemStyleObject
   toggleButton: SystemStyleObject
-  actionButton: SystemStyleObject
+  /** Slim row above the bar: status text left, interrupt ghost right. */
+  utilityRow: SystemStyleObject
+  statusText: SystemStyleObject
+  /** Single unified composer bar. */
+  composerBar: SystemStyleObject
+  ghostButton: SystemStyleObject
+  micButton: (micOn: boolean) => SystemStyleObject
+  sendButton: SystemStyleObject
   input: SystemStyleObject
-  attachButton: SystemStyleObject
 }
 
 interface AIIndicatorStyles {
@@ -19,10 +26,12 @@ export const footerStyles: {
 } = {
   footer: {
     container: (isCollapsed) => ({
-      bg: isCollapsed ? 'transparent' : { base: 'rgba(10, 18, 31, .88)', lg: 'gray.800' },
-      backdropFilter: { base: 'blur(18px)', lg: 'none' },
-      borderRadius: isCollapsed ? 'none' : { base: '28px', lg: '16px 16px 0 0' },
-      border: isCollapsed ? 'none' : { base: '1px solid rgba(255,255,255,.12)', lg: 'none' },
+      bg: isCollapsed ? 'transparent' : { base: miliTokens.color.elevated, lg: miliTokens.color.background },
+      backdropFilter: { base: miliTokens.blur.bar, lg: 'none' },
+      borderRadius: isCollapsed ? 'none' : { base: miliTokens.radius.lg, lg: '0' },
+      border: isCollapsed ? 'none' : { base: '1px solid', lg: 'none' },
+      borderColor: isCollapsed ? undefined : { base: miliTokens.color.borderStrong, lg: undefined },
+      borderTop: isCollapsed ? undefined : { base: undefined, lg: `1px solid ${miliTokens.color.border}` },
       transform: isCollapsed
         ? { base: 'translateY(calc(100% - 10px))', lg: 'translateY(calc(100% - 24px))' }
         : 'translateY(0)',
@@ -33,85 +42,122 @@ export const footerStyles: {
       pointerEvents: 'auto',
       touchAction: 'manipulation',
       overflow: 'hidden',
-      pb: { base: '0', lg: '4' },
-      boxShadow: isCollapsed ? 'none' : { base: '0 12px 36px rgba(0,0,0,.28)', lg: 'none' },
+      px: { base: '1.5', lg: '4' },
+      pb: { base: '1.5', lg: '3' },
+      boxShadow: isCollapsed ? 'none' : { base: miliTokens.shadow.float, lg: 'none' },
     }),
     toggleButton: {
-      height: { base: '7px', lg: '24px' },
+      height: { base: '7px', lg: '20px' },
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
       cursor: 'pointer',
-      color: 'whiteAlpha.700',
-      _hover: { color: 'white' },
+      color: miliTokens.color.textMuted,
+      _hover: { color: miliTokens.color.textPrimary },
       bg: 'transparent',
       transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
     },
-    actionButton: {
-      borderRadius: { base: 'full', lg: '12px' },
-      width: { base: '44px', lg: '50px' },
-      height: { base: '44px', lg: '50px' },
-      minW: { base: '44px', lg: '50px' },
+    utilityRow: {
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      px: { base: '6px', lg: '2px' },
+      pb: '2px',
+      minH: '26px',
+      // When the status text hides (thinking pill takes over), keep
+      // the interrupt button pinned right.
+      '& > :last-child': { marginLeft: 'auto' },
+    },
+    statusText: {
+      fontSize: miliTokens.font.xs,
+      color: miliTokens.color.textSecondary,
+      whiteSpace: 'nowrap',
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
+    },
+    composerBar: {
+      display: 'flex',
+      alignItems: 'center',
+      width: '100%',
+      minW: '0',
+      height: { base: '50px', lg: '56px' },
+      px: { base: '1', lg: '1.5' },
+      gap: '1px',
+      bg: miliTokens.color.surface,
+      border: '1px solid',
+      borderColor: miliTokens.color.border,
+      borderRadius: miliTokens.radius.pill,
+      overflow: 'hidden',
+    },
+    ghostButton: {
       flexShrink: 0,
-      position: 'relative',
-      zIndex: 2,
-      pointerEvents: 'auto',
-      touchAction: 'manipulation',
-      boxShadow: { base: '0 4px 14px rgba(0,0,0,.18)', lg: 'none' },
+      width: { base: '36px', lg: '40px' },
+      minW: { base: '36px', lg: '40px' },
+      height: { base: '36px', lg: '40px' },
+      borderRadius: 'full',
+      color: miliTokens.color.textSecondary,
+      bg: 'transparent',
+      _hover: { bg: miliTokens.color.surface, color: miliTokens.color.textPrimary },
+      _active: { bg: miliTokens.color.surface },
+    },
+    micButton: (micOn) => ({
+      flexShrink: 0,
+      width: { base: miliTokens.control.touch, lg: miliTokens.control.desktop },
+      minW: { base: miliTokens.control.touch, lg: miliTokens.control.desktop },
+      height: { base: miliTokens.control.touch, lg: miliTokens.control.desktop },
+      borderRadius: 'full',
+      color: micOn ? miliTokens.color.successText : miliTokens.color.dangerText,
+      bg: micOn ? miliTokens.color.successSoft : miliTokens.color.dangerSoft,
+      _hover: { filter: 'brightness(1.15)' },
+      _active: { filter: 'brightness(1.25)' },
+    }),
+    sendButton: {
+      flexShrink: 0,
+      width: { base: miliTokens.control.touch, lg: miliTokens.control.desktop },
+      minW: { base: miliTokens.control.touch, lg: miliTokens.control.desktop },
+      height: { base: miliTokens.control.touch, lg: miliTokens.control.desktop },
+      borderRadius: 'full',
+      color: 'white',
+      bg: miliTokens.color.accent,
+      _hover: { filter: 'brightness(1.12)' },
+      _active: { filter: 'brightness(1.2)' },
+      _disabled: { opacity: 0.45 },
     },
     input: {
       bg: 'transparent',
       border: 'none',
-      height: { base: '52px', lg: '80px' },
+      height: { base: '50px', lg: '56px' },
       borderRadius: '0',
-      fontSize: { base: '15px', lg: '18px' },
+      fontSize: { base: miliTokens.font.md, lg: miliTokens.font.lg },
       pl: { base: '1.5', lg: '2' },
       pr: { base: '1', lg: '2' },
-      color: 'whiteAlpha.900',
+      color: miliTokens.color.textPrimary,
       _placeholder: {
-        color: 'whiteAlpha.500',
+        color: miliTokens.color.textMuted,
       },
       _focus: {
         border: 'none',
         bg: 'transparent',
       },
       resize: 'none',
-      minHeight: { base: '52px', lg: '80px' },
-      maxHeight: { base: '52px', lg: '80px' },
-      py: { base: '14px', lg: '24px' },
+      minHeight: { base: '50px', lg: '56px' },
+      maxHeight: { base: '50px', lg: '56px' },
+      py: { base: '13px', lg: '16px' },
       lineHeight: '1.4',
       whiteSpace: 'pre-wrap',
       overflowY: 'auto',
       overflowX: 'hidden',
     },
-    attachButton: {
-      position: 'absolute',
-      left: '1',
-      top: '50%',
-      transform: 'translateY(-50%)',
-      color: 'whiteAlpha.700',
-      zIndex: 2,
-      _hover: {
-        bg: 'transparent',
-        color: 'white',
-      },
-    },
   },
   aiIndicator: {
     container: {
-      bg: '#7C5CFF',
-      color: 'white',
-      width: '110px',
-      height: '30px',
-      borderRadius: '12px',
       display: 'flex',
       alignItems: 'center',
-      justifyContent: 'center',
-      boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
-      overflow: 'hidden',
+      minW: '0',
     },
     text: {
-      fontSize: '12px',
+      fontSize: miliTokens.font.xs,
+      color: miliTokens.color.textSecondary,
       whiteSpace: 'nowrap',
       overflow: 'hidden',
       textOverflow: 'ellipsis',
