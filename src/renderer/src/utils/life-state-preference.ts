@@ -31,51 +31,46 @@ export interface LifeStatePreferences {
 }
 
 // Reasonable bounds so the widget stays readable but can never swallow the app.
-export const LIFE_STATE_MIN_WIDTH = 200;
-export const LIFE_STATE_MIN_HEIGHT = 150;
-export const LIFE_STATE_MAX_WIDTH = 380;
-export const LIFE_STATE_MAX_HEIGHT = 520;
+export const LIFE_STATE_MIN_WIDTH = 280;
+export const LIFE_STATE_MIN_HEIGHT = 200;
+export const LIFE_STATE_MAX_WIDTH = 520;
+export const LIFE_STATE_MAX_HEIGHT = 700;
 // Minimum visible strip (px) kept inside the viewport (boundary protection).
 export const LIFE_STATE_VISIBLE_STRIP = 80;
 
-/** Single active pointer tracked for drag/pinch gestures. */
-export interface LifeStatePointer {
-  id: number;
-  x: number;
-  y: number;
-}
-
-/** Distance between two pointers (px). Zero when degenerate. */
-export function pinchDistance(
-  a: LifeStatePointer,
-  b: LifeStatePointer,
-): number {
-  const dx = a.x - b.x;
-  const dy = a.y - b.y;
-  return Math.sqrt(dx * dx + dy * dy);
+/**
+ * New size after dragging the bottom-right resize handle (pure,
+ * unit-testable). Adds the pointer delta to the gesture-start size, then
+ * hard-clamps to MIN/MAX: shrinking past MIN stops at MIN, growing past
+ * MAX stops at MAX. Drag right/down grows, left/up shrinks.
+ */
+export function applyResizeDelta(
+  startSize: LifeStateSize,
+  deltaX: number,
+  deltaY: number,
+): LifeStateSize {
+  const dx = Number.isFinite(deltaX) ? deltaX : 0;
+  const dy = Number.isFinite(deltaY) ? deltaY : 0;
+  return clampLifeStateSize({
+    width: startSize.width + dx,
+    height: startSize.height + dy,
+  });
 }
 
 /**
- * Size after a pinch gesture (pure, unit-testable).
- * Scales the gesture-start size by the finger-distance ratio, then clamps
- * to the readable widget bounds. Pinch out grows, pinch in shrinks.
+ * New panel position after a drag (pure, unit-testable). Adds the pointer
+ * delta to the gesture-start position; viewport clamping is applied by the
+ * caller via clampLifeStatePosition.
  */
-export function pinchResizedSize(
-  startDistance: number,
-  currentDistance: number,
-  startSize: LifeStateSize,
-): LifeStateSize {
-  if (!Number.isFinite(startDistance) || startDistance <= 0) {
-    return clampLifeStateSize(startSize);
-  }
-  const ratio =
-    Number.isFinite(currentDistance) && currentDistance > 0
-      ? currentDistance / startDistance
-      : 1;
-  return clampLifeStateSize({
-    width: startSize.width * ratio,
-    height: startSize.height * ratio,
-  });
+export function applyDragDelta(
+  base: LifeStatePosition,
+  from: LifeStatePosition,
+  to: LifeStatePosition,
+): LifeStatePosition {
+  return {
+    x: base.x + (to.x - from.x),
+    y: base.y + (to.y - from.y),
+  };
 }
 
 export const DEFAULT_LIFE_STATE_PREFS: LifeStatePreferences = {

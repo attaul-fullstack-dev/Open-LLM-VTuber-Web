@@ -4,12 +4,14 @@ import {
   LIFE_STATE_PREF_KEY,
   DEFAULT_LIFE_STATE_PREFS,
   LIFE_STATE_MIN_WIDTH,
+  LIFE_STATE_MIN_HEIGHT,
   LIFE_STATE_MAX_WIDTH,
+  LIFE_STATE_MAX_HEIGHT,
+  applyDragDelta,
+  applyResizeDelta,
   clampLifeStatePosition,
   clampLifeStateSize,
   loadLifeStatePreferences,
-  pinchDistance,
-  pinchResizedSize,
   saveLifeStatePreferences,
 } from "@/utils/life-state-preference";
 
@@ -44,16 +46,32 @@ test("ON/OFF roundtrips without touching other fields", () => {
   assert.deepEqual(loaded.position, { x: 10, y: 20 });
 });
 
+test("saved size and position restore on initialization", () => {
+  storage.clear();
+  saveLifeStatePreferences({
+    enabled: true,
+    position: { x: 300, y: 150 },
+    size: { width: 320, height: 260 },
+  });
+  const loaded = loadLifeStatePreferences();
+  assert.deepEqual(loaded.position, { x: 300, y: 150 });
+  assert.deepEqual(loaded.size, { width: 320, height: 260 });
+});
+
 test("corrupt data falls back to safe default", () => {
   storage.set(LIFE_STATE_PREF_KEY, "{broken");
   assert.deepEqual(loadLifeStatePreferences(), DEFAULT_LIFE_STATE_PREFS);
 });
 
 test("size is clamped to readable bounds", () => {
+  assert.equal(LIFE_STATE_MIN_WIDTH, 280);
+  assert.equal(LIFE_STATE_MIN_HEIGHT, 200);
+  assert.equal(LIFE_STATE_MAX_WIDTH, 520);
+  assert.equal(LIFE_STATE_MAX_HEIGHT, 700);
   const tiny = clampLifeStateSize({ width: 10, height: 10 });
-  assert.ok(tiny.width >= LIFE_STATE_MIN_WIDTH && tiny.height >= 150);
+  assert.deepEqual(tiny, { width: 280, height: 200 });
   const huge = clampLifeStateSize({ width: 5000, height: 5000 });
-  assert.ok(huge.width <= LIFE_STATE_MAX_WIDTH && huge.height <= 520);
+  assert.deepEqual(huge, { width: 520, height: 700 });
 });
 
 test("position clamp keeps a visible strip inside the viewport", () => {
@@ -63,30 +81,47 @@ test("position clamp keeps a visible strip inside the viewport", () => {
   assert.deepEqual(kept, { x: 100, y: 100 });
 });
 
-test("pinch distance is symmetric and zero for identical points", () => {
-  assert.equal(pinchDistance({ id: 1, x: 0, y: 0 }, { id: 2, x: 3, y: 4 }), 5);
-  assert.equal(
-    pinchDistance({ id: 1, x: 10, y: 10 }, { id: 2, x: 10, y: 10 }),
-    0,
+test("resize down stops at MIN lock", () => {
+  const start = { width: 320, height: 260 };
+  const shrunk = applyResizeDelta(start, -1000, -1000);
+  assert.deepEqual(shrunk, { width: 280, height: 200 });
+});
+
+test("resize up stops at MAX lock", () => {
+  const start = { width: 320, height: 260 };
+  const grown = applyResizeDelta(start, 1000, 1000);
+  assert.deepEqual(grown, { width: 520, height: 700 });
+});
+
+test("normal resize produces the exact size", () => {
+  assert.deepEqual(applyResizeDelta({ width: 300, height: 240 }, 40, -20), {
+    width: 340,
+    height: 220,
+  });
+  // Non-finite deltas are ignored safely.
+  assert.deepEqual(
+    applyResizeDelta({ width: 300, height: 240 }, Number.NaN, 10),
+    { width: 300, height: 250 },
   );
 });
 
-test("pinch out grows, pinch in shrinks", () => {
-  const start = { width: 232, height: 200 };
-  const grown = pinchResizedSize(100, 150, start);
-  assert.ok(grown.width > start.width && grown.height > start.height);
-  const shrunk = pinchResizedSize(150, 100, start);
-  assert.ok(shrunk.width < start.width && shrunk.height < start.height);
+test("drag delta moves the panel point from any grab origin", () => {
+  // Press in the middle of the panel (not the header) and slide.
+  assert.deepEqual(
+    applyDragDelta({ x: 100, y: 100 }, { x: 250, y: 300 }, { x: 270, y: 280 }),
+    { x: 120, y: 80 },
+  );
 });
 
-test("pinch respects min/max bounds", () => {
-  const tiny = pinchResizedSize(100, 5, { width: 232, height: 200 });
-  assert.ok(tiny.width >= LIFE_STATE_MIN_WIDTH);
-  const huge = pinchResizedSize(10, 1000, { width: 232, height: 200 });
-  assert.ok(huge.width <= LIFE_STATE_MAX_WIDTH);
-});
-
-test("degenerate pinch distance keeps current size", () => {
-  const start = { width: 232, height: 200 };
-  assert.deepEqual(pinchResizedSize(0, 50, start), start);
+test("no pinch helpers remain exported", async () => {
+  const mod = (await import("@/utils/life-state-preference")) as Record<
+    string,
+    unknown
+  >;
+  for (const key of Object.keys(mod)) {
+    assert.ok(
+      !key.toLowerCase().includes("pinch"),
+      `pinch API must be gone: ${key}`,
+    );
+  }
 });

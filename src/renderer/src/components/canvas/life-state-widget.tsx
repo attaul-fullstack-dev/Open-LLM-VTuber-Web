@@ -13,10 +13,9 @@ import {
   LIFE_STATE_MIN_HEIGHT,
   LIFE_STATE_MAX_WIDTH,
   LIFE_STATE_MAX_HEIGHT,
-  pinchDistance,
-  pinchResizedSize,
-  type LifeStatePointer,
-  type LifeStateSize,
+  applyDragDelta,
+  applyResizeDelta,
+  clampLifeStatePosition,
 } from "@/utils/life-state-preference";
 
 function formatLocalTime(iso: string | undefined): string {
@@ -44,21 +43,71 @@ function Row({ label, value }: { label: string; value: string }) {
   );
 }
 
+/** Dedicated bottom-right resize handle (large touch target). */
+function ResizeGrip({
+  onPointerDown,
+}: {
+  onPointerDown: (event: React.PointerEvent) => void;
+}) {
+  return (
+    <Box
+      data-testid="life-state-resize-handle"
+      position="absolute"
+      right="2px"
+      bottom="2px"
+      width="30px"
+      height="30px"
+      cursor="nwse-resize"
+      touchAction="none"
+      aria-hidden="true"
+      onPointerDown={onPointerDown}
+    >
+      <Box
+        position="absolute"
+        right="5px"
+        bottom="5px"
+        width="14px"
+        height="14px"
+        borderRight="2px solid rgba(255,255,255,0.55)"
+        borderBottom="2px solid rgba(255,255,255,0.55)"
+        borderBottomRightRadius="4px"
+      />
+      <Box
+        position="absolute"
+        right="10px"
+        bottom="10px"
+        width="8px"
+        height="8px"
+        borderRight="2px solid rgba(255,255,255,0.3)"
+        borderBottom="2px solid rgba(255,255,255,0.3)"
+        borderBottomRightRadius="3px"
+      />
+    </Box>
+  );
+}
+
 /**
  * Floating read-only observability panel for the authoritative backend
  * World/Life State. Overlay only: it never changes chat layout, avatar,
  * emotion, voice, or World State itself.
  *
+ * Gestures (Pointer Events, mouse + touch unified):
+ * - press-and-hold ANYWHERE on the panel (except the resize handle) and
+ *   slide: the whole panel follows in real time; release persists position.
+ * - press-and-hold the bottom-right handle and slide: the whole panel
+ *   resizes live within MIN/MAX locks; release persists size.
+ * No pinch handling exists by design.
+ *
  * Data: fetched on mount / toggle-ON / manual refresh / conversation end
  * through the existing WebSocket (no polling, no scheduler, no LLM calls).
- * Position + size persist in localStorage; viewport clamping keeps the
- * widget from getting lost off-screen.
  */
 export function LifeStateWidget() {
   const { enabled, snapshot, position, setPosition, size, setSize } =
     useLifeState();
   const { sendMessage, wsState } = useWebSocket();
   const boxRef = useRef<HTMLDivElement | null>(null);
+  // Active single-pointer drag (panel move). Only one gesture at a time:
+  // a resize in progress suppresses drag and vice versa.
   const dragRef = useRef<{
     pointerId: number;
     startX: number;
@@ -66,14 +115,14 @@ export function LifeStateWidget() {
     baseX: number;
     baseY: number;
   } | null>(null);
-  // Active pointers on the widget (touch + mouse unified via Pointer Events).
-  const pointersRef = useRef<Map<number, LifeStatePointer>>(new Map());
-  // Two-pointer pinch state. While set, drag is suppressed.
-  const pinchRef = useRef<{
-    startDistance: number;
-    startSize: LifeStateSize;
+  // Active resize from the bottom-right handle.
+  const resizeRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    startWidth: number;
+    startHeight: number;
   } | null>(null);
-  const sizeTimer = useRef<number | null>(null);
   // Minute clock tick (single pending timeout, Stage-1 style: no interval).
   const [, forceClockTick] = useReducer((x: number) => x + 1, 0);
   // Latest socket state for the refresh guard without re-firing effects.
@@ -114,61 +163,21 @@ export function LifeStateWidget() {
     };
   }, [enabled]);
 
-  // Persist resizes (debounced trailing write, not a loop).
-  useEffect(() => {
-    const node = boxRef.current;
-    if (!node || typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver((entries) => {
-      const rect = entries[0]?.contentRect;
-      if (!rect || rect.width < 10) return;
-      if (sizeTimer.current !== null) window.clearTimeout(sizeTimer.current);
-      sizeTimer.current = window.setTimeout(() => {
-        setSize({
-          width: Math.round(rect.width),
-          height: Math.round(rect.height),
-        });
-      }, 300);
-    });
-    observer.observe(node);
-    return () => {
-      observer.disconnect();
-      if (sizeTimer.current !== null) window.clearTimeout(sizeTimer.current);
-    };
-  }, [setSize, enabled]);
-
-  // Header press-and-hold starts a one-finger drag. Works identically for
-  // mouse and touch: no hover, no click-click, no release required to move.
-  const onHeaderPointerDown = useCallback(
-    (event: React.PointerEvent) => {
-      if (pinchRef.current) return;
-      if (!boxRef.current) return;
-      const rect = boxRef.current.getBoundingClientRect();
-      dragRef.current = {
-        pointerId: event.pointerId,
-        startX: event.clientX,
-        startY: event.clientY,
-        baseX: position?.x ?? rect.left,
-        baseY: position?.y ?? rect.top,
-      };
-    },
-    [position],
-  );
-
   const applyDragMove = useCallback((clientX: number, clientY: number) => {
     const drag = dragRef.current;
     const node = boxRef.current;
     if (!drag || !node) return;
-    const next = {
-      x: drag.baseX + (clientX - drag.startX),
-      y: drag.baseY + (clientY - drag.startY),
-    };
-    // Live clamp: keep the panel inside the viewport at all times.
-    const rect = node.getBoundingClientRect();
-    next.x = Math.min(
-      Math.max(next.x, 80 - rect.width),
-      window.innerWidth - 80,
+    const raw = applyDragDelta(
+      { x: drag.baseX, y: drag.baseY },
+      { x: drag.startX, y: drag.startY },
+      { x: clientX, y: clientY },
     );
-    next.y = Math.min(Math.max(next.y, 0), window.innerHeight - 80);
+    // Live clamp: keep the panel inside the viewport at all times.
+    const next = clampLifeStatePosition(
+      raw,
+      window.innerWidth,
+      window.innerHeight,
+    );
     node.style.left = `${next.x}px`;
     node.style.top = `${next.y}px`;
     node.style.right = "auto";
@@ -192,84 +201,94 @@ export function LifeStateWidget() {
     [setPosition],
   );
 
-  // Box-level pointer tracking unifies mouse + touch. Capture on the box
-  // (currentTarget) so moves keep flowing during press-and-hold slides.
-  const onBoxPointerDown = useCallback((event: React.PointerEvent) => {
+  const applyResizeMove = useCallback((clientX: number, clientY: number) => {
+    const resize = resizeRef.current;
     const node = boxRef.current;
-    if (!node) return;
-    node.setPointerCapture?.(event.pointerId);
-    pointersRef.current.set(event.pointerId, {
-      id: event.pointerId,
-      x: event.clientX,
-      y: event.clientY,
-    });
-    if (pointersRef.current.size === 2) {
-      // Second finger down: enter pinch mode, cancel any drag so a
-      // pinch is never mistaken for a drag.
-      const [a, b] = [...pointersRef.current.values()];
-      const rect = node.getBoundingClientRect();
-      dragRef.current = null;
-      pinchRef.current = {
-        startDistance: pinchDistance(a, b),
-        startSize: { width: rect.width, height: rect.height },
-      };
-    }
+    if (!resize || !node) return;
+    const next = applyResizeDelta(
+      { width: resize.startWidth, height: resize.startHeight },
+      clientX - resize.startX,
+      clientY - resize.startY,
+    );
+    node.style.width = `${next.width}px`;
+    node.style.height = `${next.height}px`;
   }, []);
 
-  const onBoxPointerMove = useCallback(
+  const finishResize = useCallback(
+    (pointerId: number) => {
+      if (!boxRef.current || !resizeRef.current) return;
+      if (resizeRef.current.pointerId !== pointerId) return;
+      const rect = boxRef.current.getBoundingClientRect();
+      setSize({
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      });
+      resizeRef.current = null;
+    },
+    [setSize],
+  );
+
+  // Press-and-hold ANYWHERE on the panel (except the handle, which stops
+  // propagation) starts a drag. Exactly one gesture runs at a time.
+  const onPanelPointerDown = useCallback(
     (event: React.PointerEvent) => {
-      const tracked = pointersRef.current.get(event.pointerId);
-      if (!tracked) {
-        // Pointer not tracked (e.g. started outside): drag only if a
-        // header-initiated drag is already in progress for this pointer.
-        if (dragRef.current?.pointerId === event.pointerId) {
-          applyDragMove(event.clientX, event.clientY);
-        }
+      if (resizeRef.current || dragRef.current) return;
+      const node = boxRef.current;
+      if (!node) return;
+      node.setPointerCapture?.(event.pointerId);
+      const rect = node.getBoundingClientRect();
+      dragRef.current = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        baseX: position?.x ?? rect.left,
+        baseY: position?.y ?? rect.top,
+      };
+    },
+    [position],
+  );
+
+  // Bottom-right handle only: starts a resize, never a drag.
+  const onHandlePointerDown = useCallback((event: React.PointerEvent) => {
+    event.stopPropagation();
+    if (dragRef.current || resizeRef.current) return;
+    const node = boxRef.current;
+    if (!node) return;
+    (event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId);
+    const rect = node.getBoundingClientRect();
+    resizeRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startWidth: rect.width,
+      startHeight: rect.height,
+    };
+  }, []);
+
+  // Single shared move/up path: exactly one gesture (drag XOR resize) can
+  // be active, and only its owning pointer drives it.
+  const onPanelPointerMove = useCallback(
+    (event: React.PointerEvent) => {
+      if (
+        resizeRef.current &&
+        resizeRef.current.pointerId === event.pointerId
+      ) {
+        applyResizeMove(event.clientX, event.clientY);
         return;
       }
-      tracked.x = event.clientX;
-      tracked.y = event.clientY;
-      const pinch = pinchRef.current;
-      if (pinch && pointersRef.current.size >= 2) {
-        const [a, b] = [...pointersRef.current.values()];
-        const next = pinchResizedSize(
-          pinch.startDistance,
-          pinchDistance(a, b),
-          pinch.startSize,
-        );
-        const node = boxRef.current;
-        if (node) {
-          node.style.width = `${next.width}px`;
-          node.style.height = `${next.height}px`;
-        }
-        return;
-      }
-      if (dragRef.current?.pointerId === event.pointerId) {
+      if (dragRef.current && dragRef.current.pointerId === event.pointerId) {
         applyDragMove(event.clientX, event.clientY);
       }
     },
-    [applyDragMove],
+    [applyDragMove, applyResizeMove],
   );
 
-  const onBoxPointerUp = useCallback(
+  const onPanelPointerUp = useCallback(
     (event: React.PointerEvent) => {
-      pointersRef.current.delete(event.pointerId);
-      if (pinchRef.current && pointersRef.current.size < 2) {
-        // Pinch finished: persist the live size, then require a fresh
-        // header press for any further drag (no accidental drag resume).
-        const node = boxRef.current;
-        pinchRef.current = null;
-        if (node) {
-          const rect = node.getBoundingClientRect();
-          setSize({
-            width: Math.round(rect.width),
-            height: Math.round(rect.height),
-          });
-        }
-      }
+      finishResize(event.pointerId);
       finishDrag(event.pointerId);
     },
-    [finishDrag, setSize],
+    [finishResize, finishDrag],
   );
 
   if (!enabled) return null;
@@ -285,27 +304,27 @@ export function LifeStateWidget() {
       data-testid="life-state-widget"
       position="absolute"
       zIndex={30}
-      width={size ? `${size.width}px` : "232px"}
+      width={size ? `${size.width}px` : "280px"}
       minWidth={`${LIFE_STATE_MIN_WIDTH}px`}
       maxWidth={`${LIFE_STATE_MAX_WIDTH}px`}
       minHeight={`${LIFE_STATE_MIN_HEIGHT}px`}
       maxHeight={`${LIFE_STATE_MAX_HEIGHT}px`}
       overflow="auto"
-      resize="both"
       bg="rgba(8, 15, 28, 0.82)"
       backdropFilter="blur(12px)"
       border="1px solid rgba(255,255,255,0.14)"
       borderRadius="md"
       p={2}
-      onPointerDown={onBoxPointerDown}
-      onPointerMove={onBoxPointerMove}
-      onPointerUp={onBoxPointerUp}
-      onPointerCancel={onBoxPointerUp}
+      pb={6}
+      onPointerDown={onPanelPointerDown}
+      onPointerMove={onPanelPointerMove}
+      onPointerUp={onPanelPointerUp}
+      onPointerCancel={onPanelPointerUp}
       style={{
         // touchAction none (inline style: guaranteed CSS) scopes gesture
-        // control to the widget only: press-and-hold drag + two-finger
-        // pinch anywhere on the panel work on touch without the browser
-        // stealing the gesture, while scrolling elsewhere is untouched.
+        // control to the widget only: press-and-hold drag and handle
+        // resize work on touch without the browser stealing the gesture,
+        // while scrolling elsewhere is untouched.
         touchAction: "none",
         ...(position
           ? { left: position.x, top: position.y }
@@ -317,7 +336,6 @@ export function LifeStateWidget() {
         mb={1}
         cursor="move"
         style={{ touchAction: "none" }}
-        onPointerDown={onHeaderPointerDown}
         userSelect="none"
       >
         <HStack gap={1}>
@@ -377,6 +395,7 @@ export function LifeStateWidget() {
           />
         </>
       )}
+      <ResizeGrip onPointerDown={onHandlePointerDown} />
     </Box>
   );
 }
