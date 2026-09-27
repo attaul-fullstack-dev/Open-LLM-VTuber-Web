@@ -3,14 +3,12 @@ import {
   Box, Textarea, IconButton,
 } from '@chakra-ui/react';
 import {
-  BsMicFill, BsMicMuteFill, BsPaperclip, BsVolumeUpFill, BsVolumeMuteFill,
-} from 'react-icons/bs';
+  FiPlus, FiMic, FiMicOff, FiVolume2, FiVolumeX, FiArrowUp, FiChevronDown,
+} from 'react-icons/fi';
 import { IoHandRightSharp } from 'react-icons/io5';
-import { FiChevronDown } from 'react-icons/fi';
 import {
-  memo, RefObject, useRef, useState,
+  memo, RefObject, useEffect, useRef, useState,
 } from 'react';
-import { FiSend } from 'react-icons/fi';
 import { useTranslation } from 'react-i18next';
 import { footerStyles } from './footer-styles';
 import AIStateIndicator from './ai-state-indicator';
@@ -45,6 +43,9 @@ interface ComposerBarProps {
   inputRef: RefObject<HTMLTextAreaElement>
 }
 
+// Visual-only cap for auto-expand; beyond this the textarea scrolls.
+const INPUT_MAX_HEIGHT = 132;
+
 // Reusable components
 const ToggleButton = memo(({ isCollapsed, onToggle }: ToggleButtonProps) => (
   <Box
@@ -60,8 +61,9 @@ const ToggleButton = memo(({ isCollapsed, onToggle }: ToggleButtonProps) => (
 
 ToggleButton.displayName = 'ToggleButton';
 
-// Single unified composer bar: attach | input | sound | mic | send.
-// Same controls on mobile and desktop, only sizes differ.
+// Single unified composer bar: + | input | speaker | mic | SEND.
+// All icons come from one Feather set for consistent stroke. Behavior
+// (handlers, refs, send flow) is untouched; only visuals + auto-expand.
 const ComposerBar = memo(({
   value,
   onChange,
@@ -80,16 +82,31 @@ const ComposerBar = memo(({
   const { t } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Auto-expand: grow with content between one line and INPUT_MAX_HEIGHT.
+  // Width, icons and bar position never change, so typing cannot jitter.
+  // An empty box falls back to the CSS single-line min-height: an empty
+  // textarea reports a larger scrollHeight quirk (44px vs 40px filled),
+  // which would shift the bar by 4px the moment typing starts.
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    if (!value) {
+      el.style.height = '';
+      return;
+    }
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, INPUT_MAX_HEIGHT)}px`;
+  }, [value, inputRef]);
+
   return (
     <Box {...footerStyles.footer.composerBar}>
       <IconButton
         aria-label="Attach file"
         variant="ghost"
-        {...footerStyles.footer.ghostButton}
-        color={attachmentCount ? '#B9A8FF' : undefined}
+        {...footerStyles.footer.attachButton(attachmentCount > 0)}
         onClick={() => fileInputRef.current?.click()}
       >
-        <BsPaperclip size="19" />
+        <FiPlus size="21" />
       </IconButton>
       <input
         ref={fileInputRef}
@@ -101,6 +118,7 @@ const ComposerBar = memo(({
           event.target.value = '';
         }}
       />
+      <Box {...footerStyles.footer.divider} />
       <Textarea
         ref={inputRef}
         rows={1}
@@ -114,27 +132,30 @@ const ComposerBar = memo(({
         flex="1"
         minW="0"
       />
+      <Box {...footerStyles.footer.divider} />
       <IconButton
         aria-label={soundOn ? 'Mute avatar voice' : 'Enable avatar voice'}
         variant="ghost"
-        {...footerStyles.footer.ghostButton}
+        {...footerStyles.footer.soundButton(soundOn)}
         onClick={onSoundToggle}
       >
-        {soundOn ? <BsVolumeUpFill size="17" /> : <BsVolumeMuteFill size="17" />}
+        {soundOn ? <FiVolume2 size="20" /> : <FiVolumeX size="20" />}
       </IconButton>
+      <Box {...footerStyles.footer.divider} />
       <IconButton
         aria-label={micOn ? 'Mute microphone' : 'Enable microphone'}
+        variant="ghost"
         {...footerStyles.footer.micButton(micOn)}
         onClick={onMicToggle}
       >
-        {micOn ? <BsMicFill /> : <BsMicMuteFill />}
+        {micOn ? <FiMic size="20" /> : <FiMicOff size="20" />}
       </IconButton>
       <IconButton
         aria-label="Send message"
         {...footerStyles.footer.sendButton}
         onClick={onSend}
       >
-        <FiSend size="19" />
+        <FiArrowUp size="21" strokeWidth={2.5} />
       </IconButton>
     </Box>
   );
@@ -180,7 +201,7 @@ function Footer({ isCollapsed = false, onToggle }: FooterProps): JSX.Element {
               aria-label="Interrupt"
               title="Interrupt"
               variant="ghost"
-              {...footerStyles.footer.ghostButton}
+              {...footerStyles.footer.utilityButton}
               width={{ base: '32px', lg: '36px' }}
               minW={{ base: '32px', lg: '36px' }}
               height={{ base: '28px', lg: '32px' }}

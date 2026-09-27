@@ -7,9 +7,14 @@ interface FooterStyles {
   /** Slim row above the bar: status text left, interrupt ghost right. */
   utilityRow: SystemStyleObject
   statusText: SystemStyleObject
-  /** Single unified composer bar. */
+  /** Ghost control on the utility row (outside the composer bar). */
+  utilityButton: SystemStyleObject
+  /** Single unified composer bar. Grows vertically with multi-line input. */
   composerBar: SystemStyleObject
-  ghostButton: SystemStyleObject
+  /** 1px warm-neutral separator between composer sections. */
+  divider: SystemStyleObject
+  attachButton: (hasAttachment: boolean) => SystemStyleObject
+  soundButton: (soundOn: boolean) => SystemStyleObject
   micButton: (micOn: boolean) => SystemStyleObject
   sendButton: SystemStyleObject
   input: SystemStyleObject
@@ -19,6 +24,8 @@ interface AIIndicatorStyles {
   container: SystemStyleObject
   text: SystemStyleObject
 }
+
+const composer = miliTokens.composer;
 
 export const footerStyles: {
   footer: FooterStyles
@@ -64,6 +71,8 @@ export const footerStyles: {
       px: { base: '6px', lg: '2px' },
       pb: '2px',
       minH: '26px',
+      maxW: { base: '100%', lg: '760px' },
+      mx: { base: '0', lg: 'auto' },
       // When the status text hides (thinking pill takes over), keep
       // the interrupt button pinned right.
       '& > :last-child': { marginLeft: 'auto' },
@@ -75,75 +84,114 @@ export const footerStyles: {
       overflow: 'hidden',
       textOverflow: 'ellipsis',
     },
-    composerBar: {
-      display: 'flex',
-      alignItems: 'center',
-      width: '100%',
-      minW: '0',
-      height: { base: '50px', lg: '56px' },
-      px: { base: '1', lg: '1.5' },
-      gap: '1px',
-      bg: miliTokens.color.surface,
-      border: '1px solid',
-      borderColor: miliTokens.color.border,
-      borderRadius: miliTokens.radius.pill,
-      overflow: 'hidden',
-    },
-    ghostButton: {
+    utilityButton: {
       flexShrink: 0,
-      width: { base: '36px', lg: '40px' },
-      minW: { base: '36px', lg: '40px' },
-      height: { base: '36px', lg: '40px' },
       borderRadius: 'full',
       color: miliTokens.color.textSecondary,
       bg: 'transparent',
       _hover: { bg: miliTokens.color.surface, color: miliTokens.color.textPrimary },
       _active: { bg: miliTokens.color.surface },
     },
+    composerBar: {
+      display: 'flex',
+      alignItems: 'center',
+      width: '100%',
+      minW: '0',
+      maxW: { base: '100%', lg: '760px' },
+      mx: { base: '0', lg: 'auto' },
+      minHeight: { base: '54px', lg: '58px' },
+      px: { base: '4px', lg: '8px' },
+      py: { base: '5px', lg: '6px' },
+      gap: '0',
+      bg: composer.bg,
+      border: '1px solid',
+      borderColor: composer.border,
+      borderRadius: '20px',
+      overflow: 'hidden',
+    },
+    divider: {
+      flexShrink: 0,
+      width: '1px',
+      alignSelf: 'stretch',
+      my: '12px',
+      bg: composer.divider,
+    },
+    attachButton: (hasAttachment) => ({
+      flexShrink: 0,
+      width: { base: '40px', lg: '40px' },
+      minW: { base: '40px', lg: '40px' },
+      height: { base: '40px', lg: '40px' },
+      borderRadius: 'full',
+      color: hasAttachment ? composer.accent : composer.icon,
+      bg: 'transparent',
+      _hover: { bg: composer.iconHoverBg, color: composer.text },
+      _active: { bg: composer.iconHoverBg },
+    }),
+    soundButton: (soundOn) => ({
+      flexShrink: 0,
+      width: { base: '40px', lg: '40px' },
+      minW: { base: '40px', lg: '40px' },
+      height: { base: '40px', lg: '40px' },
+      borderRadius: 'full',
+      color: soundOn ? composer.icon : composer.iconMuted,
+      bg: 'transparent',
+      _hover: { bg: composer.iconHoverBg, color: composer.text },
+      _active: { bg: composer.iconHoverBg },
+    }),
     micButton: (micOn) => ({
       flexShrink: 0,
-      width: { base: miliTokens.control.touch, lg: miliTokens.control.desktop },
-      minW: { base: miliTokens.control.touch, lg: miliTokens.control.desktop },
-      height: { base: miliTokens.control.touch, lg: miliTokens.control.desktop },
+      width: { base: '40px', lg: '40px' },
+      minW: { base: '40px', lg: '40px' },
+      height: { base: '40px', lg: '40px' },
       borderRadius: 'full',
-      color: micOn ? miliTokens.color.successText : miliTokens.color.dangerText,
-      bg: micOn ? miliTokens.color.successSoft : miliTokens.color.dangerSoft,
-      _hover: { filter: 'brightness(1.15)' },
-      _active: { filter: 'brightness(1.25)' },
+      color: micOn ? composer.accent : composer.iconMuted,
+      bg: micOn ? composer.micActiveBg : 'transparent',
+      _hover: { bg: micOn ? composer.micActiveBg : composer.iconHoverBg, color: micOn ? composer.accent : composer.text },
+      _active: { bg: micOn ? composer.micActiveBg : composer.iconHoverBg },
     }),
     sendButton: {
       flexShrink: 0,
-      width: { base: miliTokens.control.touch, lg: miliTokens.control.desktop },
-      minW: { base: miliTokens.control.touch, lg: miliTokens.control.desktop },
-      height: { base: miliTokens.control.touch, lg: miliTokens.control.desktop },
+      width: miliTokens.control.touch,
+      minW: miliTokens.control.touch,
+      height: miliTokens.control.touch,
       borderRadius: 'full',
-      color: 'white',
-      bg: miliTokens.color.accent,
-      _hover: { filter: 'brightness(1.12)' },
-      _active: { filter: 'brightness(1.2)' },
+      color: composer.accentInk,
+      bg: composer.accent,
+      ml: '2px',
+      _hover: { filter: 'brightness(1.07)' },
+      _active: { filter: 'brightness(1.12)' },
       _disabled: { opacity: 0.45 },
     },
     input: {
       bg: 'transparent',
       border: 'none',
-      height: { base: '50px', lg: '56px' },
+      outline: 'none',
       borderRadius: '0',
-      fontSize: { base: miliTokens.font.md, lg: miliTokens.font.lg },
-      pl: { base: '1.5', lg: '2' },
-      pr: { base: '1', lg: '2' },
-      color: miliTokens.color.textPrimary,
+      fontSize: { base: miliTokens.font.md, lg: '16px' },
+      pl: { base: '1.5', lg: '2.5' },
+      pr: '0.5',
+      py: '0',
+      color: composer.text,
       _placeholder: {
-        color: miliTokens.color.textMuted,
+        color: composer.placeholder,
+        whiteSpace: 'nowrap',
       },
       _focus: {
         border: 'none',
+        outline: 'none',
         bg: 'transparent',
       },
+      _focusVisible: {
+        outline: 'none',
+        boxShadow: 'none',
+        border: 'none',
+      },
       resize: 'none',
-      minHeight: { base: '50px', lg: '56px' },
-      maxHeight: { base: '50px', lg: '56px' },
-      py: { base: '13px', lg: '16px' },
-      lineHeight: '1.4',
+      // Auto-expand is driven by scrollHeight in the component; the bar
+      // grows between one line and this cap, then scrolls internally.
+      minHeight: { base: '40px', lg: '42px' },
+      maxHeight: '132px',
+      lineHeight: '1.45',
       whiteSpace: 'pre-wrap',
       overflowY: 'auto',
       overflowX: 'hidden',

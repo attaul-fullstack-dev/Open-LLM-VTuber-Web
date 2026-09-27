@@ -67,6 +67,24 @@ export const miliTokens = {
     float: '0 10px 32px rgba(0, 0, 0, 0.28)',
     none: 'none',
   },
+  /**
+   * Chat composer: flat warm-neutral vector UI. Self-contained palette so
+   * the composer reads as one component; page background stays untouched.
+   */
+  composer: {
+    bg: '#221E1A',
+    border: 'rgba(255, 238, 222, 0.13)',
+    divider: 'rgba(255, 238, 222, 0.09)',
+    text: '#F6EEE3',
+    placeholder: 'rgba(246, 238, 227, 0.38)',
+    icon: 'rgba(246, 238, 227, 0.74)',
+    iconMuted: 'rgba(246, 238, 227, 0.32)',
+    iconHoverBg: 'rgba(255, 238, 222, 0.07)',
+    /** Warm orange accent. Flat fills only — never gradient/glow. */
+    accent: '#E8935A',
+    accentInk: '#2A1A10',
+    micActiveBg: 'rgba(232, 147, 90, 0.16)',
+  },
   blur: {
     bar: 'blur(18px)',
     card: 'blur(12px)',

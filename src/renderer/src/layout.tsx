@@ -55,7 +55,10 @@ export const layoutStyles = {
   },
   footer: {
     width: { base: 'calc(100% - 24px)', lg: '100%' },
-    height: { base: '96px', lg: '120px' },
+    // Auto height: the composer bar grows vertically with multi-line input.
+    // Collapse still works: collapsedFooter pins a fixed small height.
+    height: { base: 'auto', lg: 'auto' },
+    minHeight: { base: '96px', lg: '120px' },
     transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
     willChange: 'transform',
     position: { base: 'fixed', lg: 'relative' },
