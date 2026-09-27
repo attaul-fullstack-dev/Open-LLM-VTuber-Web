@@ -94,3 +94,27 @@ test("single fetch trigger per turn end: chain-end only (no duplicates)", () => 
   // the ws (re)connect resync. Anything more is a duplicate-fetch risk.
   assert.equal(triggers.length, 2);
 });
+
+test("chain-end fetch lives on the LIVE control path (not a dead case)", () => {
+  // Backend emits {type:'control', text:'conversation-chain-end'}, routed to
+  // handleControlMessage — an outer `case 'conversation-chain-end'` on
+  // message.type would never fire. There must be exactly one such case and
+  // the fetch send must sit inside its branch.
+  const source = fs.readFileSync(
+    path.join(SRC, "services/websocket-handler.tsx"),
+    "utf8",
+  );
+  const cases = [...source.matchAll(/case ['"]conversation-chain-end['"]:/g)].map(
+    (m) => m.index ?? -1,
+  );
+  assert.equal(cases.length, 1);
+  const branch = source.slice(cases[0], cases[0] + 1500);
+  assert.ok(
+    branch.includes("fetch-world-state"),
+    "live chain-end branch must trigger the Life State fetch",
+  );
+  assert.ok(
+    branch.indexOf("break;") > branch.indexOf("fetch-world-state"),
+    "fetch must precede the branch break",
+  );
+});

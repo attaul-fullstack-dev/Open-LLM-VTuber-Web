@@ -112,6 +112,13 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
           });
           resolve();
         }));
+        // LIVE PATH (backend sends {type:'control',text:'conversation-chain-end'}):
+        // event-driven Life State refresh, widget visible only, no polling.
+        // The user timezone travels with the request so reconnects and
+        // fresh sessions still derive time_context locally.
+        if (lifeStateEnabledRef.current) {
+          wsService.sendMessage({ type: 'fetch-world-state', timezone: getUserTimezone() });
+        }
         break;
       default:
         console.warn('Unknown control command:', controlText);
@@ -388,22 +395,6 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
         break;
       case 'backend-synth-complete':
         setBackendSynthComplete(true);
-        break;
-      case 'conversation-chain-end':
-        if (!audioTaskQueue.hasTask()) {
-          setAiState((currentState: AiState) => {
-            if (currentState === 'thinking-speaking') {
-              return 'idle';
-            }
-            return currentState;
-          });
-        }
-        // Event-driven Life State refresh (widget visible only): no polling.
-        // The user timezone travels with the request so reconnects and
-        // fresh sessions still derive time_context locally.
-        if (lifeStateEnabledRef.current) {
-          wsService.sendMessage({ type: 'fetch-world-state', timezone: getUserTimezone() });
-        }
         break;
       case 'force-new-message':
         setForceNewMessage(true);
