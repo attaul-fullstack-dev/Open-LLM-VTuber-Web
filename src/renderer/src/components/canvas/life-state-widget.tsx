@@ -9,14 +9,13 @@ import {
   userTimeZoneLabel,
 } from "@/utils/user-timezone";
 import {
-  LIFE_STATE_MIN_WIDTH,
-  LIFE_STATE_MIN_HEIGHT,
-  LIFE_STATE_MAX_WIDTH,
-  LIFE_STATE_MAX_HEIGHT,
+  LIFE_STATE_BASE_WIDTH,
   applyDragDelta,
-  applyResizeDelta,
   canFetchLifeState,
   clampLifeStatePosition,
+  scaleForHandleDelta,
+  scaleForWidth,
+  widthForScale,
 } from "@/utils/life-state-preference";
 
 function formatLocalTime(iso: string | undefined): string {
@@ -107,6 +106,8 @@ export function LifeStateWidget() {
     useLifeState();
   const { sendMessage, wsState } = useWebSocket();
   const boxRef = useRef<HTMLDivElement | null>(null);
+  // Mirror of the rendered zoom scale (see below); gestures start here.
+  const scaleRef = useRef<number>(1);
   // Active single-pointer drag (panel move). Only one gesture at a time:
   // a resize in progress suppresses drag and vice versa.
   const dragRef = useRef<{
@@ -116,13 +117,12 @@ export function LifeStateWidget() {
     baseX: number;
     baseY: number;
   } | null>(null);
-  // Active resize from the bottom-right handle.
+  // Active resize from the bottom-right handle: only the start scale and
+  // pointer origin are needed — the scale factor drives everything.
   const resizeRef = useRef<{
     pointerId: number;
     startX: number;
-    startY: number;
-    startWidth: number;
-    startHeight: number;
+    startScale: number;
   } | null>(null);
   // Minute clock tick (single pending timeout, Stage-1 style: no interval).
   const [, forceClockTick] = useReducer((x: number) => x + 1, 0);
@@ -202,27 +202,35 @@ export function LifeStateWidget() {
     [setPosition],
   );
 
-  const applyResizeMove = useCallback((clientX: number, clientY: number) => {
+  // Whole-widget scaling: one zoom factor scales width, height, fonts,
+  // padding, gaps, icons and radius together, so aspect and layout can
+  // never drift apart. Horizontal handle travel drives the scale (vertical
+  // travel is intentionally ignored to keep the aspect locked). Applied
+  // live via style (no re-render churn).
+  const applyResizeMove = useCallback((clientX: number) => {
     const resize = resizeRef.current;
     const node = boxRef.current;
     if (!resize || !node) return;
-    const next = applyResizeDelta(
-      { width: resize.startWidth, height: resize.startHeight },
+    const next = scaleForHandleDelta(
+      resize.startScale,
       clientX - resize.startX,
-      clientY - resize.startY,
+      window.innerWidth,
     );
-    node.style.width = `${next.width}px`;
-    node.style.height = `${next.height}px`;
+    node.style.zoom = String(next);
+    scaleRef.current = next;
   }, []);
 
   const finishResize = useCallback(
     (pointerId: number) => {
       if (!boxRef.current || !resizeRef.current) return;
       if (resizeRef.current.pointerId !== pointerId) return;
-      const rect = boxRef.current.getBoundingClientRect();
+      const node = boxRef.current;
+      // offsetHeight is layout (pre-zoom) height; visual height follows zoom.
+      const liveScale =
+        Number.parseFloat(node.style.zoom || "") || resizeRef.current.startScale;
       setSize({
-        width: Math.round(rect.width),
-        height: Math.round(rect.height),
+        width: widthForScale(liveScale),
+        height: Math.max(1, Math.round(node.offsetHeight)),
       });
       resizeRef.current = null;
     },
@@ -256,15 +264,15 @@ export function LifeStateWidget() {
     const node = boxRef.current;
     if (!node) return;
     (event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId);
-    const rect = node.getBoundingClientRect();
     resizeRef.current = {
       pointerId: event.pointerId,
       startX: event.clientX,
-      startY: event.clientY,
-      startWidth: rect.width,
-      startHeight: rect.height,
+      startScale: scaleRef.current,
     };
   }, []);
+
+  // Mirror of the rendered scale (persisted size, then live gesture value)
+  // so a gesture always starts from the true current scale.
 
   // Single shared move/up path: exactly one gesture (drag XOR resize) can
   // be active, and only its owning pointer drives it.
@@ -274,7 +282,7 @@ export function LifeStateWidget() {
         resizeRef.current &&
         resizeRef.current.pointerId === event.pointerId
       ) {
-        applyResizeMove(event.clientX, event.clientY);
+        applyResizeMove(event.clientX);
         return;
       }
       if (dragRef.current && dragRef.current.pointerId === event.pointerId) {
@@ -298,6 +306,10 @@ export function LifeStateWidget() {
   // Same zone the backend uses for time_context; re-read each render so the
   // clock row always matches the active session timezone.
   const userTz = getUserTimezone();
+  // Single source of visual size: persisted width -> scale; everything
+  // (fonts, padding, icons, radius) follows via zoom.
+  const scale = size ? scaleForWidth(size.width) : 1;
+  scaleRef.current = scale;
 
   return (
     <Box
@@ -305,11 +317,8 @@ export function LifeStateWidget() {
       data-testid="life-state-widget"
       position="absolute"
       zIndex={30}
-      width={size ? `${size.width}px` : "280px"}
-      minWidth={`${LIFE_STATE_MIN_WIDTH}px`}
-      maxWidth={`${LIFE_STATE_MAX_WIDTH}px`}
-      minHeight={`${LIFE_STATE_MIN_HEIGHT}px`}
-      maxHeight={`${LIFE_STATE_MAX_HEIGHT}px`}
+      width={`${LIFE_STATE_BASE_WIDTH}px`}
+      maxWidth="calc(100vw - 16px)"
       overflow="auto"
       bg="rgba(8, 15, 28, 0.82)"
       backdropFilter="blur(12px)"
@@ -322,11 +331,15 @@ export function LifeStateWidget() {
       onPointerUp={onPanelPointerUp}
       onPointerCancel={onPanelPointerUp}
       style={{
+        // Single visual-size source: zoom scales width, height, fonts,
+        // padding, gaps, icons and radius together, preserving aspect.
         // touchAction none (inline style: guaranteed CSS) scopes gesture
         // control to the widget only: press-and-hold drag and handle
         // resize work on touch without the browser stealing the gesture,
         // while scrolling elsewhere is untouched.
+        zoom: scale,
         touchAction: "none",
+        transformOrigin: "top left",
         ...(position
           ? { left: position.x, top: position.y }
           : { right: "12px", top: "64px" }),

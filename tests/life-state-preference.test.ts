@@ -7,12 +7,18 @@ import {
   LIFE_STATE_MIN_HEIGHT,
   LIFE_STATE_MAX_WIDTH,
   LIFE_STATE_MAX_HEIGHT,
+  LIFE_STATE_BASE_WIDTH,
+  LIFE_STATE_MIN_SCALE,
+  LIFE_STATE_MAX_SCALE,
   applyDragDelta,
-  applyResizeDelta,
   clampLifeStatePosition,
+  clampLifeStateScale,
   clampLifeStateSize,
   loadLifeStatePreferences,
   saveLifeStatePreferences,
+  scaleForHandleDelta,
+  scaleForWidth,
+  widthForScale,
 } from "@/utils/life-state-preference";
 
 // Minimal localStorage stub so the pure module works without a browser.
@@ -82,27 +88,39 @@ test("position clamp keeps a visible strip inside the viewport", () => {
 });
 
 test("resize down stops at MIN lock", () => {
-  const start = { width: 320, height: 260 };
-  const shrunk = applyResizeDelta(start, -1000, -1000);
-  assert.deepEqual(shrunk, { width: 280, height: 200 });
+  // Way past the minimum: locked at 0.35x of the 280px base.
+  assert.equal(scaleForHandleDelta(1, -1000), LIFE_STATE_MIN_SCALE);
+  assert.equal(widthForScale(LIFE_STATE_MIN_SCALE), 98);
 });
 
 test("resize up stops at MAX lock", () => {
-  const start = { width: 320, height: 260 };
-  const grown = applyResizeDelta(start, 1000, 1000);
-  assert.deepEqual(grown, { width: 520, height: 700 });
+  assert.equal(scaleForHandleDelta(1, 1000), LIFE_STATE_MAX_SCALE);
+  assert.equal(widthForScale(LIFE_STATE_MAX_SCALE), 560);
 });
 
-test("normal resize produces the exact size", () => {
-  assert.deepEqual(applyResizeDelta({ width: 300, height: 240 }, 40, -20), {
-    width: 340,
-    height: 220,
-  });
+test("normal resize produces the exact scale", () => {
+  // +28px drag on a 280px base = +0.1 scale.
+  assert.equal(scaleForHandleDelta(1, 28), 1.1);
+  assert.equal(scaleForHandleDelta(1, -28), 0.9);
+  assert.equal(widthForScale(1.1), 308);
   // Non-finite deltas are ignored safely.
-  assert.deepEqual(
-    applyResizeDelta({ width: 300, height: 240 }, Number.NaN, 10),
-    { width: 300, height: 250 },
-  );
+  assert.equal(scaleForHandleDelta(1, Number.NaN), 1);
+});
+
+test("aspect ratio is preserved across scales", () => {
+  // One zoom factor drives both dimensions: any content height scales
+  // with the same factor as the base width.
+  for (const scale of [0.35, 1, 2]) {
+    const width = widthForScale(scale);
+    const contentHeight = 200;
+    assert.equal(width / (contentHeight * scale), LIFE_STATE_BASE_WIDTH / contentHeight);
+  }
+});
+
+test("viewport bound keeps the widget on small screens", () => {
+  // 360px-wide phone: scale capped so 280px base still fits.
+  const capped = scaleForHandleDelta(2, 0, 360);
+  assert.ok(capped * LIFE_STATE_BASE_WIDTH <= 360 - 16);
 });
 
 test("drag delta moves the panel point from any grab origin", () => {

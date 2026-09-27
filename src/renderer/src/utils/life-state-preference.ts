@@ -38,23 +38,67 @@ export const LIFE_STATE_MAX_HEIGHT = 700;
 // Minimum visible strip (px) kept inside the viewport (boundary protection).
 export const LIFE_STATE_VISIBLE_STRIP = 80;
 
+// ---------------------------------------------------------------------------
+// Proportional whole-widget scaling (single source of size truth).
+//
+// The panel renders at a fixed base width; a single `zoom` factor scales
+// width, height, fonts, padding, gaps, icons and radius together, so the
+// aspect ratio and internal layout can never drift apart. The resize handle
+// only changes this scale; persisted size records are interpreted through
+// it (width authoritative, height informational).
+// ---------------------------------------------------------------------------
+
+/** Base layout width (px) the widget is designed at; zoom scales from here. */
+export const LIFE_STATE_BASE_WIDTH = 280;
+/** Minimum scale (~0.35x): compact but still readable. */
+export const LIFE_STATE_MIN_SCALE = 0.35;
+/** Maximum scale (~2x): large but never fullscreen. */
+export const LIFE_STATE_MAX_SCALE = 2.0;
+
+export function clampLifeStateScale(value: number): number {
+  if (!Number.isFinite(value)) return 1;
+  const clamped = Math.min(
+    LIFE_STATE_MAX_SCALE,
+    Math.max(LIFE_STATE_MIN_SCALE, value),
+  );
+  return Math.round(clamped * 100) / 100;
+}
+
+/** Scale that renders the given persisted width (width authoritative). */
+export function scaleForWidth(width: number): number {
+  if (!Number.isFinite(width) || width <= 0) return 1;
+  return clampLifeStateScale(width / LIFE_STATE_BASE_WIDTH);
+}
+
+/** Visual width (px) at a scale step. */
+export function widthForScale(scale: number): number {
+  return Math.round(LIFE_STATE_BASE_WIDTH * clampLifeStateScale(scale));
+}
+
 /**
- * New size after dragging the bottom-right resize handle (pure,
- * unit-testable). Adds the pointer delta to the gesture-start size, then
- * hard-clamps to MIN/MAX: shrinking past MIN stops at MIN, growing past
- * MAX stops at MAX. Drag right/down grows, left/up shrinks.
+ * New scale after dragging the bottom-right resize handle (pure,
+ * unit-testable). Horizontal pointer travel drives the scale so width and
+ * height stay proportional; the result is hard-clamped to MIN/MAX and
+ * additionally to the current viewport width when provided.
  */
-export function applyResizeDelta(
-  startSize: LifeStateSize,
+export function scaleForHandleDelta(
+  startScale: number,
   deltaX: number,
-  deltaY: number,
-): LifeStateSize {
+  viewportWidth?: number,
+): number {
   const dx = Number.isFinite(deltaX) ? deltaX : 0;
-  const dy = Number.isFinite(deltaY) ? deltaY : 0;
-  return clampLifeStateSize({
-    width: startSize.width + dx,
-    height: startSize.height + dy,
-  });
+  let scale = clampLifeStateScale(startScale + dx / LIFE_STATE_BASE_WIDTH);
+  if (viewportWidth !== undefined && Number.isFinite(viewportWidth)) {
+    const fit = (viewportWidth - 16) / LIFE_STATE_BASE_WIDTH;
+    if (fit < scale) {
+      // Floor (not round) so the fitted width never exceeds the viewport.
+      scale = Math.max(
+        LIFE_STATE_MIN_SCALE,
+        Math.floor(Math.min(scale, fit) * 100) / 100,
+      );
+    }
+  }
+  return scale;
 }
 
 /**
