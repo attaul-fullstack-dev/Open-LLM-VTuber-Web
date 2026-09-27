@@ -102,6 +102,30 @@ export function scaleForHandleDelta(
 }
 
 /**
+ * Resolve the scale to render: a live gesture value wins over the persisted
+ * one while a gesture is in flight, so unrelated re-renders (clock ticks,
+ * snapshot updates) can never snap the visuals back mid-gesture. This is
+ * the single source of truth that prevents resize/drag feedback loops.
+ */
+export function resolveRenderScale(
+  persistedScale: number,
+  liveScale: number | null,
+): number {
+  return liveScale ?? persistedScale;
+}
+
+/**
+ * Resolve the position to render: same live-wins contract as scale, so a
+ * drag never jumps when something else re-renders the widget.
+ */
+export function resolveRenderPosition(
+  persisted: LifeStatePosition | null,
+  live: LifeStatePosition | null,
+): LifeStatePosition | null {
+  return live ?? persisted;
+}
+
+/**
  * New panel position after a drag (pure, unit-testable). Adds the pointer
  * delta to the gesture-start position; viewport clamping is applied by the
  * caller via clampLifeStatePosition.
@@ -143,6 +167,7 @@ export function clampLifeStatePosition(
   pos: LifeStatePosition,
   viewportWidth: number,
   viewportHeight: number,
+  boxWidth?: number,
 ): LifeStatePosition {
   const vw =
     Number.isFinite(viewportWidth) && viewportWidth > 0 ? viewportWidth : 1024;
@@ -150,11 +175,17 @@ export function clampLifeStatePosition(
     Number.isFinite(viewportHeight) && viewportHeight > 0
       ? viewportHeight
       : 768;
+  // Clamp against the LIVE visual width when known (zoom-scaled panel),
+  // otherwise the conservative maximum constant.
+  const visualWidth =
+    Number.isFinite(boxWidth) && (boxWidth as number) > 0
+      ? (boxWidth as number)
+      : LIFE_STATE_MAX_WIDTH;
   return {
     x: Math.round(
       clampNumber(
         pos.x,
-        LIFE_STATE_VISIBLE_STRIP - LIFE_STATE_MAX_WIDTH,
+        LIFE_STATE_VISIBLE_STRIP - visualWidth,
         vw - LIFE_STATE_VISIBLE_STRIP,
       ),
     ),

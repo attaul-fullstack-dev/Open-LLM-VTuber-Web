@@ -1,5 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   LIFE_STATE_PREF_KEY,
   DEFAULT_LIFE_STATE_PREFS,
@@ -15,6 +18,8 @@ import {
   clampLifeStateScale,
   clampLifeStateSize,
   loadLifeStatePreferences,
+  resolveRenderPosition,
+  resolveRenderScale,
   saveLifeStatePreferences,
   scaleForHandleDelta,
   scaleForWidth,
@@ -131,6 +136,25 @@ test("drag delta moves the panel point from any grab origin", () => {
   );
 });
 
+test("pointer +100 grows scale, -100 shrinks it (A/B)", () => {
+  assert.ok(scaleForHandleDelta(1, 100) > 1);
+  assert.ok(scaleForHandleDelta(1, -100) < 1);
+});
+
+test("live gesture value wins for render, persisted otherwise (C/D/K)", () => {
+  assert.equal(resolveRenderScale(1, 1.5), 1.5);
+  assert.equal(resolveRenderScale(1, null), 1);
+  assert.deepEqual(
+    resolveRenderPosition({ x: 10, y: 20 }, { x: 30, y: 40 }),
+    { x: 30, y: 40 },
+  );
+  assert.deepEqual(resolveRenderPosition({ x: 10, y: 20 }, null), {
+    x: 10,
+    y: 20,
+  });
+  assert.equal(resolveRenderPosition(null, null), null);
+});
+
 test("no pinch helpers remain exported", async () => {
   const mod = (await import("@/utils/life-state-preference")) as Record<
     string,
@@ -142,4 +166,44 @@ test("no pinch helpers remain exported", async () => {
       `pinch API must be gone: ${key}`,
     );
   }
+});
+
+test("persist happens once per gesture end, never per move (J)", () => {
+  const srcDir = path.join(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "..",
+    "src",
+    "renderer",
+    "src",
+  );
+  const widget = fs.readFileSync(
+    path.join(srcDir, "components/canvas/life-state-widget.tsx"),
+    "utf8",
+  );
+  const setPositionCalls = widget.match(/[^a-zA-Z]setPosition\(/g) ?? [];
+  const setSizeCalls = widget.match(/[^a-zA-Z]setSize\(/g) ?? [];
+  // Exactly one persist site each (finishDrag / finishResize); moves only
+  // touch live refs + DOM style, never storage.
+  assert.equal(setPositionCalls.length, 1);
+  assert.equal(setSizeCalls.length, 1);
+});
+
+test("resize handle is isolated from panel drag (H)", () => {
+  const srcDir = path.join(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "..",
+    "src",
+    "renderer",
+    "src",
+  );
+  const widget = fs.readFileSync(
+    path.join(srcDir, "components/canvas/life-state-widget.tsx"),
+    "utf8",
+  );
+  const handleBlock = widget.slice(widget.indexOf("onHandlePointerDown"));
+  assert.ok(
+    handleBlock.slice(0, 400).includes("stopPropagation"),
+    "handle press must not reach the panel drag handler",
+  );
+  assert.ok(widget.includes('data-testid="life-state-resize-handle"'));
 });
