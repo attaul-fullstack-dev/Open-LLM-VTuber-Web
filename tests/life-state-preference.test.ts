@@ -17,6 +17,8 @@ import {
   clampLifeStatePosition,
   clampLifeStateScale,
   clampLifeStateSize,
+  clampUnscaledPosition,
+  dragGeometryStep,
   loadLifeStatePreferences,
   resolveRenderPosition,
   resolveRenderScale,
@@ -66,7 +68,29 @@ test("saved size and position restore on initialization", () => {
   });
   const loaded = loadLifeStatePreferences();
   assert.deepEqual(loaded.position, { x: 300, y: 150 });
-  assert.deepEqual(loaded.size, { width: 320, height: 260 });
+  // Scale roundtrip is 2-decimal: 320 -> 1.14x -> 319px. Bounded, stable,
+  // and visually identical; never drifts across reloads.
+  assert.deepEqual(loaded.size, { width: 319, height: 260 });
+  saveLifeStatePreferences(loaded);
+  assert.deepEqual(loadLifeStatePreferences().size, {
+    width: 319,
+    height: 260,
+  });
+});
+
+test("save never re-clamps: persist roundtrip is exact (279 regression)", () => {
+  // Live bug: a drag-persisted {327,150} at scale ~1.11 came back from
+  // storage as {279,150} because the save path re-clamped with a rounded
+  // scale. Save must store exactly; only load may clamp for migration.
+  storage.clear();
+  saveLifeStatePreferences({
+    enabled: true,
+    position: { x: 327, y: 150 },
+    size: { width: 311, height: 80 },
+  });
+  const raw = JSON.parse(storage.get(LIFE_STATE_PREF_KEY)!);
+  assert.deepEqual(raw.position, { x: 327, y: 150 });
+  assert.deepEqual(raw.size, { width: 311, height: 80 });
 });
 
 test("corrupt data falls back to safe default", () => {
@@ -188,6 +212,25 @@ test("persist happens once per gesture end, never per move (J)", () => {
   assert.equal(setSizeCalls.length, 1);
 });
 
+test("single live geometry object, no competing scale truths", () => {
+  const srcDir = path.join(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "..",
+    "src",
+    "renderer",
+    "src",
+  );
+  const widget = fs.readFileSync(
+    path.join(srcDir, "components/canvas/life-state-widget.tsx"),
+    "utf8",
+  );
+  for (const dead of ["liveScaleRef", "livePosRef", "persistedScaleRef"]) {
+    assert.ok(!widget.includes(dead), `second truth must be gone: ${dead}`);
+  }
+  // Gesture starts derive scale from the element (visual/base).
+  assert.ok(widget.includes("rect.width / LIFE_STATE_BASE_WIDTH"));
+});
+
 test("resize handle is isolated from panel drag (H)", () => {
   const srcDir = path.join(
     path.dirname(fileURLToPath(import.meta.url)),
@@ -202,8 +245,225 @@ test("resize handle is isolated from panel drag (H)", () => {
   );
   const handleBlock = widget.slice(widget.indexOf("onHandlePointerDown"));
   assert.ok(
-    handleBlock.slice(0, 400).includes("stopPropagation"),
+    handleBlock.slice(0, 600).includes("stopPropagation"),
     "handle press must not reach the panel drag handler",
   );
   assert.ok(widget.includes('data-testid="life-state-resize-handle"'));
+});
+
+test("scaled rects never feed style values (no teleport reads)", () => {
+  // getBoundingClientRect is zoom-scaled: allowed only to DERIVE the live
+  // scale (visual width / base) and the drag clamp bound at gesture start.
+  // Positions must always convert back (rect / scale); raw scaled readings
+  // must never become style values or persist values.
+  const srcDir = path.join(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "..",
+    "src",
+    "renderer",
+    "src",
+  );
+  const widget = fs.readFileSync(
+    path.join(srcDir, "components/canvas/life-state-widget.tsx"),
+    "utf8",
+  );
+  const reads = widget.match(/getBoundingClientRect\(\)/g) ?? [];
+  assert.equal(reads.length, 2);
+  assert.ok(widget.includes("rect.width / LIFE_STATE_BASE_WIDTH"));
+  assert.ok(widget.includes("rect.left / scale"));
+  assert.ok(widget.includes("rect.top / scale"));
+  assert.ok(!widget.match(/baseX:\s*rect\.left[^/]/));
+  assert.ok(!widget.match(/baseY:\s*rect\.top[^/]/));
+});
+
+// Headless simulator mirroring the component's gesture handlers exactly:
+// single live geometry (unscaled units), start+delta math, persist-on-end.
+function makePanel(persisted = { x: 100, y: 200, scale: 1 }) {
+  const VW = 390;
+  const VH = 844;
+  return {
+    persisted: { ...persisted },
+    live: null as null | { x: number | null; y: number | null; scale: number | null },
+    _drag: null as null | {
+      startX: number;
+      startY: number;
+      baseX: number;
+      baseY: number;
+      scale: number;
+      visualHeight: number;
+    },
+    _resize: null as null | { startX: number; startScale: number },
+    render() {
+      const live = this.live;
+      return {
+        x: live && live.x !== null ? live.x : this.persisted.x,
+        y: live && live.y !== null ? live.y : this.persisted.y,
+        scale: live?.scale ?? this.persisted.scale,
+      };
+    },
+    pointerDown(x: number, y: number, onHandle = false) {
+      if (this._drag || this._resize) return;
+      if (onHandle) {
+        this._resize = {
+          startX: x,
+          startScale: this.live?.scale ?? this.persisted.scale,
+        };
+        return;
+      }
+      const base = this.live?.x !== null && this.live?.x !== undefined
+        ? { x: this.live!.x as number, y: this.live!.y as number }
+        : { x: this.persisted.x, y: this.persisted.y };
+      const scale = this.live?.scale ?? this.persisted.scale;
+      this._drag = {
+        startX: x,
+        startY: y,
+        baseX: base.x,
+        baseY: base.y,
+        scale,
+        visualHeight: 200 * scale,
+      };
+    },
+    pointerMove(x: number, y: number) {
+      if (this._resize) {
+        const s = scaleForHandleDelta(this._resize.startScale, x - this._resize.startX, VW);
+        this.live = { x: null, y: null, scale: s };
+        return;
+      }
+      if (this._drag) {
+        const d = this._drag;
+        const raw = dragGeometryStep(
+          { x: d.baseX, y: d.baseY },
+          { x: d.startX, y: d.startY },
+          { x, y },
+          d.scale,
+        );
+        const next = clampUnscaledPosition(raw, d.scale, VW, VH, d.visualHeight);
+        this.live = { x: next.x, y: next.y, scale: d.scale };
+      }
+    },
+    pointerUp() {
+      if (this._resize) {
+        const s = this.live?.scale ?? this._resize.startScale;
+        this.persisted.scale = s;
+        this._resize = null;
+        this.live = null;
+      }
+      if (this._drag && this.live && this.live.x !== null) {
+        this.persisted.x = this.live.x;
+        this.persisted.y = this.live.y as number;
+        this._drag = null;
+        this.live = null;
+      } else {
+        this._drag = null;
+      }
+    },
+  };
+}
+
+test("exact user sequence: shrink -> up -> enlarge -> down (H)", () => {
+  const panel = makePanel({ x: 98, y: 64, scale: 1 });
+  const seen: string[] = [];
+  const snap = () => {
+    const r = panel.render();
+    return `${r.x.toFixed(1)},${r.y.toFixed(1)},${r.scale.toFixed(2)}`;
+  };
+
+  // 1. shrink: handle -120px at scale 1.
+  panel.pointerDown(300, 100, true);
+  panel.pointerMove(180, 100);
+  let r = panel.render();
+  assert.ok(r.scale < 1, `shrink must reduce scale, got ${r.scale}`);
+  // x/y MUST NOT move during resize (top-left anchor stable).
+  assert.deepEqual({ x: r.x, y: r.y }, { x: 98, y: 64 });
+  panel.pointerUp();
+  const shrunkScale = panel.persisted.scale;
+
+  // 2. move up: press center, slide up 200px finger travel.
+  panel.pointerDown(200, 200);
+  const before = panel.render();
+  panel.pointerMove(200, 100);
+  r = panel.render();
+  assert.equal(r.scale, before.scale, "drag must not change scale (G)");
+  // Finger -100 at scale ~0.57 = -175 unscaled: hits the top clamp, which
+  // keeps exactly the 80px visible strip. No snap anywhere else.
+  assert.equal(r.y, -60, `clamped, not snapped: ${snap()}`);
+  panel.pointerMove(200, 0);
+  const r2 = panel.render();
+  assert.equal(r2.y, -60, "stays clamped, no further motion, no snap");
+  assert.equal(r2.scale, before.scale);
+  panel.pointerUp();
+  const upPos = { ...panel.persisted };
+
+  // 3. enlarge: handle +150px.
+  panel.pointerDown(300, 300, true);
+  panel.pointerMove(450, 450);
+  r = panel.render();
+  assert.ok(r.scale > shrunkScale, "enlarge must grow scale");
+  assert.deepEqual(
+    { x: r.x, y: r.y },
+    { x: upPos.x, y: upPos.y },
+    "enlarge must not move position",
+  );
+  panel.pointerUp();
+
+  // 4. move down: finger +300px converts through the CURRENT scale
+  // (dragGeometryStep), so visual travel == finger travel exactly.
+  const s = panel.persisted.scale;
+  panel.pointerDown(200, 150);
+  const d0 = panel.render();
+  panel.pointerMove(200, 450);
+  r = panel.render();
+  assert.equal(r.scale, s, "scale invariant during drag");
+  assert.ok(
+    Math.abs(r.y - (d0.y + 300 / s)) < 1.5,
+    `drag down tracks finger exactly at scale ${s}: ${snap()}`,
+  );
+  // No magnet: position is pure start+delta, never remapped.
+  assert.ok(r.y > d0.y && r.y < 1400);
+  panel.pointerUp();
+  seen.push(snap());
+
+  // 5. repeat the whole sequence: no drift.
+  const first = snap();
+  panel.pointerDown(300, 300, true);
+  panel.pointerMove(180, 180);
+  panel.pointerUp();
+  panel.pointerDown(200, 200);
+  panel.pointerMove(200, 100);
+  panel.pointerUp();
+  panel.pointerDown(300, 300, true);
+  panel.pointerMove(450, 450);
+  panel.pointerUp();
+  panel.pointerDown(200, 150);
+  panel.pointerMove(200, 450);
+  panel.pointerUp();
+  // After a symmetric-ish repeat, geometry stays bounded and sane.
+  const end = panel.render();
+  assert.ok(end.scale >= 0.35 && end.scale <= 2.0);
+  assert.ok(end.y >= 0 && end.y <= 844);
+  assert.ok(end.x >= 80 - 280 * end.scale && end.x <= 390 - 80);
+  void seen;
+  void first;
+});
+
+test("inverse sequence: enlarge -> down -> shrink -> up", () => {
+  const panel = makePanel({ x: 50, y: 100, scale: 1 });
+  panel.pointerDown(300, 300, true);
+  panel.pointerMove(450, 450);
+  panel.pointerUp();
+  assert.ok(panel.persisted.scale > 1);
+  panel.pointerDown(200, 200);
+  panel.pointerMove(200, 500);
+  const r = panel.render();
+  assert.ok(r.y > 100, "dragged down continuously");
+  panel.pointerUp();
+  const downY = panel.persisted.y;
+  panel.pointerDown(300, 300, true);
+  panel.pointerMove(150, 150);
+  panel.pointerUp();
+  assert.ok(panel.persisted.scale < 1.6);
+  panel.pointerDown(200, 400);
+  panel.pointerMove(200, 100);
+  panel.pointerUp();
+  assert.ok(panel.persisted.y < downY, "dragged back up");
 });

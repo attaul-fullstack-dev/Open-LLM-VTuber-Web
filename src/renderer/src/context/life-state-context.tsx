@@ -8,8 +8,7 @@ import {
 import {
   loadLifeStatePreferences,
   saveLifeStatePreferences,
-  clampLifeStatePosition,
-  clampLifeStateSize,
+  LIFE_STATE_BASE_WIDTH,
   type LifeStatePosition,
   type LifeStateSize,
 } from "@/utils/life-state-preference";
@@ -73,14 +72,23 @@ export function LifeStateProvider({ children }: { children: React.ReactNode }) {
 
   const setPosition = useCallback(
     (position: LifeStatePosition) => {
-      const clamped = clampLifeStatePosition(
-        position,
-        window.innerWidth,
-        window.innerHeight,
-      );
+      // No viewport clamp here on purpose: the drag gesture already clamps
+      // with the live zoom-aware geometry, and re-clamping with stale width
+      // constants would snap the persisted position (e.g. 327 -> 310) and
+      // teleport the panel on the next render. Keep finite values only.
+      const clean = {
+        x:
+          Number.isFinite(position.x) && Math.abs(position.x) < 10000
+            ? Math.round(position.x)
+            : 0,
+        y:
+          Number.isFinite(position.y) && Math.abs(position.y) < 10000
+            ? Math.round(position.y)
+            : 0,
+      };
       persist({
         enabled: stored.enabled,
-        position: clamped,
+        position: clean,
         size: stored.size,
       });
     },
@@ -89,10 +97,24 @@ export function LifeStateProvider({ children }: { children: React.ReactNode }) {
 
   const setSize = useCallback(
     (size: LifeStateSize) => {
+      // No px-clamp here on purpose: the resize gesture already enforces
+      // the MIN/MAX scale locks, and clamping here would snap sub-280px
+      // persists back up (undoing a shrink). Load-time sanitize still
+      // migrates legacy records.
+      const clean = {
+        width:
+          Number.isFinite(size.width) && size.width > 0
+            ? Math.round(size.width)
+            : LIFE_STATE_BASE_WIDTH,
+        height:
+          Number.isFinite(size.height) && size.height > 0
+            ? Math.round(size.height)
+            : LIFE_STATE_BASE_WIDTH,
+      };
       persist({
         enabled: stored.enabled,
         position: stored.position,
-        size: clampLifeStateSize(size),
+        size: clean,
       });
     },
     [persist, stored.enabled, stored.position],

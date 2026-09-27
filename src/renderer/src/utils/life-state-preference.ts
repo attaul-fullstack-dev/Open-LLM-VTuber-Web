@@ -126,6 +126,84 @@ export function resolveRenderPosition(
 }
 
 /**
+ * Single live geometry for an in-flight gesture, ALL IN UNSCALED units.
+ *
+ * CSS `zoom` scales positioned offsets too (a `top:64px` renders at
+ * 64*zoom), so mixing getBoundingClientRect readings (scaled/visual) with
+ * style values (unscaled) makes panels jump, drift and resist the finger.
+ * Exactly one of drag/resize owns this object at a time; each writes only
+ * its own fields (drag: x/y, resize: scale), so gestures can never fight.
+ * Null fields mean "keep whatever the persisted/rendered value is".
+ */
+export interface LifeStateLiveGeometry {
+  x: number | null;
+  y: number | null;
+  scale: number | null;
+}
+
+export function resolveRenderGeometry(
+  persisted: LifeStateLiveGeometry,
+  live: LifeStateLiveGeometry | null,
+): LifeStateLiveGeometry {
+  return live ?? persisted;
+}
+
+/**
+ * Drag step in unscaled units: finger travel converts through the scale
+ * that was active when the gesture STARTED (constant for the whole drag),
+ * so the panel follows the finger 1:1 visually at any zoom.
+ */
+export function dragGeometryStep(
+  base: LifeStatePosition,
+  from: LifeStatePosition,
+  to: LifeStatePosition,
+  scale: number,
+): LifeStatePosition {
+  const s = Number.isFinite(scale) && scale > 0 ? scale : 1;
+  return {
+    x: base.x + (to.x - from.x) / s,
+    y: base.y + (to.y - from.y) / s,
+  };
+}
+
+/**
+ * Clamp an unscaled position so the SCALED panel stays in the viewport.
+ * Bounds convert explicitly (visual_bound / scale); the caller passes the
+ * live visual height measured ONCE at gesture start, never re-measured
+ * per move (no measurement feedback).
+ */
+export function clampUnscaledPosition(
+  pos: LifeStatePosition,
+  scale: number,
+  viewportWidth: number,
+  viewportHeight: number,
+  visualHeight: number,
+): LifeStatePosition {
+  const s = Number.isFinite(scale) && scale > 0 ? scale : 1;
+  const vw =
+    Number.isFinite(viewportWidth) && viewportWidth > 0 ? viewportWidth : 1024;
+  const vh =
+    Number.isFinite(viewportHeight) && viewportHeight > 0 ? viewportHeight : 768;
+  const vhPx =
+    Number.isFinite(visualHeight) && visualHeight > 0
+      ? visualHeight
+      : 200 * s;
+  const visualWidth = LIFE_STATE_BASE_WIDTH * s;
+  return {
+    x: Math.round(
+      clampNumber(
+        pos.x,
+        (LIFE_STATE_VISIBLE_STRIP - visualWidth) / s,
+        (vw - LIFE_STATE_VISIBLE_STRIP) / s,
+      ),
+    ),
+    y: Math.round(
+      clampNumber(pos.y, -(vhPx - LIFE_STATE_VISIBLE_STRIP) / s, (vh - LIFE_STATE_VISIBLE_STRIP) / s),
+    ),
+  };
+}
+
+/**
  * New panel position after a drag (pure, unit-testable). Adds the pointer
  * delta to the gesture-start position; viewport clamping is applied by the
  * caller via clampLifeStatePosition.
@@ -205,8 +283,8 @@ function sanitizePreferences(raw: unknown): LifeStatePreferences {
   const rawPos = record.position as { x?: unknown; y?: unknown } | null;
   if (rawPos && typeof rawPos.x === "number" && typeof rawPos.y === "number") {
     position = {
-      x: clampNumber(rawPos.x, -LIFE_STATE_MAX_WIDTH, 4096),
-      y: clampNumber(rawPos.y, -LIFE_STATE_MAX_HEIGHT, 4096),
+      x: clampNumber(rawPos.x, -4096, 4096),
+      y: clampNumber(rawPos.y, -4096, 4096),
     };
   }
   let size: LifeStateSize | null = null;
@@ -216,10 +294,36 @@ function sanitizePreferences(raw: unknown): LifeStatePreferences {
     typeof rawSize.width === "number" &&
     typeof rawSize.height === "number"
   ) {
-    size = clampLifeStateSize({
-      width: rawSize.width,
-      height: rawSize.height,
-    });
+    // Scale roundtrip (no px floor): preserves sub-280px shrinks exactly
+    // while still bounding outliers to MIN/MAX scale. Legacy records
+    // migrate losslessly (232px -> 0.83x -> 232px).
+    const scale = clampLifeStateScale(rawSize.width / LIFE_STATE_BASE_WIDTH);
+    size = {
+      width: Math.round(LIFE_STATE_BASE_WIDTH * scale),
+      height:
+        Number.isFinite(rawSize.height) && rawSize.height > 0
+          ? Math.round(rawSize.height)
+          : LIFE_STATE_BASE_WIDTH,
+    };
+    // Scale-aware viewport clamp so a reload never strands the panel
+    // off-screen, without remapping valid positions.
+    if (position && typeof window !== "undefined") {
+      const visualWidth = LIFE_STATE_BASE_WIDTH * scale;
+      const vw = window.innerWidth || 1024;
+      const vh = window.innerHeight || 768;
+      position = {
+        x: Math.round(
+          clampNumber(
+            position.x,
+            (LIFE_STATE_VISIBLE_STRIP - visualWidth) / scale,
+            (vw - LIFE_STATE_VISIBLE_STRIP) / scale,
+          ),
+        ),
+        y: Math.round(
+          clampNumber(position.y, 0, (vh - LIFE_STATE_VISIBLE_STRIP) / scale),
+        ),
+      };
+    }
   }
   return { enabled, position, size };
 }
@@ -236,11 +340,34 @@ export function loadLifeStatePreferences(): LifeStatePreferences {
 }
 
 export function saveLifeStatePreferences(prefs: LifeStatePreferences): void {
+  // Save WITHOUT viewport clamping: gestures already clamp with live
+  // geometry, and re-clamping here (e.g. with a stale or rounded scale)
+  // silently rewrites valid positions on every write (327 -> 279) and
+  // teleports the panel. Load-time sanitize stays responsible for
+  // migrating legacy/corrupt records.
   try {
-    window.localStorage.setItem(
-      LIFE_STATE_PREF_KEY,
-      JSON.stringify(sanitizePreferences(prefs)),
-    );
+    const clean: LifeStatePreferences = {
+      enabled: prefs.enabled === true,
+      position:
+        prefs.position &&
+        Number.isFinite(prefs.position.x) &&
+        Number.isFinite(prefs.position.y)
+          ? {
+            x: Math.round(prefs.position.x),
+            y: Math.round(prefs.position.y),
+          }
+          : null,
+      size:
+        prefs.size &&
+        Number.isFinite(prefs.size.width) &&
+        Number.isFinite(prefs.size.height)
+          ? {
+            width: Math.round(prefs.size.width),
+            height: Math.round(prefs.size.height),
+          }
+          : null,
+    };
+    window.localStorage.setItem(LIFE_STATE_PREF_KEY, JSON.stringify(clean));
   } catch (error) {
     console.error("Error saving life state preferences:", error);
   }

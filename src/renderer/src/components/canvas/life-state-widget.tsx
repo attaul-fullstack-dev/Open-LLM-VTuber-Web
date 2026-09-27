@@ -10,14 +10,13 @@ import {
 } from "@/utils/user-timezone";
 import {
   LIFE_STATE_BASE_WIDTH,
-  applyDragDelta,
   canFetchLifeState,
-  clampLifeStatePosition,
-  resolveRenderPosition,
-  resolveRenderScale,
+  clampUnscaledPosition,
+  dragGeometryStep,
   scaleForHandleDelta,
   scaleForWidth,
   widthForScale,
+  type LifeStateLiveGeometry,
 } from "@/utils/life-state-preference";
 
 function formatLocalTime(iso: string | undefined): string {
@@ -108,23 +107,27 @@ export function LifeStateWidget() {
     useLifeState();
   const { sendMessage, wsState } = useWebSocket();
   const boxRef = useRef<HTMLDivElement | null>(null);
-  // Live gesture values: while a drag/resize is in flight these are the
-  // SINGLE source of truth for rendering, so unrelated re-renders (clock
-  // tick, snapshot update) can never snap the panel back mid-gesture and
-  // cause jumps or jitter. Cleared on gesture end after persisting.
-  const liveScaleRef = useRef<number | null>(null);
-  const livePosRef = useRef<{ x: number; y: number } | null>(null);
+  // SINGLE live geometry for an in-flight gesture, ALL IN UNSCALED units
+  // (style space: 1px style = 1px at zoom 1). CSS zoom scales offsets too,
+  // so scaled rect readings must NEVER feed style values. Visual geometry
+  // derives from live (visual = style * scale), never the reverse. Null
+  // when no gesture is active; render then uses persisted values.
+  const liveRef = useRef<LifeStateLiveGeometry | null>(null);
   // Active single-pointer drag (panel move). Only one gesture at a time:
-  // a resize in progress suppresses drag and vice versa.
+  // a resize in progress suppresses drag and vice versa. Scale + visual
+  // height are snapshotted at gesture start and stay constant all drag.
   const dragRef = useRef<{
     pointerId: number;
     startX: number;
     startY: number;
     baseX: number;
     baseY: number;
+    scale: number;
+    visualHeight: number;
   } | null>(null);
   // Active resize from the bottom-right handle: only the start scale and
   // pointer origin are needed — the scale factor drives everything.
+  // Position is NEVER touched by resize (top-left anchor is stable).
   const resizeRef = useRef<{
     pointerId: number;
     startX: number;
@@ -174,42 +177,40 @@ export function LifeStateWidget() {
     const drag = dragRef.current;
     const node = boxRef.current;
     if (!drag || !node) return;
-    const raw = applyDragDelta(
+    // Finger delta converts through the START scale (constant all gesture),
+    // so the panel follows 1:1 visually at any zoom. Base/anchor never
+    // re-read mid-gesture: start + delta only, no frame-to-frame feedback.
+    const raw = dragGeometryStep(
       { x: drag.baseX, y: drag.baseY },
       { x: drag.startX, y: drag.startY },
       { x: clientX, y: clientY },
+      drag.scale,
     );
-    // Live clamp against the CURRENT visual width (zoom-scaled rect), so a
-    // resized panel keeps the same boundary contract without jumping.
-    const visualWidth = node.getBoundingClientRect().width;
-    const next = clampLifeStatePosition(
+    const next = clampUnscaledPosition(
       raw,
+      drag.scale,
       window.innerWidth,
       window.innerHeight,
-      visualWidth,
+      drag.visualHeight,
     );
     node.style.left = `${next.x}px`;
     node.style.top = `${next.y}px`;
     node.style.right = "auto";
-    livePosRef.current = next;
-    dragRef.current = {
-      ...drag,
-      baseX: next.x,
-      baseY: next.y,
-      startX: clientX,
-      startY: clientY,
-    };
+    liveRef.current = { x: next.x, y: next.y, scale: drag.scale };
   }, []);
 
   const finishDrag = useCallback(
     (pointerId: number) => {
-      if (!boxRef.current || !dragRef.current) return;
+      if (!dragRef.current) return;
       if (dragRef.current.pointerId !== pointerId) return;
-      const rect = boxRef.current.getBoundingClientRect();
-      const pos = { x: Math.round(rect.left), y: Math.round(rect.top) };
       dragRef.current = null;
-      livePosRef.current = pos;
-      setPosition(pos);
+      // Persist from the live geometry (single source), never re-measured.
+      // A resize-only live object carries no x/y and persists nothing here.
+      const live = liveRef.current;
+      liveRef.current = null;
+      if (live && live.x !== null && live.y !== null) {
+        setPosition({ x: Math.round(live.x), y: Math.round(live.y) });
+      }
     },
     [setPosition],
   );
@@ -218,7 +219,8 @@ export function LifeStateWidget() {
   // padding, gaps, icons and radius together, so aspect and layout can
   // never drift apart. Horizontal handle travel drives the scale (vertical
   // travel is intentionally ignored to keep the aspect locked). Applied
-  // live via style (no re-render churn).
+  // live via style (no re-render churn). Position is NEVER touched here:
+  // the top-left anchor stays fixed for the whole resize.
   const applyResizeMove = useCallback((clientX: number) => {
     const resize = resizeRef.current;
     const node = boxRef.current;
@@ -229,7 +231,12 @@ export function LifeStateWidget() {
       window.innerWidth,
     );
     node.style.zoom = String(next);
-    liveScaleRef.current = next;
+    const live = liveRef.current;
+    liveRef.current = {
+      x: live?.x ?? null,
+      y: live?.y ?? null,
+      scale: next,
+    };
   }, []);
 
   const finishResize = useCallback(
@@ -239,9 +246,9 @@ export function LifeStateWidget() {
       const node = boxRef.current;
       // offsetHeight is layout (pre-zoom) height; visual height follows zoom.
       // Persist from the live scale (single source), never from a zoomed rect.
-      const liveScale = liveScaleRef.current ?? resizeRef.current.startScale;
+      const liveScale = liveRef.current?.scale ?? resizeRef.current.startScale;
       resizeRef.current = null;
-      liveScaleRef.current = liveScale;
+      liveRef.current = null;
       setSize({
         width: widthForScale(liveScale),
         height: Math.max(1, Math.round(node.offsetHeight)),
@@ -251,8 +258,9 @@ export function LifeStateWidget() {
   );
 
   // Press-and-hold ANYWHERE on the panel (except the handle, which stops
-  // propagation) starts a drag. Exactly one gesture runs at a time. The
-  // drag base is the live position when re-grabbing mid-gesture state.
+  // propagation) starts a drag. Exactly one gesture runs at a time. Scale
+  // comes from the ELEMENT (visual width / base): the one value that always
+  // matches what is on screen, regardless of persist timing.
   const onPanelPointerDown = useCallback(
     (event: React.PointerEvent) => {
       if (resizeRef.current || dragRef.current) return;
@@ -260,34 +268,42 @@ export function LifeStateWidget() {
       if (!node) return;
       node.setPointerCapture?.(event.pointerId);
       const rect = node.getBoundingClientRect();
-      const base = livePosRef.current ?? position ?? {
-        x: rect.left,
-        y: rect.top,
-      };
+      const scale = rect.width / LIFE_STATE_BASE_WIDTH;
+      const live = liveRef.current;
+      const base =
+        live && live.x !== null && live.y !== null
+          ? { x: live.x, y: live.y }
+          : (position ?? {
+            x: rect.left / scale,
+            y: rect.top / scale,
+          });
       dragRef.current = {
         pointerId: event.pointerId,
         startX: event.clientX,
         startY: event.clientY,
         baseX: base.x,
         baseY: base.y,
+        scale,
+        visualHeight: rect.height,
       };
     },
     [position],
   );
 
-  // Bottom-right handle only: starts a resize, never a drag. The start
-  // scale comes from the live ref (or persisted size), never from a
-  // zoom-scaled rect, so consecutive gestures can't accumulate error.
+  // Bottom-right handle only: starts a resize, never a drag. Start scale
+  // comes from the ELEMENT (visual / base), never from persisted state,
+  // so a resize always continues exactly what is on screen.
   const onHandlePointerDown = useCallback((event: React.PointerEvent) => {
     event.stopPropagation();
     if (dragRef.current || resizeRef.current) return;
     const node = boxRef.current;
     if (!node) return;
     (event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId);
+    const rect = node.getBoundingClientRect();
     resizeRef.current = {
       pointerId: event.pointerId,
       startX: event.clientX,
-      startScale: liveScaleRef.current ?? persistedScale,
+      startScale: rect.width / LIFE_STATE_BASE_WIDTH,
     };
   }, []);
 
@@ -323,15 +339,16 @@ export function LifeStateWidget() {
   // Same zone the backend uses for time_context; re-read each render so the
   // clock row always matches the active session timezone.
   const userTz = getUserTimezone();
-  // RENDER single source: live gesture values win while a gesture is in
-  // flight, so clock ticks / snapshot updates can never snap the panel
-  // back mid-gesture (no jumps, no jitter, no magnet). Otherwise the
-  // persisted values render (and re-sync the live mirrors).
   const persistedScale = size ? scaleForWidth(size.width) : 1;
-  if (!resizeRef.current) liveScaleRef.current = persistedScale;
-  if (!dragRef.current) livePosRef.current = null;
-  const renderScale = resolveRenderScale(persistedScale, liveScaleRef.current);
-  const renderPos = resolveRenderPosition(position, livePosRef.current);
+  // RENDER single source: the in-flight live geometry wins while a gesture
+  // runs, so clock ticks / snapshot updates can never snap the panel back
+  // mid-gesture (no jumps, no jitter, no magnet). Otherwise persisted.
+  const live = liveRef.current;
+  const renderScale = live?.scale ?? persistedScale;
+  const renderPos =
+    live && live.x !== null && live.y !== null
+      ? { x: live.x, y: live.y }
+      : position;
 
   return (
     <Box
