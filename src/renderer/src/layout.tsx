@@ -1,3 +1,5 @@
+import { miliTokens } from './theme/design-tokens';
+
 const isElectron = window.api !== undefined;
 
 const getAppHeight = () => {
@@ -10,8 +12,8 @@ export const layoutStyles = {
   appContainer: {
     width: '100vw',
     height: getAppHeight(),
-    bg: 'gray.900',
-    color: 'white',
+    bg: miliTokens.color.background,
+    color: miliTokens.color.textPrimary,
     overflow: 'hidden',
     position: 'relative',
     display: 'flex',
@@ -24,9 +26,9 @@ export const layoutStyles = {
     top: 0,
     width: { base: '100vw', lg: '440px' },
     height: '100%',
-    bg: 'gray.800',
+    bg: miliTokens.color.background,
     borderRight: '1px solid',
-    borderColor: 'whiteAlpha.200',
+    borderColor: miliTokens.color.border,
     overflow: 'hidden',
     flexShrink: 0,
     transition: 'all 0.2s',
@@ -53,7 +55,11 @@ export const layoutStyles = {
   },
   footer: {
     width: { base: 'calc(100% - 24px)', lg: '100%' },
-    height: { base: '66px', lg: '120px' },
+    // Auto height: the composer bar is the only content and grows
+    // vertically with multi-line input.
+    // Collapse still works: collapsedFooter pins a fixed small height.
+    height: { base: 'auto', lg: 'auto' },
+    minHeight: '0',
     transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
     willChange: 'transform',
     position: { base: 'fixed', lg: 'relative' },

@@ -20,16 +20,37 @@ export function Toaster() {
     <Portal>
       <ChakraToaster toaster={toaster} insetInline={{ mdDown: '4' }}>
         {(toast) => (
-          <Toast.Root width={{ md: 'sm' }}>
+          // Mobile: compact fit-content notification (content width with
+          // viewport margin), tighter padding/gap/icon/type. Desktop (md+)
+          // keeps the existing default look untouched.
+          <Toast.Root
+            width={{ base: 'auto', md: 'sm' }}
+            maxWidth={{ base: 'calc(100vw - 32px)', md: 'sm' }}
+            px={{ base: '4', md: undefined }}
+            py={{ base: '2.5', md: undefined }}
+            gap={{ base: '2.5', md: undefined }}
+          >
             {toast.type === 'loading' ? (
               <Spinner size="sm" color="blue.solid" />
             ) : (
-              <Toast.Indicator />
+              <Toast.Indicator boxSize={{ base: '20px', md: undefined }} flexShrink={0} />
             )}
-            <Stack gap="1" flex="1" maxWidth="100%">
-              {toast.title && <Toast.Title>{toast.title}</Toast.Title>}
+            <Stack gap="1" flex="1" minW="0" maxWidth="100%">
+              {toast.title && (
+                <Toast.Title
+                  fontSize={{ base: '14px', md: undefined }}
+                  lineHeight={{ base: '20px', md: undefined }}
+                >
+                  {toast.title}
+                </Toast.Title>
+              )}
               {toast.description && (
-                <Toast.Description>{toast.description}</Toast.Description>
+                <Toast.Description
+                  fontSize={{ base: '14px', md: undefined }}
+                  lineHeight={{ base: '20px', md: undefined }}
+                >
+                  {toast.description}
+                </Toast.Description>
               )}
             </Stack>
             {toast.action && (

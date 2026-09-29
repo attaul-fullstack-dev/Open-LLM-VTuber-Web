@@ -3,6 +3,7 @@ import { useWebSocket } from '@/context/websocket-context';
 import { useInterrupt } from '@/components/canvas/live2d';
 import { useChatHistory } from '@/context/chat-history-context';
 import { useMode, ModeType } from '@/context/mode-context';
+import { getUserTimezone } from '@/utils/user-timezone';
 
 export const useSidebar = () => {
   const disclosure = useDisclosure();
@@ -20,6 +21,7 @@ export const useSidebar = () => {
     interrupt();
     sendMessage({
       type: 'create-new-history',
+      timezone: getUserTimezone(),
     });
   };
 

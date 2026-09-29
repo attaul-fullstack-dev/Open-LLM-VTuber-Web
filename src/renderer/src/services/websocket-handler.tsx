@@ -30,6 +30,9 @@ import {
 } from '@/utils/history-storage';
 import { subtitlePlaybackCoordinator } from '@/utils/subtitle-playback';
 import { loadVoiceOutputEnabled } from '@/utils/voice-output-preference';
+import { useLifeState } from '@/context/life-state-context';
+import { toLifeSnapshot } from '@/utils/life-state-sync';
+import { getUserTimezone } from '@/utils/user-timezone';
 
 function WebSocketHandler({ children }: { children: React.ReactNode }) {
   const { t } = useTranslation();
@@ -52,6 +55,12 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
   const activeConfUidRef = useRef('');
   const { interrupt } = useInterrupt();
   const { setBrowserViewData } = useBrowser();
+  const { enabled: lifeStateEnabled, setSnapshot: setLifeSnapshot } = useLifeState();
+  const lifeStateEnabledRef = useRef(lifeStateEnabled);
+
+  useEffect(() => {
+    lifeStateEnabledRef.current = lifeStateEnabled;
+  }, [lifeStateEnabled]);
 
   useEffect(() => {
     autoStartMicOnConvEndRef.current = autoStartMicOnConvEnd;
@@ -103,6 +112,13 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
           });
           resolve();
         }));
+        // LIVE PATH (backend sends {type:'control',text:'conversation-chain-end'}):
+        // event-driven Life State refresh, widget visible only, no polling.
+        // The user timezone travels with the request so reconnects and
+        // fresh sessions still derive time_context locally.
+        if (lifeStateEnabledRef.current) {
+          wsService.sendMessage({ type: 'fetch-world-state', timezone: getUserTimezone() });
+        }
         break;
       default:
         console.warn('Unknown control command:', controlText);
@@ -340,10 +356,11 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
             wsService.sendMessage({
               type: 'fetch-and-set-history',
               history_uid: decision.uid,
+              timezone: getUserTimezone(),
             });
           } else {
             if (rememberedUid) clearLastHistoryUid(confUidForHistory);
-            wsService.sendMessage({ type: 'create-new-history' });
+            wsService.sendMessage({ type: 'create-new-history', timezone: getUserTimezone() });
           }
         }
         break;
@@ -379,18 +396,12 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
       case 'backend-synth-complete':
         setBackendSynthComplete(true);
         break;
-      case 'conversation-chain-end':
-        if (!audioTaskQueue.hasTask()) {
-          setAiState((currentState: AiState) => {
-            if (currentState === 'thinking-speaking') {
-              return 'idle';
-            }
-            return currentState;
-          });
-        }
-        break;
       case 'force-new-message':
         setForceNewMessage(true);
+        break;
+      case 'world-state':
+        // Authoritative World/Life snapshot for the observability widget.
+        setLifeSnapshot(toLifeSnapshot(message));
         break;
       case 'interrupt-signal':
         // Handle forwarded interrupt
@@ -430,10 +441,15 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
 
   // Re-apply the persisted Voice Output setting to the backend whenever the
   // connection (re)opens, so a reload/reconnect keeps the same TTS state.
+  // Same moment refreshes the Life State snapshot (widget visible only) so
+  // reconnects always re-derive time_context with the current user timezone.
   useEffect(() => {
     if (wsState !== 'OPEN') return;
     const enabled = loadVoiceOutputEnabled();
     wsService.sendMessage({ type: 'voice-output-toggle', enabled });
+    if (lifeStateEnabledRef.current) {
+      wsService.sendMessage({ type: 'fetch-world-state', timezone: getUserTimezone() });
+    }
   }, [wsState]);
 
   useEffect(() => {

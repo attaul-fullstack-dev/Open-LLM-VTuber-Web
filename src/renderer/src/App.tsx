@@ -3,6 +3,8 @@
 import { Box, Flex, ChakraProvider, defaultSystem, IconButton } from "@chakra-ui/react";
 import { useState, useEffect, useRef } from "react";
 import { FiMenu, FiX } from "react-icons/fi";
+import { miliTokens } from "./theme/design-tokens";
+import { resolveComposerCollapsed } from "./utils/composer-visibility";
 // import Canvas from './components/canvas/canvas'; // Likely unused now
 import Sidebar from "./components/sidebar/sidebar";
 import Footer from "./components/footer/footer";
@@ -32,10 +34,15 @@ import Subtitle from "./components/canvas/subtitle";
 import ThinkingStatus from "./components/canvas/thinking-status";
 import { ModeProvider, useMode } from "./context/mode-context";
 import { AvatarActivityProvider } from "./context/avatar-activity-context";
+import { LifeStateProvider } from "./context/life-state-context";
+import { LifeStateWidget } from "./components/canvas/life-state-widget";
 
 function AppContent(): JSX.Element {
   const [showSidebar, setShowSidebar] = useState(() => window.innerWidth >= 1024);
   const [isFooterCollapsed, setIsFooterCollapsed] = useState(false);
+  // Mobile breakpoint mirrors layout.tsx (base < lg = 1024px). On mobile the
+  // sidebar is a full-screen overlay; the composer must collapse under it.
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 1024);
   const { mode } = useMode();
   const isElectron = window.api !== undefined;
   const live2dContainerRef = useRef<HTMLDivElement>(null);
@@ -44,11 +51,20 @@ function AppContent(): JSX.Element {
     const handleResize = () => {
       const vh = window.innerHeight * 0.01;
       document.documentElement.style.setProperty("--vh", `${vh}px`);
+      setIsMobile(window.innerWidth < 1024);
     };
     handleResize();
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
+
+  // Overlay open => composer collapsed. Closing the overlay restores the
+  // user's own collapsed state (never forces an expand). Pure derivation:
+  // no extra state, no loop, draft text untouched (Footer stays mounted).
+  const composerCollapsed = resolveComposerCollapsed(
+    isFooterCollapsed,
+    isMobile && showSidebar,
+  );
 
     
   document.documentElement.style.overflow = 'hidden';
@@ -148,10 +164,12 @@ function AppContent(): JSX.Element {
                 width="44px"
                 height="44px"
                 borderRadius="full"
-                color="white"
-                bg="rgba(8, 15, 28, .68)"
-                backdropFilter="blur(14px)"
-                border="1px solid rgba(255,255,255,.14)"
+                color={miliTokens.color.textSecondary}
+                bg="rgba(10, 18, 32, 0.6)"
+                backdropFilter={miliTokens.blur.card}
+                border="1px solid"
+                borderColor={miliTokens.color.border}
+                _hover={{ color: miliTokens.color.textPrimary }}
                 onClick={() => setShowSidebar(!showSidebar)}
               >
                 {showSidebar ? <FiX /> : <FiMenu />}
@@ -159,11 +177,14 @@ function AppContent(): JSX.Element {
               <Box position="absolute" top={{ base: "14px", lg: "20px" }} left={{ base: "14px", lg: "20px" }} zIndex={10} transform={{ base: "scale(.72)", lg: "none" }} transformOrigin="top left">
                 <WebSocketStatus />
               </Box>
+              {/* Optional floating Life State observability overlay (Stage 7).
+                  Absolute overlay only: never affects chat layout or sizing. */}
+              <LifeStateWidget />
               <Box
                 position="absolute"
                 bottom={isFooterCollapsed
                   ? "39px"
-                  : { base: "calc(84px + env(safe-area-inset-bottom, 0px))", lg: "135px" }}
+                  : { base: "calc(74px + env(safe-area-inset-bottom, 0px))", lg: "86px" }}
                 left="50%"
                 transform="translateX(-50%)"
                 zIndex={10}
@@ -177,10 +198,10 @@ function AppContent(): JSX.Element {
                 // Keep the fixed mobile controls above the interactive
                 // Live2D canvas so their touch events are never intercepted.
                 zIndex={50}
-                {...(isFooterCollapsed && layoutStyles.collapsedFooter)}
+                {...(composerCollapsed && layoutStyles.collapsedFooter)}
               >
                 <Footer
-                  isCollapsed={isFooterCollapsed}
+                  isCollapsed={composerCollapsed}
                   onToggle={() => setIsFooterCollapsed(!isFooterCollapsed)}
                 />
               </Box>
@@ -218,7 +239,8 @@ function AppWithGlobalStyles(): JSX.Element {
                 <AvatarActivityProvider>
                   <ProactiveSpeakProvider>
                     <Live2DConfigProvider>
-                      <SubtitleProvider>
+                      <LifeStateProvider>
+                        <SubtitleProvider>
                         <VADProvider>
                           <BgUrlProvider>
                             <GroupProvider>
@@ -232,6 +254,7 @@ function AppWithGlobalStyles(): JSX.Element {
                           </BgUrlProvider>
                         </VADProvider>
                       </SubtitleProvider>
+                      </LifeStateProvider>
                     </Live2DConfigProvider>
                   </ProactiveSpeakProvider>
                 </AvatarActivityProvider>

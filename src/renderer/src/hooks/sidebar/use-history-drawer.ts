@@ -5,6 +5,7 @@ import { useWebSocket, HistoryInfo } from '@/context/websocket-context';
 import { toaster } from '@/components/ui/toaster';
 import { useConfig } from '@/context/character-config-context';
 import { setLastHistoryUid } from '@/utils/history-storage';
+import { getUserTimezone } from '@/utils/user-timezone';
 
 export const useHistoryDrawer = () => {
   const { t } = useTranslation();
@@ -33,6 +34,7 @@ export const useHistoryDrawer = () => {
     sendMessage({
       type: 'fetch-and-set-history',
       history_uid: uid,
+      timezone: getUserTimezone(),
     });
   };
 

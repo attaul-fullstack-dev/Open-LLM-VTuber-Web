@@ -6,6 +6,7 @@ import { useChatHistory } from '@/context/chat-history-context';
 import { useVAD } from '@/context/vad-context';
 import { useMediaCapture } from '@/hooks/utils/use-media-capture';
 import { startChatLatency } from '@/utils/chat-latency';
+import { getUserTimezone } from '@/utils/user-timezone';
 import { useAvatarActivityState } from '@/context/avatar-activity-context';
 
 export function useTextInput() {
@@ -73,6 +74,7 @@ export function useTextInput() {
         images: [...capturedImages, ...uploadedImages],
         request_id: timing.requestId,
         client_user_send_ms: timing.clientUserSendMs,
+        timezone: getUserTimezone(),
       });
       // Never render a phantom user message. If the socket dropped, keep the
       // draft and attachments intact so the user can resend after reconnect.

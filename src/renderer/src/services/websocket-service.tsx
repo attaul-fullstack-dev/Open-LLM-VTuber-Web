@@ -74,6 +74,14 @@ export interface MessageEvent {
   histories?: HistoryInfo[];
   configs?: ConfigFile[];
   title?: string;
+  // World/Life State snapshot fields (backend `world-state` message).
+  location?: string;
+  activity?: string;
+  energy?: number;
+  mood?: string;
+  time_context?: string;
+  activity_started_at?: string;
+  last_update_at?: string;
   memories?: {
     text: string;
     added_at: string;

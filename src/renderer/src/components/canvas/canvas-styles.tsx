@@ -1,3 +1,5 @@
+import { miliTokens } from '@/theme/design-tokens';
+
 export const canvasStyles = {
   background: {
     container: {
@@ -6,7 +8,7 @@ export const canvasStyles = {
       height: '100%',
       overflow: 'hidden',
       pointerEvents: 'auto',
-      backgroundColor: '#07111f',
+      backgroundColor: miliTokens.color.background,
       isolation: 'isolate',
     },
     image: {
@@ -41,20 +43,21 @@ export const canvasStyles = {
   subtitle: {
     container: {
       position: 'relative',
-      backgroundColor: 'rgba(0, 0, 0, 0.7)',
+      backgroundColor: miliTokens.color.elevated,
       width: 'fit-content',
       marginInline: 'auto',
-      padding: { base: '12px 42px 12px 17px', lg: '15px 46px 15px 26px' },
-      borderRadius: { base: '18px', lg: '16px' },
+      padding: { base: '10px 40px 10px 16px', lg: '15px 46px 15px 26px' },
+      borderRadius: { base: miliTokens.radius.lg, lg: miliTokens.radius.lg },
       minWidth: { base: 'auto', lg: '60%' },
       maxWidth: { base: '92vw', lg: 'min(760px, 92%)' },
       maxHeight: { base: '30dvh', lg: '34dvh' },
       overflowY: 'auto',
       overflowX: 'hidden',
       overscrollBehavior: 'contain',
-      backdropFilter: 'blur(12px)',
-      border: '1px solid rgba(255, 255, 255, 0.08)',
-      boxShadow: '0 8px 28px rgba(0, 0, 0, 0.22)',
+      backdropFilter: miliTokens.blur.card,
+      border: '1px solid',
+      borderColor: miliTokens.color.border,
+      boxShadow: miliTokens.shadow.float,
     },
     closeButton: {
       position: 'absolute',
@@ -83,20 +86,25 @@ export const canvasStyles = {
   wsStatus: {
     container: {
       position: 'relative',
-      // top: '20px',
-      // left: '20px',
       zIndex: 2,
-      padding: { base: '6px 10px', lg: '8px 16px' },
-      borderRadius: '20px',
-      fontSize: { base: '11px', lg: '14px' },
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: '7px',
+      padding: { base: '7px 12px', lg: '8px 14px' },
+      borderRadius: miliTokens.radius.pill,
+      border: '1px solid',
+      fontSize: { base: miliTokens.font.xs, lg: miliTokens.font.sm },
       fontWeight: 'medium',
-      color: 'white',
+      color: miliTokens.color.textSecondary,
       transition: 'all 0.2s',
-      cursor: 'pointer',
       userSelect: 'none',
-      _hover: {
-        opacity: 0.8,
-      },
+      backdropFilter: miliTokens.blur.card,
+    },
+    dot: {
+      width: '7px',
+      height: '7px',
+      borderRadius: 'full',
+      flexShrink: 0,
     },
   },
 };

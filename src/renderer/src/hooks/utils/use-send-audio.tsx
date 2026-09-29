@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import { useWebSocket } from "@/context/websocket-context";
 import { useMediaCapture } from "@/hooks/utils/use-media-capture";
+import { getUserTimezone } from "@/utils/user-timezone";
 
 export function useSendAudio() {
   const { sendMessage } = useWebSocket();
@@ -23,7 +24,7 @@ export function useSendAudio() {
 
       // Send end signal after all chunks
       const images = await captureAllMedia();
-      sendMessage({ type: "mic-audio-end", images });
+      sendMessage({ type: "mic-audio-end", images, timezone: getUserTimezone() });
     },
     [sendMessage, captureAllMedia],
   );

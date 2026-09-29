@@ -1,11 +1,21 @@
 import { SystemStyleObject } from '@chakra-ui/react';
+import { miliTokens } from '@/theme/design-tokens';
 
 interface FooterStyles {
   container: (isCollapsed: boolean) => SystemStyleObject
-  toggleButton: SystemStyleObject
-  actionButton: SystemStyleObject
+  /** Single unified composer bar. Grows vertically with multi-line input. */
+  composerBar: SystemStyleObject
+  /** 1px warm-neutral separator between composer sections. */
+  divider: SystemStyleObject
+  /** Short separator inside the bottom control row (never a tall wall). */
+  dividerShort: SystemStyleObject
+  attachButton: (hasAttachment: boolean) => SystemStyleObject
+  soundButton: (soundOn: boolean) => SystemStyleObject
+  micButton: (micOn: boolean) => SystemStyleObject
+  sendButton: SystemStyleObject
   input: SystemStyleObject
-  attachButton: SystemStyleObject
+  /** Expanded-mode textarea padding: comfortable inset inside the surface. */
+  inputExpanded: SystemStyleObject
 }
 
 interface AIIndicatorStyles {
@@ -13,16 +23,21 @@ interface AIIndicatorStyles {
   text: SystemStyleObject
 }
 
+const composer = miliTokens.composer;
+
 export const footerStyles: {
   footer: FooterStyles
   aiIndicator: AIIndicatorStyles
 } = {
   footer: {
     container: (isCollapsed) => ({
-      bg: isCollapsed ? 'transparent' : { base: 'rgba(10, 18, 31, .88)', lg: 'gray.800' },
-      backdropFilter: { base: 'blur(18px)', lg: 'none' },
-      borderRadius: isCollapsed ? 'none' : { base: '28px', lg: '16px 16px 0 0' },
-      border: isCollapsed ? 'none' : { base: '1px solid rgba(255,255,255,.12)', lg: 'none' },
+      // The composer is a single visual unit: no panel background, border,
+      // radius, shadow or blur on the wrapper. Positioning, safe-area
+      // padding and the collapse transform are preserved.
+      bg: 'transparent',
+      backdropFilter: 'none',
+      borderRadius: 'none',
+      border: 'none',
       transform: isCollapsed
         ? { base: 'translateY(calc(100% - 10px))', lg: 'translateY(calc(100% - 24px))' }
         : 'translateY(0)',
@@ -33,85 +48,141 @@ export const footerStyles: {
       pointerEvents: 'auto',
       touchAction: 'manipulation',
       overflow: 'hidden',
-      pb: { base: '0', lg: '4' },
-      boxShadow: isCollapsed ? 'none' : { base: '0 12px 36px rgba(0,0,0,.28)', lg: 'none' },
+      px: { base: '1.5', lg: '4' },
+      pb: { base: '1.5', lg: '3' },
+      boxShadow: 'none',
     }),
-    toggleButton: {
-      height: { base: '7px', lg: '24px' },
+    composerBar: {
       display: 'flex',
       alignItems: 'center',
-      justifyContent: 'center',
-      cursor: 'pointer',
-      color: 'whiteAlpha.700',
-      _hover: { color: 'white' },
-      bg: 'transparent',
-      transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+      width: '100%',
+      minW: '0',
+      maxW: { base: '100%', lg: '760px' },
+      mx: { base: '0', lg: 'auto' },
+      minHeight: { base: '54px', lg: '58px' },
+      px: { base: miliTokens.space[1], lg: miliTokens.space[2] },
+      py: { base: miliTokens.space[1.5], lg: miliTokens.space[1.5] },
+      gap: '0',
+      bg: composer.bg,
+      border: '1px solid',
+      borderColor: composer.border,
+      borderRadius: '20px',
+      overflow: 'hidden',
     },
-    actionButton: {
-      borderRadius: { base: 'full', lg: '12px' },
-      width: { base: '44px', lg: '50px' },
-      height: { base: '44px', lg: '50px' },
-      minW: { base: '44px', lg: '50px' },
+    divider: {
       flexShrink: 0,
-      position: 'relative',
-      zIndex: 2,
-      pointerEvents: 'auto',
-      touchAction: 'manipulation',
-      boxShadow: { base: '0 4px 14px rgba(0,0,0,.18)', lg: 'none' },
+      width: '1px',
+      // Fixed short height, never stretched by the textarea: tall wrapped
+      // text must not turn these into full-height walls.
+      height: '32px',
+      alignSelf: 'center',
+      bg: composer.divider,
+    },
+    dividerShort: {
+      flexShrink: 0,
+      width: '1px',
+      height: '24px',
+      alignSelf: 'center',
+      bg: composer.divider,
+    },
+    attachButton: (hasAttachment) => ({
+      flexShrink: 0,
+      width: { base: '40px', lg: '40px' },
+      minW: { base: '40px', lg: '40px' },
+      height: { base: '40px', lg: '40px' },
+      borderRadius: 'full',
+      color: hasAttachment ? composer.accent : composer.icon,
+      bg: 'transparent',
+      _hover: { bg: composer.iconHoverBg, color: composer.text },
+      _active: { bg: composer.iconHoverBg },
+    }),
+    soundButton: (soundOn) => ({
+      flexShrink: 0,
+      width: { base: '40px', lg: '40px' },
+      minW: { base: '40px', lg: '40px' },
+      height: { base: '40px', lg: '40px' },
+      borderRadius: 'full',
+      color: soundOn ? composer.icon : composer.iconMuted,
+      bg: 'transparent',
+      _hover: { bg: composer.iconHoverBg, color: composer.text },
+      _active: { bg: composer.iconHoverBg },
+    }),
+    micButton: (micOn) => ({
+      flexShrink: 0,
+      width: { base: '40px', lg: '40px' },
+      minW: { base: '40px', lg: '40px' },
+      height: { base: '40px', lg: '40px' },
+      borderRadius: 'full',
+      color: micOn ? composer.accent : composer.iconMuted,
+      bg: micOn ? composer.micActiveBg : 'transparent',
+      _hover: { bg: micOn ? composer.micActiveBg : composer.iconHoverBg, color: micOn ? composer.accent : composer.text },
+      _active: { bg: micOn ? composer.micActiveBg : composer.iconHoverBg },
+    }),
+    sendButton: {
+      flexShrink: 0,
+      width: miliTokens.control.touch,
+      minW: miliTokens.control.touch,
+      height: miliTokens.control.touch,
+      borderRadius: 'full',
+      color: composer.accentInk,
+      bg: composer.accent,
+      ml: '2px',
+      _hover: { filter: 'brightness(1.07)' },
+      _active: { filter: 'brightness(1.12)' },
+      _disabled: { opacity: 0.45 },
     },
     input: {
       bg: 'transparent',
       border: 'none',
-      height: { base: '52px', lg: '80px' },
+      outline: 'none',
       borderRadius: '0',
-      fontSize: { base: '15px', lg: '18px' },
-      pl: { base: '1.5', lg: '2' },
-      pr: { base: '1', lg: '2' },
-      color: 'whiteAlpha.900',
+      fontSize: { base: miliTokens.font.md, lg: '16px' },
+      pl: { base: '1.5', lg: '2.5' },
+      pr: '0.5',
+      py: '0',
+      color: composer.text,
       _placeholder: {
-        color: 'whiteAlpha.500',
+        color: composer.placeholder,
+        whiteSpace: 'nowrap',
       },
       _focus: {
         border: 'none',
+        outline: 'none',
         bg: 'transparent',
       },
+      _focusVisible: {
+        outline: 'none',
+        boxShadow: 'none',
+        border: 'none',
+      },
       resize: 'none',
-      minHeight: { base: '52px', lg: '80px' },
-      maxHeight: { base: '52px', lg: '80px' },
-      py: { base: '14px', lg: '24px' },
-      lineHeight: '1.4',
+      // minHeight 0: scrollHeight then reports the exact content height, so
+      // a single line is always exactly one line-height tall and centered
+      // by the bar (a CSS minimum would pad slack below the text).
+      minHeight: '0',
+      maxHeight: '132px',
+      lineHeight: '1.45',
       whiteSpace: 'pre-wrap',
       overflowY: 'auto',
       overflowX: 'hidden',
     },
-    attachButton: {
-      position: 'absolute',
-      left: '1',
-      top: '50%',
-      transform: 'translateY(-50%)',
-      color: 'whiteAlpha.700',
-      zIndex: 2,
-      _hover: {
-        bg: 'transparent',
-        color: 'white',
-      },
+    inputExpanded: {
+      // Full-width text zone: inset from the container edge for a
+      // comfortable reading column aligned with the control row below.
+      px: '10px',
+      // Clearance above the control row without a divider line.
+      pb: miliTokens.space[2],
     },
   },
   aiIndicator: {
     container: {
-      bg: '#7C5CFF',
-      color: 'white',
-      width: '110px',
-      height: '30px',
-      borderRadius: '12px',
       display: 'flex',
       alignItems: 'center',
-      justifyContent: 'center',
-      boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
-      overflow: 'hidden',
+      minW: '0',
     },
     text: {
-      fontSize: '12px',
+      fontSize: miliTokens.font.xs,
+      color: miliTokens.color.textSecondary,
       whiteSpace: 'nowrap',
       overflow: 'hidden',
       textOverflow: 'ellipsis',

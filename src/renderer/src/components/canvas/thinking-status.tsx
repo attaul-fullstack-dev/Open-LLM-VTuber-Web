@@ -3,6 +3,7 @@ import { Box, Spinner, Text } from '@chakra-ui/react';
 import { FiAlertCircle } from 'react-icons/fi';
 import { useTranslation } from 'react-i18next';
 import { useAiState } from '@/context/ai-state-context';
+import { miliTokens } from '@/theme/design-tokens';
 
 // After this long without a first token, the model is very likely stuck.
 // Show a warning instead of the plain waiting text so the user can tell a
@@ -49,15 +50,15 @@ function ThinkingStatus(): JSX.Element | null {
         px={{ base: '14px', lg: '18px' }}
         py={{ base: '8px', lg: '10px' }}
         borderRadius="full"
-        bg={stuck ? '#E53E3E' : '#7C5CFF'}
+        bg={stuck ? miliTokens.color.danger : miliTokens.color.accent}
         color="white"
-        border="1px solid rgba(255, 255, 255, 0.18)"
-        boxShadow="0 8px 28px rgba(0, 0, 0, 0.22)"
-        backdropFilter="blur(12px)"
+        border="1px solid rgba(255, 255, 255, 0.14)"
+        boxShadow={miliTokens.shadow.float}
+        backdropFilter={miliTokens.blur.card}
       >
         {stuck ? <FiAlertCircle size="16" /> : <Spinner size="sm" />}
         <Text
-          fontSize={{ base: '13px', lg: '15px' }}
+          fontSize={{ base: miliTokens.font.sm, lg: miliTokens.font.md }}
           fontWeight="medium"
           textAlign="center"
           lineHeight="1.3"

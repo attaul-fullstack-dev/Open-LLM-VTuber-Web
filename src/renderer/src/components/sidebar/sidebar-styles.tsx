@@ -1,4 +1,5 @@
 import { css } from '@emotion/react';
+import { miliTokens } from '@/theme/design-tokens';
 
 const isElectron = window.api !== undefined;
 
@@ -40,7 +41,7 @@ export const sidebarStyles = {
       width: { base: '100vw', lg: '440px' },
       // Blur across a full-screen Live2D canvas is expensive on mobile while scrolling.
       // The almost-opaque background preserves the same visual separation without GPU jank.
-      bg: 'rgba(17, 24, 39, .985)',
+      bg: miliTokens.color.drawer,
       backdropFilter: { base: 'none', lg: 'blur(12px)' },
       transform: isCollapsed
         ? 'translateX(calc(-100% + 24px))'
@@ -93,12 +94,12 @@ export const sidebarStyles = {
       width: { base: '44px', lg: '40px' },
       height: { base: '44px', lg: '40px' },
       p: 0,
-      borderRadius: { base: '14px', lg: '10px' },
-      color: 'whiteAlpha.800',
-      bg: 'rgba(255,255,255,.035)',
-      border: '1px solid rgba(255,255,255,.04)',
-      _hover: { bg: 'whiteAlpha.100', color: 'white' },
-      _active: { bg: 'whiteAlpha.200' },
+      borderRadius: { base: miliTokens.radius.md, lg: miliTokens.radius.sm },
+      color: miliTokens.color.textSecondary,
+      bg: 'transparent',
+      border: '1px solid transparent',
+      _hover: { bg: miliTokens.color.surface, color: miliTokens.color.textPrimary },
+      _active: { bg: miliTokens.color.surface },
     },
   },
 
@@ -571,24 +572,24 @@ export const sidebarStyles = {
 
 export const chatPanelStyles = css`
   .cs-message-list {
-    background: var(--chakra-colors-gray-900) !important;
-    padding: 12px 10px 22px !important;
+    background: ${miliTokens.color.background} !important;
+    padding: 16px 12px 24px !important;
   }
-  
+
   .cs-message {
-    margin: 6px 0 !important;
+    margin: 10px 0 !important;
   }
 
   .cs-message__content {
-    background-color: rgba(255, 255, 255, .095) !important;
-    border: 1px solid rgba(255, 255, 255, .055) !important;
-    border-radius: 18px 18px 18px 6px !important;
-    padding: 11px 14px !important;
-    color: var(--chakra-colors-white) !important;
-    font-size: 0.94rem !important;
-    line-height: 1.5 !important;
+    background-color: ${miliTokens.color.surface} !important;
+    border: 1px solid ${miliTokens.color.border} !important;
+    border-radius: 16px 16px 16px 5px !important;
+    padding: 10px 14px !important;
+    color: ${miliTokens.color.textPrimary} !important;
+    font-size: ${miliTokens.font.message} !important;
+    line-height: 1.55 !important;
     margin-top: 0 !important;
-    box-shadow: 0 3px 12px rgba(0, 0, 0, .1) !important;
+    box-shadow: none !important;
   }
 
   .cs-message__text {
@@ -599,9 +600,9 @@ export const chatPanelStyles = css`
   }
 
   .cs-message--outgoing .cs-message__content {
-    background: linear-gradient(145deg, rgba(124, 92, 255, .92), rgba(91, 72, 210, .92)) !important;
-    border-color: rgba(255, 255, 255, .12) !important;
-    border-radius: 18px 18px 6px 18px !important;
+    background: ${miliTokens.color.accent} !important;
+    border-color: transparent !important;
+    border-radius: 16px 16px 5px 16px !important;
   }
 
   .cs-chat-container {
@@ -629,17 +630,17 @@ export const chatPanelStyles = css`
   }
 
   .cs-avatar {
-    background-color: var(--chakra-colors-blue-500) !important;
-    color: white !important;
-    width: 30px !important;
-    min-width: 30px !important;
-    max-width: 30px !important;
-    height: 30px !important;
-    min-height: 30px !important;
-    max-height: 30px !important;
-    flex: 0 0 30px !important;
+    background-color: ${miliTokens.color.surface} !important;
+    color: ${miliTokens.color.textSecondary} !important;
+    width: 28px !important;
+    min-width: 28px !important;
+    max-width: 28px !important;
+    height: 28px !important;
+    min-height: 28px !important;
+    max-height: 28px !important;
+    flex: 0 0 28px !important;
     aspect-ratio: 1 / 1 !important;
-    font-size: 13px !important;
+    font-size: 12px !important;
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
@@ -656,7 +657,8 @@ export const chatPanelStyles = css`
   }
 
   .cs-message--outgoing .cs-avatar {
-    background-color: var(--chakra-colors-green-500) !important;
+    background-color: ${miliTokens.color.accentSoft} !important;
+    color: ${miliTokens.color.accentText} !important;
   }
 
   .cs-message__header {
@@ -665,11 +667,11 @@ export const chatPanelStyles = css`
 
   @media (min-width: 1024px) {
     .cs-message-list {
-      padding: 14px 16px 22px !important;
+      padding: 18px 18px 24px !important;
     }
 
     .cs-message {
-      margin: 8px 0 !important;
+      margin: 12px 0 !important;
     }
 
     .cs-message__content-wrapper {
@@ -679,26 +681,26 @@ export const chatPanelStyles = css`
 
   @media (max-width: 430px) {
     .cs-message-list {
-      padding-inline: 8px !important;
+      padding-inline: 10px !important;
     }
 
     .cs-message {
-      margin: 7px 0 !important;
+      margin: 10px 0 !important;
     }
 
     .cs-message__content-wrapper {
-      max-width: calc(100% - 48px) !important;
+      max-width: calc(100% - 46px) !important;
       margin-inline: 5px !important;
     }
 
     .cs-message__content {
-      padding: 11px 13px !important;
-      border-radius: 17px 17px 17px 6px !important;
-      font-size: .95rem !important;
+      padding: 10px 13px !important;
+      border-radius: 15px 15px 15px 5px !important;
+      font-size: ${miliTokens.font.message} !important;
     }
 
     .cs-message--outgoing .cs-message__content {
-      border-radius: 17px 17px 6px 17px !important;
+      border-radius: 15px 15px 5px 15px !important;
     }
   }
 `;
