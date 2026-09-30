@@ -25,23 +25,24 @@ export function Toaster() {
           // keeps the existing default look untouched.
           <Toast.Root
             width={{ base: 'auto', md: 'sm' }}
-            maxWidth={{ base: 'calc(100vw - 32px)', md: 'sm' }}
+            maxWidth={{ base: 'min(230px, calc(100vw - 32px))', md: 'sm' }}
             px={{ base: '4', md: undefined }}
-            // Success toasts are slightly taller on mobile (compact pill
-            // target height). Other toast types keep default padding.
-            py={toast.type === 'success' ? { base: '3', md: undefined } : undefined}
+            // Success toasts: compact pill sizing (mobile only).
+            // Other toast types keep default padding/typography.
+            py={toast.type === 'success' ? { base: '2.5', md: undefined } : undefined}
             gap={{ base: '2.5', md: undefined }}
+            borderRadius={toast.type === 'success' ? { base: '12px', md: undefined } : undefined}
           >
             {toast.type === 'loading' ? (
               <Spinner size="sm" color="blue.solid" />
             ) : (
-              <Toast.Indicator boxSize={{ base: '20px', md: undefined }} flexShrink={0} />
+              <Toast.Indicator boxSize={{ base: '24px', md: undefined }} flexShrink={0} />
             )}
             <Stack gap="1" flex="1" minW="0" maxWidth="100%">
               {toast.title && (
                 <Toast.Title
-                  fontSize={{ base: '14px', md: undefined }}
-                  lineHeight={{ base: '20px', md: undefined }}
+                  fontSize={toast.type === 'success' ? { base: '16px', md: undefined } : { base: '14px', md: undefined }}
+                  lineHeight={toast.type === 'success' ? { base: '22px', md: undefined } : { base: '20px', md: undefined }}
                 >
                   {toast.title}
                 </Toast.Title>
