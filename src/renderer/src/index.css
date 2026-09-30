@@ -22,12 +22,20 @@ canvas {
     background: #07111F;
 }
 
-/* Mobile: center success toasts horizontally. Chakra positions toasts
-   with inline left/right offsets (top-end placement); this override
-   applies only to success type so warning/error toasts keep their
-   existing placement. Safe with Chakra animations, which use the
+/* Center success + warning toasts horizontally. Covers phones, large
+   phones/tablets and desktop-site mode viewports (up to 1023px); true
+   desktop keeps default placement. Chakra positions toasts with inline
+   left/right offsets (top-end placement); this override applies to the
+   actual toast elements. Safe with Chakra animations, which use the
    individual `translate`/`scale` properties, not `transform`. */
-@media (max-width: 767px) {
+@media (max-width: 1023px) {
+    /* The toast group is fixed-positioned but only end-anchored, so it
+       collapses to zero width at the right edge on wider viewports.
+       Stretch it full-width so success/warning toasts centered with
+       left:50% align to the viewport, not to a right-side parent. */
+    [data-scope="toast"][data-part="group"] {
+        inset-inline-start: 16px !important;
+    }
     [data-scope="toast"][data-part="root"][data-type="success"],
     [data-scope="toast"][data-part="root"][data-type="warning"] {
         left: 50% !important;
