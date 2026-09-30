@@ -28,10 +28,14 @@ canvas {
    existing placement. Safe with Chakra animations, which use the
    individual `translate`/`scale` properties, not `transform`. */
 @media (max-width: 767px) {
-    [data-scope="toast"][data-part="root"][data-type="success"] {
+    [data-scope="toast"][data-part="root"][data-type="success"],
+    [data-scope="toast"][data-part="root"][data-type="warning"] {
         left: 50% !important;
         right: auto !important;
         transform: translateX(-50%) !important;
         width: max-content !important;
+    }
+    [data-scope="toast"][data-part="root"][data-type="warning"] {
+        max-width: min(320px, calc(100vw - 32px)) !important;
     }
 }
