@@ -21,3 +21,17 @@ canvas {
     height: 100%;
     background: #07111F;
 }
+
+/* Mobile: center success toasts horizontally. Chakra positions toasts
+   with inline left/right offsets (top-end placement); this override
+   applies only to success type so warning/error toasts keep their
+   existing placement. Safe with Chakra animations, which use the
+   individual `translate`/`scale` properties, not `transform`. */
+@media (max-width: 767px) {
+    [data-scope="toast"][data-part="root"][data-type="success"] {
+        left: 50% !important;
+        right: auto !important;
+        transform: translateX(-50%) !important;
+        min-width: 180px;
+    }
+}

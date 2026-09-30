@@ -27,7 +27,9 @@ export function Toaster() {
             width={{ base: 'auto', md: 'sm' }}
             maxWidth={{ base: 'calc(100vw - 32px)', md: 'sm' }}
             px={{ base: '4', md: undefined }}
-            py={{ base: '2.5', md: undefined }}
+            // Success toasts are slightly taller on mobile (compact pill
+            // target height). Other toast types keep default padding.
+            py={toast.type === 'success' ? { base: '3', md: undefined } : undefined}
             gap={{ base: '2.5', md: undefined }}
           >
             {toast.type === 'loading' ? (
