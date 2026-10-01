@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { useWebSocket } from '@/context/websocket-context';
 import { useAiState } from '@/context/ai-state-context';
 import { useInterrupt } from '@/components/canvas/live2d';
@@ -8,6 +8,15 @@ import { useMediaCapture } from '@/hooks/utils/use-media-capture';
 import { startChatLatency } from '@/utils/chat-latency';
 import { getUserTimezone } from '@/utils/user-timezone';
 import { useAvatarActivityState } from '@/context/avatar-activity-context';
+import { saveDraft, loadDraft, clearDraft, draftKey, resolvePostSendDraft } from '@/utils/composer-draft';
+
+function sessionDraftStorage(): Storage | null {
+  try {
+    return typeof window !== 'undefined' ? window.sessionStorage : null;
+  } catch {
+    return null;
+  }
+}
 
 export function useTextInput() {
   const [inputText, setInputText] = useState('');
@@ -20,13 +29,27 @@ export function useTextInput() {
   const wsContext = useWebSocket();
   const { aiState } = useAiState();
   const { interrupt } = useInterrupt();
-  const { appendHumanMessage } = useChatHistory();
+  const { appendHumanMessage, currentHistoryUid } = useChatHistory();
   const { stopMic, autoStopMic } = useVAD();
   const { captureAllMedia } = useMediaCapture();
   const { markUserActivity } = useAvatarActivityState();
+  const key = draftKey(currentHistoryUid);
+
+  // Restore a draft that survived reconnect / history reload / remount.
+  // Runs on mount and whenever the conversation scope changes.
+  useEffect(() => {
+    const restored = loadDraft(sessionDraftStorage(), key);
+    if (restored) {
+      setInputText(restored);
+      if (inputRef.current) inputRef.current.value = restored;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setInputText(e.target.value);
+    // Persist every keystroke; cleared only on successful send.
+    saveDraft(sessionDraftStorage(), key, e.target.value);
   };
 
   const handleSend = async () => {
@@ -83,9 +106,25 @@ export function useTextInput() {
       markUserActivity();
       appendHumanMessage(messageText);
       if (autoStopMic) stopMic();
-      setInputText('');
-      if (inputRef.current) inputRef.current.value = '';
-      setUploadedImages([]);
+      // Keystrokes typed during the media-capture await were never sent;
+      // resolvePostSendDraft keeps them instead of wiping unsent input.
+      const postSend = resolvePostSendDraft(
+        messageText,
+        inputRef.current?.value,
+      );
+      if (postSend.action === 'keep') {
+        setInputText(postSend.text);
+        if (inputRef.current) inputRef.current.value = postSend.text;
+        saveDraft(sessionDraftStorage(), key, postSend.text);
+      } else {
+        setInputText('');
+        if (inputRef.current) inputRef.current.value = '';
+        setUploadedImages([]);
+        // The message left the building: the persisted draft is stale now.
+        // This is the ONLY place the draft is cleared — never on reconnect,
+        // history reload, remount, or streaming events.
+        clearDraft(sessionDraftStorage(), key);
+      }
     } finally {
       isSendingRef.current = false;
     }
