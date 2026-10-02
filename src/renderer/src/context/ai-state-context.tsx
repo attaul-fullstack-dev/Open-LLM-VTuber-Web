@@ -8,6 +8,7 @@ import {
   useRef,
   useEffect,
 } from 'react';
+import { getActiveConnectionId, logWsDiag } from '@/utils/ws-diagnostics';
 
 /**
  * Enum for all possible AI states
@@ -104,6 +105,11 @@ export function AiStateProvider({ children }: { children: ReactNode }) {
       ? (newState as (currentState: AiState) => AiState)(latest)
       : newState;
 
+    // Diagnostic-only (BUG B correlation): record real transitions.
+    if (nextState !== latest) {
+      logWsDiag('AI_STATE_CHANGE', getActiveConnectionId(), `${latest}->${nextState}`);
+    }
+
     if (nextState === AiStateEnum.WAITING) {
       if (latest !== AiStateEnum.THINKING_SPEAKING) {
         setAiStateInternal(nextState);
@@ -113,6 +119,7 @@ export function AiStateProvider({ children }: { children: ReactNode }) {
         }
 
         timerRef.current = setTimeout(() => {
+          logWsDiag('AI_STATE_CHANGE', getActiveConnectionId(), 'waiting->idle(timer)');
           setAiStateInternal(AiStateEnum.IDLE);
           timerRef.current = null;
         }, 2000);

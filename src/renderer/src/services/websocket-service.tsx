@@ -7,6 +7,14 @@ import { HistoryInfo } from '@/context/websocket-context';
 import { ConfigFile } from '@/context/character-config-context';
 import { toaster } from '@/components/ui/toaster';
 import { markWebSocketSend } from '@/utils/chat-latency';
+import {
+  logWsDiag,
+  markConnError,
+  markConnSendFailure,
+  nextConnectionId,
+  recordCloseIncident,
+  setActiveConnectionId,
+} from '@/utils/ws-diagnostics';
 
 export interface DisplayText {
   text: string;
@@ -144,6 +152,15 @@ class WebSocketService {
 
   private explicitlyDisconnected = false;
 
+  // Diagnostic-only connection identity (BUG B capture). Assigned per
+  // socket creation; never affects lifecycle decisions.
+  private connId = 'ws0';
+
+  // Diagnostic-only reconnect tracking. Set when a retry timer is armed,
+  // consumed on the next open/failed-connect — never drives behavior.
+  private reconnectPending = false;
+  private openedConns = new Set<string>();
+
   static getInstance() {
     if (!WebSocketService.instance) {
       WebSocketService.instance = new WebSocketService();
@@ -152,6 +169,7 @@ class WebSocketService {
   }
 
   private initializeConnection() {
+    logWsDiag('HISTORY_LIST_REQUEST', this.connId);
     this.sendMessage({
       type: 'fetch-backgrounds',
     });
@@ -170,22 +188,29 @@ class WebSocketService {
     }
   }
 
-  private scheduleReconnect() {
+  private scheduleReconnect(reason: string) {
     if (
       this.explicitlyDisconnected
       || !this.currentUrl
       || this.reconnectTimer
       || this.ws?.readyState === WebSocket.OPEN
       || this.ws?.readyState === WebSocket.CONNECTING
-    ) return;
+    ) {
+      // Diagnostic-only: record suppressed attempts too.
+      logWsDiag('RECONNECT_SUPPRESSED', this.connId, `reason=${reason}`);
+      return;
+    }
 
     // One bounded retry timer prevents reconnect storms while still recovering
     // automatically after a backend restart or brief mobile-network drop.
     const delayMs = Math.min(1000 * (2 ** this.reconnectAttempt), 10000);
     this.reconnectAttempt += 1;
+    this.reconnectPending = true;
+    logWsDiag('RECONNECT_SCHEDULED', this.connId, `reason=${reason} delayMs=${delayMs}`);
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       if (this.currentUrl && !this.explicitlyDisconnected) {
+        logWsDiag('RECONNECT_START', this.connId, `reason=${reason}`);
         this.connect(this.currentUrl);
       }
     }, delayMs);
@@ -198,12 +223,18 @@ class WebSocketService {
 
     if (this.ws?.readyState === WebSocket.CONNECTING ||
         this.ws?.readyState === WebSocket.OPEN) {
+      // Diagnostic-only: superseding a live socket is itself an event.
+      logWsDiag('WS_SUPERSEDE_CLOSE', this.connId, `readyState=${this.ws.readyState}`);
       this.ws.close();
     }
 
     try {
       const socket = new WebSocket(url);
       this.ws = socket;
+      this.connId = nextConnectionId();
+      const connId = this.connId;
+      setActiveConnectionId(connId);
+      logWsDiag('WS_CREATE', connId);
       this.currentState = 'CONNECTING';
       this.stateSubject.next('CONNECTING');
 
@@ -212,6 +243,12 @@ class WebSocketService {
         this.reconnectAttempt = 0;
         this.currentState = 'OPEN';
         this.stateSubject.next('OPEN');
+        this.openedConns.add(connId);
+        if (this.reconnectPending) {
+          this.reconnectPending = false;
+          logWsDiag('RECONNECT_SUCCESS', connId);
+        }
+        logWsDiag('WS_OPEN', connId);
         this.initializeConnection();
       };
 
@@ -230,17 +267,39 @@ class WebSocketService {
         }
       };
 
-      socket.onclose = () => {
+      socket.onclose = (event) => {
         // Ignore a late close event from a socket superseded by connect().
         if (this.ws !== socket) return;
         this.ws = null;
         this.currentState = 'CLOSED';
         this.stateSubject.next('CLOSED');
-        this.scheduleReconnect();
+        const code = typeof event?.code === 'number' ? event.code : null;
+        const reason = typeof event?.reason === 'string' ? event.reason : '';
+        logWsDiag(
+          'WS_CLOSE', connId,
+          `code=${code} reason=${reason} readyState=${socket.readyState}`,
+          socket.readyState,
+        );
+        if (!this.openedConns.has(connId)) {
+          // Diagnostic-only: a connect attempt died before opening.
+          logWsDiag('RECONNECT_FAILED', connId, `code=${code} reason=${reason}`);
+        }
+        // Diagnostic-only incident snapshot. Runs BEFORE scheduleReconnect
+        // so the old connection's facts survive resync.
+        recordCloseIncident({
+          connId,
+          code,
+          reason,
+          readyStateAtClose: socket.readyState,
+          reconnectScheduled: !this.explicitlyDisconnected && !!this.currentUrl,
+        });
+        this.scheduleReconnect('onclose');
       };
 
       socket.onerror = () => {
         if (this.ws !== socket) return;
+        markConnError(connId);
+        logWsDiag('WS_ERROR', connId, `readyState=${socket.readyState}`, socket.readyState);
         // Browsers normally follow this with `close`; closing explicitly makes
         // that lifecycle deterministic without starting a second retry timer.
         socket.close();
@@ -250,33 +309,40 @@ class WebSocketService {
       this.currentState = 'CLOSED';
       this.stateSubject.next('CLOSED');
       this.ws = null;
-      this.scheduleReconnect();
+      logWsDiag('WS_CREATE_FAILED', this.connId, `error=${error}`);
+      this.scheduleReconnect('connect-throw');
     }
   }
 
   sendMessage(message: object): boolean {
-    if (this.ws?.readyState === WebSocket.OPEN) {
+    const messageType = 'type' in message ? String(message.type) : 'unknown';
+    const before = this.ws?.readyState;
+    if (this.ws && before === WebSocket.OPEN) {
       const outgoing = { ...message } as Record<string, unknown>;
       if (outgoing.type === 'text-input' && typeof outgoing.request_id === 'string') {
         outgoing.client_websocket_send_ms = markWebSocketSend(outgoing.request_id);
       }
       try {
         this.ws.send(JSON.stringify(outgoing));
+        logWsDiag('WS_SEND', this.connId, `type=${messageType} readyState=${before}`, before);
         return true;
       } catch (error) {
         console.warn('WebSocket send failed; reconnecting.', error);
+        markConnSendFailure(this.connId);
+        logWsDiag('WS_SEND_FAILED', this.connId, `type=${messageType} readyState=${before} error=${error}`, before);
         this.ws.close();
       }
     } else {
-      const messageType = 'type' in message ? String(message.type) : 'unknown';
       console.warn('WebSocket is not open. Unable to send message type:', messageType);
+      markConnSendFailure(this.connId);
+      logWsDiag('WS_SEND_FAILED', this.connId, `type=${messageType} readyState=${before} reason=not-open`, before);
       toaster.create({
         title: getTranslation()('error.websocketNotOpen'),
         type: 'error',
         duration: 2000,
       });
     }
-    this.scheduleReconnect();
+    this.scheduleReconnect('send-failure');
     return false;
   }
 
@@ -289,6 +355,7 @@ class WebSocketService {
   }
 
   disconnect() {
+    logWsDiag('WS_EXPLICIT_DISCONNECT', this.connId);
     this.explicitlyDisconnected = true;
     this.clearReconnectTimer();
     this.ws?.close();
@@ -299,6 +366,11 @@ class WebSocketService {
 
   getCurrentState() {
     return this.currentState;
+  }
+
+  /** Diagnostic-only current connection identity for correlating events. */
+  getConnectionId() {
+    return this.connId;
   }
 }
 

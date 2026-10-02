@@ -10,8 +10,8 @@ const context = read('../src/renderer/src/context/websocket-context.tsx');
 test('websocket send reports whether an open socket accepted the payload', () => {
   assert.match(context, /sendMessage: \(message: object\) => boolean/);
   assert.match(service, /sendMessage\(message: object\): boolean/);
-  assert.match(service, /this\.ws\.send\(JSON\.stringify\(outgoing\)\);\s*return true/);
-  assert.match(service, /this\.scheduleReconnect\(\);\s*return false/);
+  assert.match(service, /this\.ws\.send\(JSON\.stringify\(outgoing\)\);[\s\S]{0,200}?return true/);
+  assert.match(service, /this\.scheduleReconnect\('send-failure'\);\s*return false/);
 });
 
 test('a failed send cannot create a phantom bubble or erase the draft', () => {
@@ -30,7 +30,7 @@ test('disconnect recovery uses one bounded reconnect timer', () => {
   assert.match(service, /private reconnectTimer/);
   assert.match(service, /Math\.min\(1000 \* \(2 \*\* this\.reconnectAttempt\), 10000\)/);
   assert.match(service, /if \(this\.ws !== socket\) return/);
-  assert.match(service, /this\.scheduleReconnect\(\)/);
+  assert.match(service, /this\.scheduleReconnect\('[a-z-]+'\)/);
 });
 
 test('explicit disconnect cancels retries', () => {

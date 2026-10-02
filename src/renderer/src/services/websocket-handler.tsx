@@ -15,6 +15,7 @@ import { useBgUrl } from '@/context/bgurl-context';
 import { useConfig } from '@/context/character-config-context';
 import { useChatHistory } from '@/context/chat-history-context';
 import { toaster } from '@/components/ui/toaster';
+import { logWsDiag } from '@/utils/ws-diagnostics';
 import { useVAD } from '@/context/vad-context';
 import { AiState, useAiState } from "@/context/ai-state-context";
 import { useLocalStorage } from '@/hooks/utils/use-local-storage';
@@ -88,6 +89,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
         stopMic();
         break;
       case 'conversation-chain-start':
+        logWsDiag('CHAIN_START', wsService.getConnectionId());
         setAiState('thinking-speaking');
         // The dedicated thinking indicator owns the waiting state now; the
         // subtitle only carries real response text.
@@ -99,6 +101,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
         clearResponse();
         break;
       case 'conversation-chain-end':
+        logWsDiag('CHAIN_END', wsService.getConnectionId());
         audioTaskQueue.addTask(() => new Promise<void>((resolve) => {
           setAiState((currentState: AiState) => {
             if (currentState === 'thinking-speaking') {
@@ -232,6 +235,11 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
         break;
       case 'history-data':
         if (message.messages) {
+          // Diagnostic-only (BUG B capture): count only, never content.
+          logWsDiag(
+            'HISTORY_DATA_RECEIVED', wsService.getConnectionId(),
+            `count=${message.messages.length}`,
+          );
           setMessages(message.messages);
         }
         toaster.create({
@@ -342,6 +350,10 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
         break;
       case 'history-list':
         if (message.histories) {
+          logWsDiag(
+            'HISTORY_LIST_RECEIVED', wsService.getConnectionId(),
+            `count=${message.histories.length}`,
+          );
           setHistoryList(message.histories);
           const confUidForHistory = activeConfUidRef.current;
           const rememberedUid = getLastHistoryUid(confUidForHistory);

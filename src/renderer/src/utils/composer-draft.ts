@@ -13,6 +13,8 @@ export interface DraftStorage {
   removeItem(key: string): void;
 }
 
+import { getActiveConnectionId, logDraftSave, logWsDiag } from './ws-diagnostics.ts';
+
 const DRAFT_KEY_PREFIX = 'mili-composer-draft:';
 
 /** Scope the draft to one conversation so drafts never leak across chats. */
@@ -30,6 +32,8 @@ export function saveDraft(
   try {
     if (text) storage.setItem(key, text);
     else storage.removeItem(key);
+    // Diagnostic-only: scope key only, never draft text.
+    logDraftSave(key);
   } catch {
     // Storage quota/private-mode failures must never break typing.
   }
@@ -54,6 +58,8 @@ export function clearDraft(
   if (!storage || !key) return;
   try {
     storage.removeItem(key);
+    // Diagnostic-only: scope key only, never draft text.
+    logWsDiag('DRAFT_CLEAR', getActiveConnectionId(), `scope=${key}`);
   } catch {
     // ignore
   }
