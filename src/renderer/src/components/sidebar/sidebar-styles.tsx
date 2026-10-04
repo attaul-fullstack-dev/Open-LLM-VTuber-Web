@@ -597,11 +597,46 @@ export const sidebarStyles = {
 export const chatPanelStyles = css`
   .cs-message-list {
     background: ${miliTokens.color.background} !important;
-    padding: 20px 16px 32px !important;
+    padding: 20px 20px 32px !important;
+  }
+
+  .cs-message-list__scroll-wrapper {
+    padding: 0 !important;
+  }
+
+  .cs-message-list__scroll-wrapper > .cs-message,
+  .cs-message-list__scroll-wrapper > .cs-message-group {
+    max-width: none !important;
   }
 
   .cs-message {
     margin: 18px 0 !important;
+  }
+
+  .cs-message--incoming {
+    justify-content: flex-start !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+
+  .cs-message--incoming .cs-message__content-wrapper {
+    margin-right: auto !important;
+    align-items: flex-start !important;
+  }
+
+  .cs-message--outgoing {
+    justify-content: flex-end !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+
+  .cs-message--outgoing .cs-message__content-wrapper {
+    margin-left: auto !important;
+    align-items: flex-end !important;
+  }
+
+  .cs-message__avatar {
+    display: none !important;
   }
 
   .cs-message__content {
@@ -690,26 +725,41 @@ export const chatPanelStyles = css`
 
   @media (max-width: 430px) {
     .cs-message-list {
-      padding-inline: 10px !important;
+      padding: 20px 20px 32px !important;
     }
 
     .cs-message {
-      margin: 10px 0 !important;
+      margin: 18px 0 !important;
     }
 
     .cs-message__content-wrapper {
-      max-width: calc(100% - 46px) !important;
-      margin-inline: 5px !important;
+      max-width: 100% !important;
+      margin: 0 !important;
+      min-width: 0 !important;
+    }
+
+    .cs-message--incoming .cs-message__content-wrapper {
+      margin-right: auto !important;
     }
 
     .cs-message__content {
-      padding: 10px 13px !important;
-      border-radius: 15px 15px 15px 5px !important;
+      background-color: transparent !important;
+      border: 0 !important;
+      border-radius: 0 !important;
+      padding: 2px 0 !important;
       font-size: ${miliTokens.font.message} !important;
     }
 
+    .cs-message--outgoing .cs-message__content-wrapper {
+      max-width: 85% !important;
+      margin-left: auto !important;
+    }
+
     .cs-message--outgoing .cs-message__content {
-      border-radius: 15px 15px 5px 15px !important;
+      background: ${miliTokens.color.surface} !important;
+      border: 1px solid ${miliTokens.color.border} !important;
+      border-radius: 18px !important;
+      padding: 10px 16px !important;
     }
   }
 `;
