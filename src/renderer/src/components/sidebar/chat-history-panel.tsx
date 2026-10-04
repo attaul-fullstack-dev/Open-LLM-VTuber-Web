@@ -15,8 +15,14 @@ import { useConfig } from '@/context/character-config-context';
 import { useWebSocket } from '@/context/websocket-context';
 import { FaTools, FaCheck, FaTimes } from 'react-icons/fa';
 import { useTranslation } from 'react-i18next';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { cleanChatDisplayText } from '@/utils/clean-display-text';
+import {
+  AUTOFOLLOW_BOTTOM_THRESHOLD_PX,
+  initialFollowOwnership,
+  isAtBottom,
+  nextFollowOwnership,
+} from '@/utils/chat-autofollow';
 
 const MESSAGE_RENDER_BATCH = 48;
 
@@ -34,6 +40,78 @@ function ChatHistoryPanel(): JSX.Element {
      (msg.type === 'tool_call_status' && msg.status === 'error'), // Keep error tools
   ), [messages]);
   const [visibleMessageCount, setVisibleMessageCount] = useState(MESSAGE_RENDER_BATCH);
+
+  // Auto-follow ownership: the system follows the bottom while streaming
+  // until the user touches the chat list. Listeners live ONLY on this
+  // list container, so composer/sidebar/menu touches never count.
+  const listHostRef = useRef<HTMLDivElement>(null);
+  const followRef = useRef(initialFollowOwnership());
+  const savedScrollTopRef = useRef(0);
+  const firstMessageIdRef = useRef<string | number | null>(null);
+
+  const listElement = (): HTMLDivElement | null => {
+    const host = listHostRef.current;
+    if (!host) return null;
+    // The kit renders scrolling inside PerfectScrollbar's inner wrapper;
+    // the outer .cs-message-list itself never scrolls.
+    return (
+      host.querySelector('.cs-message-list__scroll-wrapper') ??
+      host.querySelector('.cs-message-list')
+    );
+  };
+
+  const readAtBottom = (el: HTMLDivElement): boolean =>
+    isAtBottom(
+      el.scrollTop,
+      el.scrollHeight,
+      el.clientHeight,
+      AUTOFOLLOW_BOTTOM_THRESHOLD_PX,
+    );
+
+  const handleListGesture = () => {
+    const el = listElement();
+    if (el) savedScrollTopRef.current = el.scrollTop;
+    followRef.current = nextFollowOwnership(followRef.current, {
+      type: 'user-gesture',
+    });
+  };
+
+  const handleListScroll = () => {
+    const el = listElement();
+    if (!el) return;
+    const atBottom = readAtBottom(el);
+    followRef.current = nextFollowOwnership(followRef.current, {
+      type: 'scroll',
+      atBottom,
+    });
+    // Keep the pinned position fresh while the user is in control; the
+    // enforce effect below restores exactly this value after each render.
+    if (followRef.current.userControl) {
+      savedScrollTopRef.current = el.scrollTop;
+    }
+  };
+
+  // Runs after every message render (parent layout effect runs after the
+  // list's own update, so this wins over any forced bottom-follow).
+  useLayoutEffect(() => {
+    const el = listElement();
+    if (!el) return;
+    const firstId = validMessages[0]?.id ?? null;
+    const prepended = firstMessageIdRef.current !== firstId;
+    firstMessageIdRef.current = firstId;
+    if (followRef.current.userControl) {
+      // Older messages prepended above (load-older): accept the list's own
+      // position keeping instead of pinning a stale offset.
+      if (!prepended) {
+        el.scrollTop = savedScrollTopRef.current;
+      } else {
+        savedScrollTopRef.current = el.scrollTop;
+      }
+    } else {
+      el.scrollTop = el.scrollHeight;
+      savedScrollTopRef.current = el.scrollTop;
+    }
+  });
 
   // A different conversation should start light, even when its transcript is huge.
   useEffect(() => {
@@ -54,6 +132,11 @@ function ChatHistoryPanel(): JSX.Element {
       h="full"
       overflow="hidden"
       bg="gray.900"
+      ref={listHostRef}
+      onTouchStart={handleListGesture}
+      onPointerDown={handleListGesture}
+      onWheel={handleListGesture}
+      onScroll={handleListScroll}
     >
       <Global styles={chatPanelStyles} />
       <MainContainer>
