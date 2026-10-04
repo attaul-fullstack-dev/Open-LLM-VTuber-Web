@@ -57,10 +57,18 @@ const HistoryItem = memo(({
     .replace(/\s+/g, ' ')
     .trim();
   const preview = cleanDisplayText(latestMessage.content || '');
-  const displayTitle = (title && title.trim()) || preview || t('history.newChat');
+  const storedTitle = cleanDisplayText(title || '');
+  const displayTitle = storedTitle || t('history.newChat');
+  const displayPreview = preview && preview !== storedTitle ? preview : '';
   const dateLocale = i18n.language.startsWith('zh')
     ? zhCN
     : (i18n.language.startsWith('id') ? id : enUS);
+  const timestamp = latestMessage.timestamp
+    ? formatDistanceToNowStrict(new Date(latestMessage.timestamp), {
+      addSuffix: true,
+      locale: dateLocale,
+    })
+    : '';
   return (
     <Box
       {...sidebarStyles.historyDrawer.historyItem}
@@ -73,20 +81,18 @@ const HistoryItem = memo(({
           cursor="pointer"
           onClick={onSelect}
         >
-          <Box {...sidebarStyles.historyDrawer.title}>
-            {cleanDisplayText(displayTitle)}
+          <Box {...sidebarStyles.historyDrawer.title} title={displayTitle}>
+            {displayTitle}
           </Box>
-          <Box {...sidebarStyles.historyDrawer.messagePreview}>
-            {preview || t('history.noMessages')}
+          <Box
+            {...sidebarStyles.historyDrawer.messagePreview}
+            title={displayPreview || undefined}
+          >
+            {displayPreview || t('history.noMessages')}
           </Box>
-          <Box {...sidebarStyles.historyDrawer.timestamp}>
-          {latestMessage.timestamp
-            ? formatDistanceToNowStrict(new Date(latestMessage.timestamp), {
-              addSuffix: true,
-              locale: dateLocale,
-            })
-            : t('history.noMessages')}
-          </Box>
+          {timestamp ? (
+            <Box {...sidebarStyles.historyDrawer.timestamp}>{timestamp}</Box>
+          ) : null}
         </Box>
         <Menu.Root positioning={{ placement: 'bottom-end' }}>
           <Menu.Trigger asChild>
