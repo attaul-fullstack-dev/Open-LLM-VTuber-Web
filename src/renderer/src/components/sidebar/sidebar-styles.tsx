@@ -597,21 +597,21 @@ export const sidebarStyles = {
 export const chatPanelStyles = css`
   .cs-message-list {
     background: ${miliTokens.color.background} !important;
-    padding: 16px 12px 24px !important;
+    padding: 20px 16px 32px !important;
   }
 
   .cs-message {
-    margin: 10px 0 !important;
+    margin: 18px 0 !important;
   }
 
   .cs-message__content {
-    background-color: ${miliTokens.color.surface} !important;
-    border: 1px solid ${miliTokens.color.border} !important;
-    border-radius: 16px 16px 16px 5px !important;
-    padding: 10px 14px !important;
+    background-color: transparent !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    padding: 2px 0 !important;
     color: ${miliTokens.color.textPrimary} !important;
     font-size: ${miliTokens.font.message} !important;
-    line-height: 1.55 !important;
+    line-height: 1.65 !important;
     margin-top: 0 !important;
     box-shadow: none !important;
   }
@@ -624,9 +624,10 @@ export const chatPanelStyles = css`
   }
 
   .cs-message--outgoing .cs-message__content {
-    background: ${miliTokens.color.accent} !important;
-    border-color: transparent !important;
-    border-radius: 16px 16px 5px 16px !important;
+    background: ${miliTokens.color.surface} !important;
+    border: 1px solid ${miliTokens.color.border} !important;
+    border-radius: 18px !important;
+    padding: 10px 16px !important;
   }
 
   .cs-chat-container {
@@ -648,41 +649,21 @@ export const chatPanelStyles = css`
   }
 
   .cs-message__content-wrapper {
-    max-width: min(84%, 680px) !important;
-    margin: 0 6px !important;
+    max-width: min(100%, 42rem) !important;
+    margin: 0 !important;
     min-width: 0 !important;
   }
 
+  .cs-message--outgoing {
+    justify-content: flex-end !important;
+  }
+
+  .cs-message--outgoing .cs-message__content-wrapper {
+    max-width: min(85%, 32rem) !important;
+  }
+
   .cs-avatar {
-    background-color: ${miliTokens.color.surface} !important;
-    color: ${miliTokens.color.textSecondary} !important;
-    width: 28px !important;
-    min-width: 28px !important;
-    max-width: 28px !important;
-    height: 28px !important;
-    min-height: 28px !important;
-    max-height: 28px !important;
-    flex: 0 0 28px !important;
-    aspect-ratio: 1 / 1 !important;
-    font-size: 12px !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    border-radius: 50% !important;
-    overflow: hidden !important;
-  }
-
-  .cs-avatar img,
-  .cs-avatar__image {
-    width: 100% !important;
-    height: 100% !important;
-    object-fit: cover !important;
-    border-radius: 50% !important;
-  }
-
-  .cs-message--outgoing .cs-avatar {
-    background-color: ${miliTokens.color.accentSoft} !important;
-    color: ${miliTokens.color.accentText} !important;
+    display: none !important;
   }
 
   .cs-message__header {
@@ -691,15 +672,19 @@ export const chatPanelStyles = css`
 
   @media (min-width: 1024px) {
     .cs-message-list {
-      padding: 18px 18px 24px !important;
+      padding: 24px 24px 32px !important;
     }
 
     .cs-message {
-      margin: 12px 0 !important;
+      margin: 20px 0 !important;
     }
 
     .cs-message__content-wrapper {
-      max-width: 80% !important;
+      max-width: 42rem !important;
+    }
+
+    .cs-message--outgoing .cs-message__content-wrapper {
+      max-width: min(80%, 32rem) !important;
     }
   }
 
