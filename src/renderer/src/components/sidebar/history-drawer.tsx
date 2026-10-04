@@ -4,8 +4,6 @@ import {
 import {
   FiTrash2, FiEdit2, FiArchive, FiMoreVertical,
 } from 'react-icons/fi';
-import { formatDistanceToNowStrict } from 'date-fns';
-import { enUS, id, zhCN } from 'date-fns/locale';
 import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -28,8 +26,8 @@ interface HistoryDrawerProps {
 }
 
 interface HistoryItemProps {
+  index: number;
   isSelected: boolean;
-  latestMessage: { content: string; timestamp: string | null };
   title?: string | null;
   onSelect: () => void;
   onRename: () => void;
@@ -40,8 +38,8 @@ interface HistoryItemProps {
 
 // Reusable components
 const HistoryItem = memo(({
+  index,
   isSelected,
-  latestMessage,
   title,
   onSelect,
   onRename,
@@ -49,32 +47,26 @@ const HistoryItem = memo(({
   onDelete,
   isDeleteDisabled,
 }: HistoryItemProps): JSX.Element => {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const cleanDisplayText = (value: string) => value
     .replace(/\[[a-z][a-z0-9_-]*\]\s*/gi, '')
     .replace(/\*([^*]+)\*/g, '$1')
     .replace(/([.!?])(?=[A-Z])/g, '$1 ')
     .replace(/\s+/g, ' ')
     .trim();
-  const preview = cleanDisplayText(latestMessage.content || '');
   const storedTitle = cleanDisplayText(title || '');
   const displayTitle = storedTitle || t('history.newChat');
-  const displayPreview = preview && preview !== storedTitle ? preview : '';
-  const dateLocale = i18n.language.startsWith('zh')
-    ? zhCN
-    : (i18n.language.startsWith('id') ? id : enUS);
-  const timestamp = latestMessage.timestamp
-    ? formatDistanceToNowStrict(new Date(latestMessage.timestamp), {
-      addSuffix: true,
-      locale: dateLocale,
-    })
-    : '';
+  // UI-only session number from render position. Never stored in history.
+  const sessionNumber = String(index + 1).padStart(2, '0');
   return (
     <Box
       {...sidebarStyles.historyDrawer.historyItem}
       {...(isSelected ? sidebarStyles.historyDrawer.historyItemSelected : {})}
     >
       <Box {...sidebarStyles.historyDrawer.historyBody}>
+        <Box {...sidebarStyles.historyDrawer.sessionNumber}>
+          {sessionNumber}
+        </Box>
         <Box
           minW="0"
           flex="1"
@@ -84,15 +76,7 @@ const HistoryItem = memo(({
           <Box {...sidebarStyles.historyDrawer.title} title={displayTitle}>
             {displayTitle}
           </Box>
-          <Box
-            {...sidebarStyles.historyDrawer.messagePreview}
-            title={displayPreview || undefined}
-          >
-            {displayPreview || t('history.noMessages')}
-          </Box>
-          {timestamp ? (
-            <Box {...sidebarStyles.historyDrawer.timestamp}>{timestamp}</Box>
-          ) : null}
+          <Box {...sidebarStyles.historyDrawer.sessionDivider} />
         </Box>
         <Menu.Root positioning={{ placement: 'bottom-end' }}>
           <Menu.Trigger asChild>
@@ -155,7 +139,6 @@ function HistoryDrawer({ children }: HistoryDrawerProps): JSX.Element {
     deleteHistory,
     renameHistory,
     compactConversation,
-    getLatestMessageContent,
   } = useHistoryDrawer();
 
   return (
@@ -176,11 +159,11 @@ function HistoryDrawer({ children }: HistoryDrawerProps): JSX.Element {
 
         <DrawerBody>
           <Box {...sidebarStyles.historyDrawer.listContainer}>
-            {historyList.map((history: HistoryInfo) => (
+            {historyList.map((history: HistoryInfo, index: number) => (
               <HistoryItem
                 key={history.uid}
+                index={index}
                 isSelected={currentHistoryUid === history.uid}
-                latestMessage={getLatestMessageContent(history)}
                 title={history.title}
                 onSelect={() => {
                   fetchAndSetHistory(history.uid);

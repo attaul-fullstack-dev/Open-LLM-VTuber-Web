@@ -218,9 +218,21 @@ export const sidebarStyles = {
     historyBody: {
       display: 'flex',
       justifyContent: 'space-between',
-      alignItems: 'flex-start',
-      gap: 2,
+      alignItems: 'center',
+      gap: 3,
       minW: 0,
+    },
+    sessionNumber: {
+      fontSize: miliTokens.font.xs,
+      color: miliTokens.color.textMuted,
+      minW: '2ch',
+      flexShrink: 0,
+      fontVariantNumeric: 'tabular-nums',
+    },
+    sessionDivider: {
+      height: '1px',
+      bg: miliTokens.color.border,
+      mt: 2,
     },
     timestamp: {
       fontSize: miliTokens.font.xs,
@@ -275,7 +287,6 @@ export const sidebarStyles = {
       width: '36px',
       height: '36px',
       flexShrink: 0,
-      mt: '-4px',
       mr: '-8px',
       borderRadius: 'full',
       bg: 'transparent',
