@@ -318,6 +318,17 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
           duration: 2000,
         });
         break;
+      case 'history-auto-titled':
+        // Passive auto-title from the backend: update the list silently,
+        // no toast (unlike a manual rename).
+        if (message.success && message.history_uid && message.title) {
+          setHistoryList((prev: HistoryInfo[]) => prev.map((history) => (
+            history.uid === message.history_uid
+              ? { ...history, title: message.title }
+              : history
+          )));
+        }
+        break;
       case 'character-memory':
         // The memory list is consumed by the Agent settings panel.
         break;
