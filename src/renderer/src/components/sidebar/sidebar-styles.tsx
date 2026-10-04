@@ -659,10 +659,11 @@ export const chatPanelStyles = css`
   }
 
   .cs-message--outgoing .cs-message__content {
-    background: ${miliTokens.color.surface} !important;
-    border: 1px solid ${miliTokens.color.border} !important;
+    background: #20b8a6 !important;
+    border: 1px solid rgba(255, 255, 255, 0.16) !important;
     border-radius: 18px !important;
     padding: 10px 16px !important;
+    color: #ffffff !important;
   }
 
   .cs-chat-container {
@@ -756,10 +757,11 @@ export const chatPanelStyles = css`
     }
 
     .cs-message--outgoing .cs-message__content {
-      background: ${miliTokens.color.surface} !important;
-      border: 1px solid ${miliTokens.color.border} !important;
+      background: #20b8a6 !important;
+      border: 1px solid rgba(255, 255, 255, 0.16) !important;
       border-radius: 18px !important;
       padding: 10px 16px !important;
+      color: #ffffff !important;
     }
   }
 `;
