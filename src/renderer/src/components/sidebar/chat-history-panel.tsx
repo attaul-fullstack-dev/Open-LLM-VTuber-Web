@@ -22,6 +22,7 @@ import {
   initialFollowOwnership,
   isAtBottom,
   nextFollowOwnership,
+  shouldAdoptScrollPosition,
 } from '@/utils/chat-autofollow';
 
 const MESSAGE_RENDER_BATCH = 48;
@@ -44,9 +45,17 @@ function ChatHistoryPanel(): JSX.Element {
   // Auto-follow ownership: the system follows the bottom while streaming
   // until the user touches the chat list. Listeners live ONLY on this
   // list container, so composer/sidebar/menu touches never count.
+  //
+  // All sensing uses NATIVE listeners in the capture phase (never React
+  // synthetic events): the bundled scrollbar library calls
+  // stopPropagation() on wheel/keyboard events it handles, which silently
+  // kills React's bubble-phase onWheel and starves the ownership tracker.
+  // Capture listeners on our own container run before anything the
+  // library does at its level, so no gesture is ever missed.
   const listHostRef = useRef<HTMLDivElement>(null);
   const followRef = useRef(initialFollowOwnership());
   const savedScrollTopRef = useRef(0);
+  const pressTopRef = useRef(0);
   const firstMessageIdRef = useRef<string | number | null>(null);
 
   const listElement = (): HTMLDivElement | null => {
@@ -70,10 +79,63 @@ function ChatHistoryPanel(): JSX.Element {
 
   const handleListGesture = () => {
     const el = listElement();
-    if (el) savedScrollTopRef.current = el.scrollTop;
+    if (el) {
+      savedScrollTopRef.current = el.scrollTop;
+      pressTopRef.current = el.scrollTop;
+    }
     followRef.current = nextFollowOwnership(followRef.current, {
       type: 'user-gesture',
     });
+  };
+
+  // Wheel needs a clamp gate that press gestures don't: every wheel tick
+  // fires even when already clamped at the bottom, and a tick that moves
+  // nothing produces no scroll event to release the control it just took.
+  // Without the gate, wheeling against the bottom clamp would freeze
+  // auto-follow until the user scrolls away and back. A downward push
+  // while already at the bottom is therefore a no-op; an upward one still
+  // arms, and its scroll event takes control through the normal path.
+  const handleWheelGesture = (event: WheelEvent) => {
+    const el = listElement();
+    if (el && event.deltaY > 0 && readAtBottom(el)) return;
+    handleListGesture();
+  };
+
+  const handleGestureEnd = () => {
+    followRef.current = nextFollowOwnership(followRef.current, {
+      type: 'gesture-end',
+    });
+  };
+
+  // A press that never moved the viewport (a tap/click, not a drag) must
+  // not leave adoption armed: without a scroll there is no scrollend to
+  // disarm it later, and the next streaming chunk would be adopted as the
+  // user's position. Feeding the current position through the scroll
+  // transition releases back to follow mode when still at the bottom and
+  // otherwise just disarms. A press that DID scroll (a drag, including a
+  // touch drag whose momentum is still coming) stays armed; scrollend
+  // disarms it. Mouse drags have no momentum, so release the arm there —
+  // touch drags keep it for the momentum that follows finger lift.
+  const handlePressEnd = (event: PointerEvent | TouchEvent) => {
+    const el = listElement();
+    const moved =
+      el != null && Math.abs(el.scrollTop - pressTopRef.current) > 1;
+    if (!moved) {
+      if (!el) {
+        handleGestureEnd();
+        return;
+      }
+      followRef.current = nextFollowOwnership(followRef.current, {
+        type: 'scroll',
+        atBottom: readAtBottom(el),
+      });
+      return;
+    }
+    const pointerType =
+      event instanceof PointerEvent ? event.pointerType : 'touch';
+    if (pointerType !== 'touch') {
+      handleGestureEnd();
+    }
   };
 
   const handleListScroll = () => {
@@ -84,10 +146,19 @@ function ChatHistoryPanel(): JSX.Element {
       type: 'scroll',
       atBottom,
     });
-    // Keep the pinned position fresh while the user is in control; the
-    // enforce effect below restores exactly this value after each render.
-    if (followRef.current.userControl) {
+    if (shouldAdoptScrollPosition(followRef.current)) {
+      // Gesture-backed scroll (or the follow-mode path): this really is
+      // the user's position, so it becomes the new pin.
       savedScrollTopRef.current = el.scrollTop;
+      return;
+    }
+    // Unarmed scroll while the user is in control: a programmatic move
+    // (the list library re-anchoring on a streaming update, browser scroll
+    // anchoring, or an enforcement echo). Adopting it would ratchet the pin
+    // downward chunk by chunk, so re-pin instead — synchronously, driven
+    // by this very event, never a timer.
+    if (el.scrollTop !== savedScrollTopRef.current) {
+      el.scrollTop = savedScrollTopRef.current;
     }
   };
 
@@ -114,9 +185,99 @@ function ChatHistoryPanel(): JSX.Element {
   });
 
   // A different conversation should start light, even when its transcript is huge.
+  // It also gets fresh follow ownership: a stale pin from another chat must
+  // never hold this list back.
+  const currentHistoryUidRef = useRef(currentHistoryUid);
   useEffect(() => {
     setVisibleMessageCount(MESSAGE_RENDER_BATCH);
+    if (currentHistoryUidRef.current !== currentHistoryUid) {
+      currentHistoryUidRef.current = currentHistoryUid;
+      followRef.current = initialFollowOwnership();
+    }
   }, [currentHistoryUid]);
+
+  // Native capture listeners for every scroll/gesture signal. They run on
+  // our own container in the capture phase, i.e. before the scrollbar
+  // library's target-level handlers (which stopPropagation() handled
+  // wheels/keys and would otherwise starve React synthetic handlers).
+  // All handlers below only touch refs, so the mount-once closures stay
+  // correct for the life of the component.
+  useEffect(() => {
+    const host = listHostRef.current;
+    if (!host) return;
+    const passive = { capture: true, passive: true } as const;
+    const active = { capture: true } as const;
+    host.addEventListener('wheel', handleWheelGesture, passive);
+    host.addEventListener('touchstart', handleListGesture, passive);
+    host.addEventListener('touchmove', handleListGesture, passive);
+    host.addEventListener('touchend', handlePressEnd, active);
+    host.addEventListener('touchcancel', handlePressEnd, active);
+    host.addEventListener('pointerdown', handleListGesture, active);
+    host.addEventListener('pointerup', handlePressEnd, active);
+    host.addEventListener('pointercancel', handlePressEnd, active);
+    host.addEventListener('scroll', handleListScroll, passive);
+    return () => {
+      host.removeEventListener('wheel', handleWheelGesture, passive);
+      host.removeEventListener('touchstart', handleListGesture, passive);
+      host.removeEventListener('touchmove', handleListGesture, passive);
+      host.removeEventListener('touchend', handlePressEnd, active);
+      host.removeEventListener('touchcancel', handlePressEnd, active);
+      host.removeEventListener('pointerdown', handleListGesture, active);
+      host.removeEventListener('pointerup', handlePressEnd, active);
+      host.removeEventListener('pointercancel', handlePressEnd, active);
+      host.removeEventListener('scroll', handleListScroll, passive);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // scrollend fires after a scroll burst fully settles (including touch
+  // momentum), which no other gesture event reliably marks. It is the
+  // primary adoption off-switch. Attached on document-capture because the
+  // event does not bubble.
+  useEffect(() => {
+    const onScrollEnd = (event: Event) => {
+      const host = listHostRef.current;
+      if (host && event.target instanceof Node && host.contains(event.target)) {
+        handleGestureEnd();
+      }
+    };
+    document.addEventListener('scrollend', onScrollEnd, true);
+    return () => {
+      document.removeEventListener('scrollend', onScrollEnd, true);
+    };
+  }, []);
+
+  // Keyboard scrolling with focus outside the list (e.g. on body) produces
+  // scroll events with no preceding list-level gesture. Arm those keys
+  // globally, except while typing in an editable field. Same clamp gate as
+  // the wheel: a downward key already at the bottom moves nothing and
+  // would strand ownership with no scroll event to release it.
+  useEffect(() => {
+    const downKeys = [' ', 'PageDown', 'End', 'ArrowDown'];
+    const upKeys = ['PageUp', 'Home', 'ArrowUp'];
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!downKeys.includes(event.key) && !upKeys.includes(event.key)) return;
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      if (downKeys.includes(event.key)) {
+        const el = listElement();
+        if (el && readAtBottom(el)) return;
+      }
+      handleListGesture();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, []);
 
   const hasOlderMessages = validMessages.length > visibleMessageCount;
   const renderedMessages = hasOlderMessages
@@ -133,10 +294,6 @@ function ChatHistoryPanel(): JSX.Element {
       overflow="hidden"
       bg="gray.900"
       ref={listHostRef}
-      onTouchStart={handleListGesture}
-      onPointerDown={handleListGesture}
-      onWheel={handleListGesture}
-      onScroll={handleListScroll}
     >
       <Global styles={chatPanelStyles} />
       <MainContainer>

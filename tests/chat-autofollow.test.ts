@@ -5,6 +5,7 @@ import {
   initialFollowOwnership,
   isAtBottom,
   nextFollowOwnership,
+  shouldAdoptScrollPosition,
 } from '../src/renderer/src/utils/chat-autofollow.ts';
 
 // 1. Long streaming, no user touch -> system keeps following.
@@ -78,4 +79,71 @@ test('re-mount resets to follow mode', () => {
   });
   assert.equal(held.userControl, true);
   assert.equal(initialFollowOwnership().userControl, false);
+  assert.equal(initialFollowOwnership().gestureArmed, false);
+});
+
+// Stable-viewport rules: only gesture-backed scrolls may move the pin.
+// Programmatic moves (library re-anchoring, browser scroll anchoring,
+// our own enforcement echo) must never be adopted.
+test('user gesture arms adoption', () => {
+  const state = nextFollowOwnership(initialFollowOwnership(), {
+    type: 'user-gesture',
+  });
+  assert.equal(state.userControl, true);
+  assert.equal(state.gestureArmed, true);
+  assert.equal(shouldAdoptScrollPosition(state), true);
+});
+
+test('armed scroll away from bottom keeps control and stays adopted', () => {
+  let state = nextFollowOwnership(initialFollowOwnership(), {
+    type: 'user-gesture',
+  });
+  for (let i = 0; i < 10; i++) {
+    state = nextFollowOwnership(state, { type: 'scroll', atBottom: false });
+    assert.equal(state.userControl, true);
+    assert.equal(state.gestureArmed, true);
+    assert.equal(shouldAdoptScrollPosition(state), true);
+  }
+});
+
+test('gesture-end disarms adoption without releasing control', () => {
+  const held = nextFollowOwnership(initialFollowOwnership(), {
+    type: 'user-gesture',
+  });
+  const settled = nextFollowOwnership(held, { type: 'gesture-end' });
+  assert.equal(settled.userControl, true);
+  assert.equal(settled.gestureArmed, false);
+  // Critical: a later programmatic scroll must NOT be adopted as the pin.
+  assert.equal(shouldAdoptScrollPosition(settled), false);
+});
+
+test('scroll landing at bottom releases control and disarms', () => {
+  const held = nextFollowOwnership(initialFollowOwnership(), {
+    type: 'user-gesture',
+  });
+  const released = nextFollowOwnership(held, { type: 'scroll', atBottom: true });
+  assert.equal(released.userControl, false);
+  assert.equal(released.gestureArmed, false);
+  assert.equal(shouldAdoptScrollPosition(released), true);
+});
+
+test('ten unarmed scrolls never release control and never adopt', () => {
+  let state = nextFollowOwnership(initialFollowOwnership(), {
+    type: 'user-gesture',
+  });
+  state = nextFollowOwnership(state, { type: 'gesture-end' });
+  for (let i = 0; i < 10; i++) {
+    state = nextFollowOwnership(state, { type: 'scroll', atBottom: false });
+    assert.equal(state.userControl, true);
+    assert.equal(state.gestureArmed, false);
+    assert.equal(shouldAdoptScrollPosition(state), false);
+  }
+});
+
+test('pointer-up alone never steals control', () => {
+  const state = nextFollowOwnership(initialFollowOwnership(), {
+    type: 'gesture-end',
+  });
+  assert.equal(state.userControl, false);
+  assert.equal(state.gestureArmed, false);
 });
