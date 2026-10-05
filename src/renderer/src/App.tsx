@@ -18,6 +18,7 @@ import { CameraProvider } from "./context/camera-context";
 import { ChatHistoryProvider } from "./context/chat-history-context";
 import { CharacterConfigProvider } from "./context/character-config-context";
 import { Toaster } from "./components/ui/toaster";
+import { WsIncidentModal } from "./components/ui/ws-incident-modal";
 import { VADProvider } from "./context/vad-context";
 import { Live2D } from "./components/canvas/live2d";
 import TitleBar from "./components/electron/title-bar";
@@ -247,6 +248,7 @@ function AppWithGlobalStyles(): JSX.Element {
                               <BrowserProvider>
                                 <WebSocketHandler>
                                   <Toaster />
+                                  <WsIncidentModal />
                                   <AppContent />
                                 </WebSocketHandler>
                               </BrowserProvider>

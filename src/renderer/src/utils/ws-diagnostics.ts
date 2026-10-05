@@ -13,6 +13,12 @@
  * - Every function is fail-soft: recorder failure never affects the app.
  */
 
+import {
+  IncidentPopupGate,
+  type IncidentFacts,
+  type IncidentKind,
+} from './ws-incident-notifier';
+
 export interface WsDiagEvent {
   t: string;
   event: string;
@@ -48,6 +54,86 @@ const connHadError = new Set<string>();
 const connHadSendFailure = new Set<string>();
 const lastDraftLogAt = new Map<string, number>();
 
+/**
+ * ---------------------------------------------------------------------------
+ * Incident popup notification (a UI layer over this recorder).
+ *
+ * The recorder below stays the single source of truth for what an incident
+ * is. Everything here only (a) decides whether the user should be
+ * interrupted with the popup and (b) fans that fact out to subscribers such
+ * as components/ui/ws-incident-modal. No recording, storage, clearing or
+ * connection behaviour is changed.
+ * ---------------------------------------------------------------------------
+ */
+export type WsIncidentKind = IncidentKind;
+
+export interface WsIncidentNotice {
+  kind: WsIncidentKind;
+  reason: string;
+  /** Snapshot when one exists (abnormal close); null for live flags. */
+  incident: WsIncident | null;
+  /** The recorder's ring buffer, metadata only. */
+  log: WsDiagEvent[];
+}
+
+type WsIncidentListener = (notice: WsIncidentNotice) => void;
+
+const incidentListeners = new Set<WsIncidentListener>();
+const popupGate = new IncidentPopupGate();
+
+export function subscribeWsIncidents(
+  listener: WsIncidentListener,
+): () => void {
+  try {
+    incidentListeners.add(listener);
+    return () => {
+      incidentListeners.delete(listener);
+    };
+  } catch {
+    return () => {
+      // ignore
+    };
+  }
+}
+
+/**
+ * Ask the policy whether this event deserves a popup, then notify
+ * subscribers once. Fail-soft: never throws into the WebSocket hot path.
+ */
+export function notifyIncident(
+  kind: WsIncidentKind,
+  connId: string,
+  facts: Partial<IncidentFacts> = {},
+): void {
+  try {
+    const decision = popupGate.notify(kind, { ...facts, connectionId: connId });
+    if (!decision.notify) return;
+    for (const listener of Array.from(incidentListeners)) {
+      try {
+        listener({
+          kind,
+          reason: decision.reason,
+          incident: getLastWsIncident(),
+          log: getWsDiagLog(),
+        });
+      } catch {
+        // A broken subscriber must never break the socket.
+      }
+    }
+  } catch {
+    // ignore
+  }
+}
+
+/** A freshly opened connection ends the previous incident episode. */
+export function forgetIncidentEpisode(connId: string): void {
+  try {
+    popupGate.forgetConnection(connId);
+  } catch {
+    // ignore
+  }
+}
+
 function nowIso(): string {
   try {
     return new Date().toISOString();
@@ -73,6 +159,7 @@ export function setActiveConnectionId(connId: string): void {
 export function markConnError(connId: string): void {
   try {
     if (connId) connHadError.add(connId);
+    notifyIncident('error', connId, { hadError: true });
   } catch {
     // ignore
   }
@@ -81,6 +168,7 @@ export function markConnError(connId: string): void {
 export function markConnSendFailure(connId: string): void {
   try {
     if (connId) connHadSendFailure.add(connId);
+    notifyIncident('send_failure', connId, { hadSendFailure: true });
   } catch {
     // ignore
   }
@@ -220,6 +308,14 @@ export function recordCloseIncident(options: {
       `code=${code} reason=${incident.closeReason}`,
       readyStateAtClose,
     );
+    // Popup notification reuses this recorder's own incident decision.
+    notifyIncident('abnormal_close', connId, {
+      closeCode: code,
+      abnormal,
+      hadSendFailure: incident.hadSendFailure,
+      hadError: incident.hadError,
+      reconnectScheduled,
+    });
     return incident;
   } catch {
     return null;

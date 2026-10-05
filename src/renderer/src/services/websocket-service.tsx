@@ -8,6 +8,8 @@ import { ConfigFile } from '@/context/character-config-context';
 import { toaster } from '@/components/ui/toaster';
 import { markWebSocketSend } from '@/utils/chat-latency';
 import {
+  forgetIncidentEpisode,
+  getActiveConnectionId,
   logWsDiag,
   markConnError,
   markConnSendFailure,
@@ -15,6 +17,10 @@ import {
   recordCloseIncident,
   setActiveConnectionId,
 } from '@/utils/ws-diagnostics';
+import {
+  describeInboundFrame,
+  installLifecycleLogging,
+} from '@/utils/ws-lifecycle-log';
 
 export interface DisplayText {
   text: string;
@@ -156,10 +162,57 @@ class WebSocketService {
   // socket creation; never affects lifecycle decisions.
   private connId = 'ws0';
 
+  // Diagnostic-only: uninstaller for the browser-lifecycle listeners. Those
+  // listeners are installed once for the lifetime of the window and are never
+  // torn down mid-session, because a disconnect/reconnect cycle must keep
+  // observing the page lifecycle. Retained so teardown stays possible and
+  // testable.
+  private readonly uninstallLifecycleLogging: () => void;
+
   // Diagnostic-only reconnect tracking. Set when a retry timer is armed,
   // consumed on the next open/failed-connect — never drives behavior.
   private reconnectPending = false;
   private openedConns = new Set<string>();
+
+  constructor() {
+    // Diagnostic-only and observation-only: start recording browser lifecycle
+    // transitions (visibilitychange / pagehide / pageshow / freeze / resume)
+    // next to the socket events. Installation is idempotent per window, so a
+    // repeated construction cannot double-register listeners, and nothing here
+    // can alter lifecycle, timing, reconnect or any WebSocket behaviour.
+    this.uninstallLifecycleLogging = installLifecycleLogging({
+      doc: typeof document === 'undefined' ? null : document,
+      win: typeof window === 'undefined' ? null : window,
+      probe: {
+        visibilityState: () =>
+          typeof document === 'undefined' ? null : document.visibilityState,
+        hidden: () => (typeof document === 'undefined' ? null : document.hidden),
+        readyState: () => this.ws?.readyState ?? null,
+      },
+      log: (detail, formatted) => {
+        logWsDiag(
+          'LIFECYCLE',
+          getActiveConnectionId(),
+          formatted,
+          detail.readyState,
+        );
+      },
+    });
+  }
+
+  /**
+   * Diagnostic-only: stop recording browser lifecycle transitions.
+   * Not called by the app (listeners live for the window's lifetime, so a
+   * reconnect keeps observing the page); exposed so teardown stays reachable
+   * when debugging in DevTools.
+   */
+  disposeDiagnosticLogging(): void {
+    try {
+      this.uninstallLifecycleLogging();
+    } catch {
+      // Diagnostics must never break the app.
+    }
+  }
 
   static getInstance() {
     if (!WebSocketService.instance) {
@@ -249,15 +302,26 @@ class WebSocketService {
           logWsDiag('RECONNECT_SUCCESS', connId);
         }
         logWsDiag('WS_OPEN', connId);
+        // A freshly opened connection closes the previous incident episode,
+        // so a genuinely new incident can raise the popup again later.
+        forgetIncidentEpisode(connId);
         this.initializeConnection();
       };
 
       socket.onmessage = (event) => {
         if (this.ws !== socket) return;
+        // Diagnostic-only: proves whether the browser was still RECEIVING
+        // frames before an abnormal close. Records the message TYPE and a byte
+        // count only — never the payload, never any field of it.
+        const inbound = describeInboundFrame(event.data);
+        logWsDiag('WS_RECV', connId, inbound.detail, socket.readyState);
         try {
           const message = JSON.parse(event.data);
           this.messageSubject.next(message);
         } catch (error) {
+          // Diagnostic-only: a frame we could not classify (binary audio, or
+          // malformed JSON) still proves the socket delivered bytes.
+          logWsDiag('WS_RECV_UNPARSED', connId, inbound.detail, socket.readyState);
           console.error('Failed to parse WebSocket message:', error);
           toaster.create({
             title: `${getTranslation()('error.failedParseWebSocket')}: ${error}`,
