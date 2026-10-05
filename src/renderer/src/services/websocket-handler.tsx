@@ -254,6 +254,10 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
         window.setTimeout(() => setSubtitleText(''), 1800);
         // No need to open mic here
         if (message.history_uid) {
+          logWsDiag(
+            'ACTIVE_HISTORY_ID', wsService.getConnectionId(),
+            `uid=${message.history_uid}`,
+          );
           setLastHistoryUid(activeConfUidRef.current, message.history_uid);
           setCurrentHistoryUid(message.history_uid);
           setMessages([]);
@@ -374,6 +378,10 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
           );
 
           if (decision.type === 'resume') {
+            logWsDiag(
+              'RESYNC_DECISION', wsService.getConnectionId(),
+              `type=resume uid=${decision.uid}`,
+            );
             setLastHistoryUid(confUidForHistory, decision.uid);
             setCurrentHistoryUid(decision.uid);
             wsService.sendMessage({
@@ -382,6 +390,10 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
               timezone: getUserTimezone(),
             });
           } else {
+            logWsDiag(
+              'RESYNC_DECISION', wsService.getConnectionId(),
+              'type=create',
+            );
             if (rememberedUid) clearLastHistoryUid(confUidForHistory);
             wsService.sendMessage({ type: 'create-new-history', timezone: getUserTimezone() });
           }

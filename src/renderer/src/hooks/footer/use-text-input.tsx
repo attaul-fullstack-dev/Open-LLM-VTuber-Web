@@ -94,6 +94,10 @@ export function useTextInput() {
       const sent = wsContext.sendMessage({
         type: 'text-input',
         text: messageText,
+        // Session identity for the reconnect race: lets the backend adopt
+        // the active history instead of minting a new session when this
+        // send lands before fetch-and-set-history completes.
+        history_uid: currentHistoryUid,
         images: [...capturedImages, ...uploadedImages],
         request_id: timing.requestId,
         client_user_send_ms: timing.clientUserSendMs,
