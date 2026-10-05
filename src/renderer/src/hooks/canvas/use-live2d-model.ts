@@ -25,7 +25,7 @@ interface Position {
 const TAP_DURATION_THRESHOLD_MS = 200; // Max duration for a tap
 const DRAG_DISTANCE_THRESHOLD_PX = 5; // Min distance to be considered a drag
 
-function parseModelUrl(url: string): { baseUrl: string; modelDir: string; modelFileName: string } {
+export function parseModelUrl(url: string): { baseUrl: string; modelDir: string; modelFileName: string } {
   try {
     const urlObj = new URL(url);
     const { pathname } = urlObj;
@@ -51,6 +51,22 @@ function parseModelUrl(url: string): { baseUrl: string; modelDir: string; modelF
     console.error('Error parsing model URL:', error);
     return { baseUrl: '', modelDir: '', modelFileName: '' };
   }
+}
+
+/**
+ * Guard for deterministic model initialization.
+ *
+ * The SDK builds `<baseUrl><modelDir>/<modelFileName>.model3.json`; any empty
+ * part used to produce `/undefined/undefined.model3.json` (or a throw inside
+ * `new URL(undefined)`). A falsy return means "do not touch the SDK at all":
+ * no `updateModelConfig`, no `releaseInstance`, no `initializeLive2D`.
+ */
+export function isValidModelParts(parts: { baseUrl: string; modelDir: string; modelFileName: string }): boolean {
+  if (!parts || !parts.baseUrl || !parts.modelDir || !parts.modelFileName) return false;
+  // A model dir is a single path segment: reject root/empty/nested artifacts
+  // (e.g. the `/` produced when the file sits at the URL root).
+  if (parts.modelDir.includes('/')) return false;
+  return true;
 }
 
 export const playAudioWithLipSync = (audioPath: string, modelIndex = 0): Promise<void> => new Promise((resolve, reject) => {
@@ -111,6 +127,13 @@ export const useLive2DModel = ({
   const activePointersRef = useRef<Set<number>>(new Set());
   // ---
 
+  // Generation-guarded init: rapid URL/config changes must never stack
+  // concurrent release+initialize cycles. Only the latest generation runs;
+  // superseded timers are cancelled on change/unmount, so a torn-down model
+  // can never be re-entered (the `release`/`getArray` race).
+  const initTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const initGenRef = useRef(0);
+
   useEffect(() => {
     const currentUrl = modelInfo?.url;
     const sdkScale = (window as any).LAppDefine?.CurrentKScale;
@@ -124,53 +147,89 @@ export const useLive2DModel = ({
       prevModelUrlRef.current = currentUrl;
 
       try {
-        const { baseUrl, modelDir, modelFileName } = parseModelUrl(currentUrl);
+        const parts = parseModelUrl(currentUrl);
 
-        if (baseUrl && modelDir) {
-          updateModelConfig(baseUrl, modelDir, modelFileName, Number(modelInfo.kScale));
+        // Deterministic init: never touch the SDK with an undefined/partial
+        // URL. `live2d-config-context` already filters these, this is the
+        // second (hook-level) barrier.
+        if (!isValidModelParts(parts)) {
+          console.warn('Skipping Live2D init: invalid model URL parts');
+          return;
+        }
+        const { baseUrl, modelDir, modelFileName } = parts;
+        updateModelConfig(baseUrl, modelDir, modelFileName, Number(modelInfo.kScale));
 
-          setTimeout(() => {
+        // Cancel any in-flight init from a previous URL/config generation.
+        if (initTimerRef.current) {
+          clearTimeout(initTimerRef.current);
+          initTimerRef.current = null;
+        }
+        const generation = (initGenRef.current += 1);
+        initTimerRef.current = setTimeout(() => {
+          initTimerRef.current = null;
+          // Superseded by a newer URL while waiting: do nothing.
+          if (generation !== initGenRef.current) return;
+          try {
             if ((window as any).LAppLive2DManager?.releaseInstance) {
               (window as any).LAppLive2DManager.releaseInstance();
             }
+            // Re-check generation after release: a newer URL may have arrived
+            // while release ran; never initialize a stale generation.
+            if (generation !== initGenRef.current) return;
             initializeLive2D();
-          }, 500);
-        }
+          } catch (error) {
+            console.error('Error initializing Live2D model:', error);
+          }
+        }, 500);
       } catch (error) {
         console.error('Error processing model URL:', error);
       }
     }
+
+    return () => {
+      if (initTimerRef.current) {
+        clearTimeout(initTimerRef.current);
+        initTimerRef.current = null;
+      }
+      // Invalidate any in-flight generation on unmount/URL change.
+      initGenRef.current += 1;
+    };
   }, [modelInfo?.url, modelInfo?.kScale]);
 
   const getModelPosition = useCallback(() => {
-    const adapter = (window as any).getLAppAdapter?.();
-    if (adapter) {
-      const model = adapter.getModel();
-      if (model && model._modelMatrix) {
-        const matrix = model._modelMatrix.getArray();
-        return {
-          x: matrix[12],
-          y: matrix[13],
-        };
-      }
+    try {
+      const adapter = (window as any).getLAppAdapter?.();
+      if (!adapter) return { x: 0, y: 0 };
+      const model = adapter.getModel?.();
+      const matrix = model?._modelMatrix?.getArray?.();
+      if (!matrix || matrix.length < 14) return { x: 0, y: 0 };
+      return {
+        x: matrix[12],
+        y: matrix[13],
+      };
+    } catch {
+      // Model may be mid-release; never throw into the render path.
+      return { x: 0, y: 0 };
     }
-    return { x: 0, y: 0 };
   }, []);
 
   const setModelPosition = useCallback((x: number, y: number) => {
-    const adapter = (window as any).getLAppAdapter?.();
-    if (adapter) {
-      const model = adapter.getModel();
-      if (model && model._modelMatrix) {
-        const matrix = model._modelMatrix.getArray();
+    try {
+      const adapter = (window as any).getLAppAdapter?.();
+      if (!adapter) return;
+      const model = adapter.getModel?.();
+      if (!model || !model._modelMatrix?.getArray) return;
+      const matrix = model._modelMatrix.getArray();
+      if (!matrix || matrix.length < 14) return;
 
-        const newMatrix = [...matrix];
-        newMatrix[12] = x;
-        newMatrix[13] = y;
+      const newMatrix = [...matrix];
+      newMatrix[12] = x;
+      newMatrix[13] = y;
 
-        model._modelMatrix.setMatrix(newMatrix);
-        modelPositionRef.current = { x, y };
-      }
+      model._modelMatrix.setMatrix?.(newMatrix);
+      modelPositionRef.current = { x, y };
+    } catch {
+      // Model may be mid-release; drag continuity is best-effort.
     }
   }, []);
 
@@ -249,10 +308,15 @@ export const useLive2DModel = ({
       isPotentialTapRef.current = true;
       setIsDragging(false); // Ensure dragging is false initially
 
-      // Store initial model position IF drag starts later
-      if (model._modelMatrix) {
-        const matrix = model._modelMatrix.getArray();
-        modelStartPos.current = { x: matrix[12], y: matrix[13] };
+      // Store initial model position IF drag starts later. Null-safe: the
+      // model may be mid-release during a rapid reload.
+      try {
+        const matrix = model._modelMatrix?.getArray?.();
+        if (matrix && matrix.length >= 14) {
+          modelStartPos.current = { x: matrix[12], y: matrix[13] };
+        }
+      } catch {
+        // ignore: drag simply starts from the last known position.
       }
     }
   }, [canvasRef, modelInfo]);
@@ -321,12 +385,18 @@ export const useLive2DModel = ({
       // Use the adapter's setModelPosition method if available, otherwise update matrix directly
       if (adapter.setModelPosition) {
         adapter.setModelPosition(newX, newY);
-      } else if (model._modelMatrix) {
-        const matrix = model._modelMatrix.getArray();
-        const newMatrix = [...matrix];
-        newMatrix[12] = newX;
-        newMatrix[13] = newY;
-        model._modelMatrix.setMatrix(newMatrix);
+      } else {
+        try {
+          const matrix = model._modelMatrix?.getArray?.();
+          if (matrix && matrix.length >= 14 && model._modelMatrix?.setMatrix) {
+            const newMatrix = [...matrix];
+            newMatrix[12] = newX;
+            newMatrix[13] = newY;
+            model._modelMatrix.setMatrix(newMatrix);
+          }
+        } catch {
+          // Model mid-release; drag continuity is best-effort.
+        }
       }
 
       modelPositionRef.current = { x: newX, y: newY };
@@ -366,13 +436,17 @@ export const useLive2DModel = ({
       // Finalize drag
       setIsDragging(false);
       if (adapter) {
-        const currentModel = adapter.getModel(); // Re-get model in case adapter changed
-        if (currentModel && currentModel._modelMatrix) {
-          const matrix = currentModel._modelMatrix.getArray();
-          const finalPos = { x: matrix[12], y: matrix[13] };
-          modelPositionRef.current = finalPos;
-          modelStartPos.current = finalPos; // Update base position for next potential drag
-          setPosition(finalPos);
+        try {
+          const currentModel = adapter.getModel?.(); // Re-get model in case adapter changed
+          const matrix = currentModel?._modelMatrix?.getArray?.();
+          if (matrix && matrix.length >= 14) {
+            const finalPos = { x: matrix[12], y: matrix[13] };
+            modelPositionRef.current = finalPos;
+            modelStartPos.current = finalPos; // Update base position for next potential drag
+            setPosition(finalPos);
+          }
+        } catch {
+          // Model mid-release; keep last known position.
         }
       }
     } else if (isPotentialTapRef.current && adapter && model && view && canvasRef.current) {
