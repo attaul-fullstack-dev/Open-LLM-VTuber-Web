@@ -52,11 +52,19 @@ export class LAppDelegate {
    * 
    */
   public static releaseInstance(): void {
-    if (s_instance != null) {
-      s_instance.release();
-    }
-
+    // Null FIRST so the RAF loop in run() stops even if release() throws
+    // midway (it nulls the view matrix before touching nullable members).
+    // Teardown is best-effort: a throwing release must never strand the loop
+    // on a half-torn-down singleton (the getArray race).
+    const inst = s_instance;
     s_instance = null;
+    if (inst != null) {
+      try {
+        inst.release();
+      } catch (error) {
+        console.warn('LAppDelegate release skipped remainder:', error);
+      }
+    }
   }
 
   /**

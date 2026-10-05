@@ -94,17 +94,28 @@ export class LAppView {
     // this._gear.release();
     // this._gear = null;
 
-    this._back.release();
-    this._back = null;
+    // _back is permanently null (initializeSprite body is commented out).
+    // Unconditional release() threw on every page unload.
+    if (this._back != null) {
+      this._back.release();
+      this._back = null;
+    }
 
-    gl.deleteProgram(this._programId);
-    this._programId = null;
+    if (this._programId != null) {
+      gl.deleteProgram(this._programId);
+      this._programId = null;
+    }
   }
 
   /**
    * 描画する。
    */
   public render(): void {
+    // A frame queued before teardown observes the nulled view: skip instead
+    // of throwing into the RAF loop (the getArray race).
+    if (this._viewMatrix == null) {
+      return;
+    }
     gl.useProgram(this._programId);
 
     if (this._back) {

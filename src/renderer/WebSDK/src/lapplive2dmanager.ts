@@ -189,8 +189,13 @@ export class LAppLive2DManager {
       LAppPal.printMessage(`[APP]model index: ${this._sceneIndex}`);
     }
 
-    // Use the directory name and file name from our configuration
+    // Use the directory name and file name from our configuration.
+    // Unconfigured (pre-updateModelConfig) calls are a no-op: without this,
+    // the constructor's first changeScene fetches undefined/undefined.
     const model: string = LAppDefine.ModelDir[index];
+    if (!model || !LAppDefine.ResourcesPath) {
+      return;
+    }
     const modelPath: string = LAppDefine.ResourcesPath + model + '/';
     
     // Use ModelFileNames if available, otherwise fall back to ModelDir
@@ -211,8 +216,18 @@ export class LAppLive2DManager {
   }
 
   public setViewMatrix(m: CubismMatrix44) {
+    // Teardown-safe: the view is nulled before the render loop observes the
+    // released singleton, and a queued frame must never throw into RAF.
+    if (m == null || this._viewMatrix == null) {
+      return;
+    }
+    const src = m.getArray();
+    const dst = this._viewMatrix.getArray();
+    if (src == null || dst == null) {
+      return;
+    }
     for (let i = 0; i < 16; i++) {
-      this._viewMatrix.getArray()[i] = m.getArray()[i];
+      dst[i] = src[i];
     }
   }
 
@@ -223,7 +238,13 @@ export class LAppLive2DManager {
     this._viewMatrix = new CubismMatrix44();
     this._models = new csmVector<LAppModel>();
     this._sceneIndex = 0;
-    this.changeScene(this._sceneIndex);
+    // Never fetch before configuration: early getInstance() calls (adapter
+    // polls, position timers) run before updateModelConfig and would otherwise
+    // request /undefined/undefined.model3.json. The first configured
+    // initializeLive2D recreates the manager, and the constructor then loads.
+    if (LAppDefine.ModelDirSize > 0 && LAppDefine.ModelDir[0]) {
+      this.changeScene(this._sceneIndex);
+    }
   }
 
   _viewMatrix: CubismMatrix44; // モデル描画に用いるview行列
