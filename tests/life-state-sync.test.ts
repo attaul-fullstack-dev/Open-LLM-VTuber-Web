@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { toLifeSnapshot } from "@/utils/life-state-sync";
-import { canFetchLifeState } from "@/utils/life-state-preference";
+import { toLifeSnapshot } from "../src/renderer/src/utils/life-state-sync.ts";
+import { canFetchLifeState } from "../src/renderer/src/utils/life-state-preference.ts";
 
 const SRC = path.join(
   path.dirname(fileURLToPath(import.meta.url)),

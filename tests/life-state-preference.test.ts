@@ -26,7 +26,7 @@ import {
   scaleForHandleDelta,
   scaleForWidth,
   widthForScale,
-} from "@/utils/life-state-preference";
+} from "../src/renderer/src/utils/life-state-preference.ts";
 
 // Minimal localStorage stub so the pure module works without a browser.
 const storage = new Map<string, string>();
@@ -180,7 +180,7 @@ test("live gesture value wins for render, persisted otherwise (C/D/K)", () => {
 });
 
 test("no pinch helpers remain exported", async () => {
-  const mod = (await import("@/utils/life-state-preference")) as Record<
+  const mod = (await import("../src/renderer/src/utils/life-state-preference.ts")) as Record<
     string,
     unknown
   >;
@@ -252,10 +252,12 @@ test("resize handle is isolated from panel drag (H)", () => {
 });
 
 test("scaled rects never feed style values (no teleport reads)", () => {
-  // getBoundingClientRect is zoom-scaled: allowed only to DERIVE the live
-  // scale (visual width / base) and the drag clamp bound at gesture start.
-  // Positions must always convert back (rect / scale); raw scaled readings
-  // must never become style values or persist values.
+  // getBoundingClientRect is zoom-scaled AND viewport-relative: allowed only
+  // to DERIVE the live scale (visual width / base), the drag clamp bound,
+  // and the offsetParent-corrected style-space origin at gesture start.
+  // Positions must always convert back ((rect - origin) / scale); raw
+  // viewport readings must never become style values or persist values
+  // (that teleported the panel by the sidebar offset on first drag).
   const srcDir = path.join(
     path.dirname(fileURLToPath(import.meta.url)),
     "..",
@@ -268,10 +270,11 @@ test("scaled rects never feed style values (no teleport reads)", () => {
     "utf8",
   );
   const reads = widget.match(/getBoundingClientRect\(\)/g) ?? [];
-  assert.equal(reads.length, 2);
+  assert.equal(reads.length, 3);
   assert.ok(widget.includes("rect.width / LIFE_STATE_BASE_WIDTH"));
-  assert.ok(widget.includes("rect.left / scale"));
-  assert.ok(widget.includes("rect.top / scale"));
+  assert.ok(widget.includes("offsetParent.getBoundingClientRect()"));
+  assert.ok(widget.includes("(rect.left - opRect.left) / scale"));
+  assert.ok(widget.includes("(rect.top - opRect.top) / scale"));
   assert.ok(!widget.match(/baseX:\s*rect\.left[^/]/));
   assert.ok(!widget.match(/baseY:\s*rect\.top[^/]/));
 });

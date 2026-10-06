@@ -271,13 +271,24 @@ export function LifeStateWidget() {
       const rect = node.getBoundingClientRect();
       const scale = rect.width / LIFE_STATE_BASE_WIDTH;
       const live = liveRef.current;
+      // Base MUST be container-relative (the coordinate space of style.left):
+      // rect.left is viewport-relative and includes the offsetParent origin
+      // (e.g. a 440px sidebar), so a first drag from the docked position
+      // used to teleport the panel by exactly that offset. offsetParent rect
+      // minus viewport rect, unscaled, is the true style-space origin.
+      const opRect = node.offsetParent instanceof Element
+        ? node.offsetParent.getBoundingClientRect()
+        : null;
+      const originBase = opRect
+        ? {
+          x: (rect.left - opRect.left) / scale,
+          y: (rect.top - opRect.top) / scale,
+        }
+        : { x: rect.left / scale, y: rect.top / scale };
       const base =
         live && live.x !== null && live.y !== null
           ? { x: live.x, y: live.y }
-          : (position ?? {
-            x: rect.left / scale,
-            y: rect.top / scale,
-          });
+          : (position ?? originBase);
       dragRef.current = {
         pointerId: event.pointerId,
         startX: event.clientX,
@@ -356,7 +367,11 @@ export function LifeStateWidget() {
       ref={boxRef}
       data-testid="life-state-widget"
       position="absolute"
-      zIndex={30}
+      // Above the footer controls (z50): the widget is a user-draggable
+      // overlay, and anything at or below z50 lets the footer swallow the
+      // resize handle (and panel body) whenever the panel sits low on
+      // screen. Still far below toasts/modals.
+      zIndex={60}
       width={`${LIFE_STATE_BASE_WIDTH}px`}
       maxWidth="calc(100vw - 16px)"
       overflow="auto"
