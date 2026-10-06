@@ -509,7 +509,7 @@ export class IdleFacialExpressionController {
    * Stage 4 — release the contextual response face. Returns the facial
    * contribution smoothly to neutral, then lets Stage 3 idle scheduling resume.
    */
-  releaseResponseFace(graceMs: number = IDLE_FACIAL_COOLDOWN_MS.speaking): void {
+  releaseResponseFace(): void {
     this.clearResponseTimer();
     this.responseFace = null;
     this.responseFaceId = null;

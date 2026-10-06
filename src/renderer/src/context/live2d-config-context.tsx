@@ -103,7 +103,9 @@ export const Live2DConfigContext = createContext<Live2DConfigState | null>(null)
  * @param {React.ReactNode} props.children - Child components
  */
 export function Live2DConfigProvider({ children }: { children: React.ReactNode }) {
-  const { confUid } = useConfig();
+  // Subscribed (not read): a character switch must re-render this provider so
+  // per-character model state refreshes. Do not remove without scoping check.
+  useConfig();
 
   const [isLoading, setIsLoading] = useState(DEFAULT_CONFIG.isLoading);
 
