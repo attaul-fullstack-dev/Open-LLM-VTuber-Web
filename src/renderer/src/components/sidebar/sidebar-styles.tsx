@@ -209,11 +209,12 @@ export const sidebarStyles = {
         borderBottomColor: 'transparent',
       },
     },
+    // Active session reads through the title first: quiet surface wash,
+    // no tinted ring, so the list title stays the visual anchor.
     historyItemSelected: {
-      bg: miliTokens.color.accentSoft,
-      borderColor: 'rgba(124, 92, 255, 0.32)',
-      borderBottomColor: 'rgba(124, 92, 255, 0.32)',
-      boxShadow: 'inset 2px 0 0 #7C5CFF',
+      bg: miliTokens.color.surface,
+      borderColor: miliTokens.color.border,
+      borderBottomColor: miliTokens.color.border,
     },
     historyBody: {
       display: 'flex',
@@ -229,16 +230,11 @@ export const sidebarStyles = {
       flexShrink: 0,
       fontVariantNumeric: 'tabular-nums',
     },
-    sessionDivider: {
-      height: '1px',
-      bg: miliTokens.color.border,
-      mt: 2,
-    },
     timestamp: {
       fontSize: miliTokens.font.xs,
       color: miliTokens.color.textMuted,
       mt: '2px',
-      noOfLines: 1,
+      lineClamp: 1,
       overflow: 'hidden',
       textOverflow: 'ellipsis',
     },
@@ -268,16 +264,21 @@ export const sidebarStyles = {
       fontSize: miliTokens.font.md,
       fontWeight: 'semibold',
       color: miliTokens.color.textPrimary,
-      noOfLines: 1,
+      lineClamp: 1,
       overflow: 'hidden',
       textOverflow: 'ellipsis',
       mb: '2px',
+    },
+    // Selected session keeps the quiet wash AND tints only its title:
+    // one accent, exactly where the eye should land.
+    titleSelected: {
+      color: miliTokens.color.accentText,
     },
     messagePreview: {
       fontSize: miliTokens.font.sm,
       lineHeight: '1.35',
       color: miliTokens.color.textSecondary,
-      noOfLines: 1,
+      lineClamp: 1,
       overflow: 'hidden',
       textOverflow: 'ellipsis',
     },
@@ -296,11 +297,12 @@ export const sidebarStyles = {
       _expanded: { color: miliTokens.color.textPrimary, bg: miliTokens.color.surface },
     },
     menuContent: {
-      bg: 'gray.800',
-      color: 'whiteAlpha.900',
-      borderColor: 'whiteAlpha.200',
+      bg: miliTokens.color.elevated,
+      color: miliTokens.color.textPrimary,
+      border: '1px solid',
+      borderColor: miliTokens.color.borderStrong,
       minW: '190px',
-      boxShadow: 'xl',
+      boxShadow: miliTokens.shadow.float,
       zIndex: 1800,
     },
     menuItem: {
@@ -659,8 +661,8 @@ export const chatPanelStyles = css`
   }
 
   .cs-message--outgoing .cs-message__content {
-    background: #20b8a6 !important;
-    border: 1px solid rgba(255, 255, 255, 0.16) !important;
+    background: ${miliTokens.chat.userBubble} !important;
+    border: 1px solid ${miliTokens.chat.userBubbleBorder} !important;
     border-radius: 18px !important;
     padding: 10px 16px !important;
     color: #ffffff !important;
@@ -757,8 +759,8 @@ export const chatPanelStyles = css`
     }
 
     .cs-message--outgoing .cs-message__content {
-      background: #20b8a6 !important;
-      border: 1px solid rgba(255, 255, 255, 0.16) !important;
+      background: ${miliTokens.chat.userBubble} !important;
+      border: 1px solid ${miliTokens.chat.userBubbleBorder} !important;
       border-radius: 18px !important;
       padding: 10px 16px !important;
       color: #ffffff !important;

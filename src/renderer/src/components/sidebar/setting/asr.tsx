@@ -5,7 +5,7 @@ import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { settingStyles } from './setting-styles';
 import { useASRSettings } from '@/hooks/sidebar/setting/use-asr-settings';
-import { SwitchField, NumberField } from './common';
+import { SwitchField, NumberField, SettingSection } from './common';
 
 interface ASRProps {
   onSave?: (callback: () => void) => () => void
@@ -41,50 +41,54 @@ function ASR({ onSave, onCancel }: ASRProps): JSX.Element {
 
   return (
     <Stack {...settingStyles.common.container}>
-      <SwitchField
-        label={t('settings.asr.autoStopMic')}
-        checked={autoStopMic}
-        onChange={setAutoStopMic}
-      />
+      <SettingSection title={t('settings.sections.microphone')}>
+        <SwitchField
+          label={t('settings.asr.autoStopMic')}
+          checked={autoStopMic}
+          onChange={setAutoStopMic}
+        />
 
-      <SwitchField
-        label={t('settings.asr.autoStartMicOnConvEnd')}
-        checked={autoStartMicOnConvEnd}
-        onChange={setAutoStartMicOnConvEnd}
-      />
+        <SwitchField
+          label={t('settings.asr.autoStartMicOnConvEnd')}
+          checked={autoStartMicOnConvEnd}
+          onChange={setAutoStartMicOnConvEnd}
+        />
 
-      <SwitchField
-        label={t('settings.asr.autoStartMicOn')}
-        checked={autoStartMicOn}
-        onChange={setAutoStartMicOn}
-      />
+        <SwitchField
+          label={t('settings.asr.autoStartMicOn')}
+          checked={autoStartMicOn}
+          onChange={setAutoStartMicOn}
+        />
+      </SettingSection>
 
-      <NumberField
-        label={t('settings.asr.positiveSpeechThreshold')}
-        help={t('settings.asr.positiveSpeechThresholdDesc')}
-        value={localSettings.positiveSpeechThreshold}
-        onChange={(value) => handleInputChange('positiveSpeechThreshold', value)}
-        min={1}
-        max={100}
-      />
+      <SettingSection title={t('settings.sections.detection')}>
+        <NumberField
+          label={t('settings.asr.positiveSpeechThreshold')}
+          help={t('settings.asr.positiveSpeechThresholdDesc')}
+          value={localSettings.positiveSpeechThreshold}
+          onChange={(value) => handleInputChange('positiveSpeechThreshold', value)}
+          min={1}
+          max={100}
+        />
 
-      <NumberField
-        label={t('settings.asr.negativeSpeechThreshold')}
-        help={t('settings.asr.negativeSpeechThresholdDesc')}
-        value={localSettings.negativeSpeechThreshold}
-        onChange={(value) => handleInputChange('negativeSpeechThreshold', value)}
-        min={0}
-        max={100}
-      />
+        <NumberField
+          label={t('settings.asr.negativeSpeechThreshold')}
+          help={t('settings.asr.negativeSpeechThresholdDesc')}
+          value={localSettings.negativeSpeechThreshold}
+          onChange={(value) => handleInputChange('negativeSpeechThreshold', value)}
+          min={0}
+          max={100}
+        />
 
-      <NumberField
-        label={t('settings.asr.redemptionFrames')}
-        help={t('settings.asr.redemptionFramesDesc')}
-        value={localSettings.redemptionFrames}
-        onChange={(value) => handleInputChange('redemptionFrames', value)}
-        min={1}
-        max={100}
-      />
+        <NumberField
+          label={t('settings.asr.redemptionFrames')}
+          help={t('settings.asr.redemptionFramesDesc')}
+          value={localSettings.redemptionFrames}
+          onChange={(value) => handleInputChange('redemptionFrames', value)}
+          min={1}
+          max={100}
+        />
+      </SettingSection>
     </Stack>
   );
 }

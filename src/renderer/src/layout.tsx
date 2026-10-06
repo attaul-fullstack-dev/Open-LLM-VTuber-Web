@@ -109,7 +109,7 @@ export const layoutStyles = {
     alignItems: 'center',
     justifyContent: 'space-between',
     height: '30px',
-    backgroundColor: 'gray.800',
+    backgroundColor: miliTokens.color.background,
     paddingX: '10px',
     zIndex: 1000,
     css: { '-webkit-app-region': 'drag' },
@@ -123,7 +123,7 @@ export const layoutStyles = {
     alignItems: 'center',
     justifyContent: 'center',
     height: '30px',
-    backgroundColor: 'gray.800',
+    backgroundColor: miliTokens.color.background,
     zIndex: 1000,
     css: {
       '-webkit-app-region': 'drag',

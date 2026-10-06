@@ -1,8 +1,7 @@
-import { 
-  Box, 
-  Stack, 
-  Text, 
-  Heading, 
+import {
+  Stack,
+  Text,
+  Heading,
   HStack,
   Icon,
 } from '@chakra-ui/react';
@@ -10,6 +9,7 @@ import { useTranslation } from 'react-i18next';
 import { FaGithub, FaBook } from 'react-icons/fa';
 import { settingStyles } from './setting-styles';
 import { Button } from '@/components/ui/button';
+import { SettingSection } from './common';
 
 function About(): JSX.Element {
   const { t } = useTranslation();
@@ -27,21 +27,14 @@ function About(): JSX.Element {
       <Heading size="md" mb={1}>
         {t("settings.about.title")}
       </Heading>
-      <Box>
-        <Text fontWeight="bold" mb={0}>
-          {t("settings.about.version")}
-        </Text>
+      <SettingSection title={t("settings.about.version")}>
         <Text>{appVersion}</Text>
-      </Box>
+      </SettingSection>
       {/* <Box mt={1}>
         <Text fontWeight="bold" mb={0}>{t('Author')}</Text>
         <Text>{appAuthor}</Text>
       </Box> */}
-      <Box borderTop="1px solid" borderColor="whiteAlpha.200" pt={2} mt={1} />
-      <Box mt={1}>
-        <Text fontWeight="bold" mb={1}>
-          {t("settings.about.projectLinks")}
-        </Text>
+      <SettingSection title={t("settings.about.projectLinks")}>
         <HStack mt={1} gap={2}>
           <Button
             size="sm"
@@ -60,19 +53,13 @@ function About(): JSX.Element {
             <Icon as={FaBook} mr={2} /> {t("settings.about.documentation")}
           </Button>
         </HStack>
-      </Box>
-      <Box borderTop="1px solid" borderColor="whiteAlpha.200" pt={2} mt={1} />
-      <Box mt={1}>
+      </SettingSection>
+      <SettingSection title={t("settings.about.copyright")}>
         <Button size="xs" colorPalette="blue" onClick={() => openExternalLink("https://github.com/Open-LLM-VTuber/Open-LLM-VTuber-Web/blob/main/LICENSE")}>
           {t("settings.about.viewLicense")}
         </Button>
-      </Box>
-      <Box mt={1}>
-        <Text fontWeight="bold" mb={0}>
-          {t("settings.about.copyright")}
-        </Text>
         <Text>© {new Date().getFullYear()} Open LLM VTuber Team</Text>
-      </Box>
+      </SettingSection>
     </Stack>
   );
 }

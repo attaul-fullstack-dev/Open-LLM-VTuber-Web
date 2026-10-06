@@ -84,6 +84,23 @@
       "agent": "Agen",
       "about": "Tentang"
     },
+    "sections": {
+      "interface": "Antarmuka",
+      "background": "Latar",
+      "character": "Karakter",
+      "connection": "Koneksi",
+      "images": "Gambar",
+      "microphone": "Mikrofon",
+      "detection": "Deteksi",
+      "interaction": "Interaksi",
+      "proactive": "Proaktif",
+      "memory": "Memori",
+      "danger": "Zona berbahaya"
+    },
+    "tts": {
+      "emptyTitle": "Pengaturan suara mengikuti karakter",
+      "emptyBody": "TTS dikendalikan oleh preset karakter aktif di backend. Belum ada yang perlu diatur di sini."
+    },
     "general": {
       "language": "Bahasa",
       "useCameraBackground": "Gunakan kamera sebagai latar",

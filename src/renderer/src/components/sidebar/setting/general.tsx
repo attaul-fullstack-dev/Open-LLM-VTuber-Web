@@ -8,7 +8,7 @@ import { useGeneralSettings } from "@/hooks/sidebar/setting/use-general-settings
 import { useWebSocket } from "@/context/websocket-context";
 import { useVoiceOutput } from "@/hooks/utils/use-voice-output";
 import { useLifeState } from "@/context/life-state-context";
-import { SelectField, SwitchField, InputField } from "./common";
+import { SelectField, SwitchField, InputField, SettingSection } from "./common";
 
 interface GeneralProps {
   onSave?: (callback: () => void) => () => void;
@@ -84,42 +84,44 @@ function General({ onSave, onCancel }: GeneralProps): JSX.Element {
 
   return (
     <Stack {...settingStyles.common.container}>
-      <SelectField
-        label={t("settings.general.language")}
-        value={settings.language}
-        onChange={(value) => handleSettingChange("language", value)}
-        collection={collections.languages}
-        placeholder={t("settings.general.language")}
-      />
+      <SettingSection title={t("settings.sections.interface")}>
+        <SelectField
+          label={t("settings.general.language")}
+          value={settings.language}
+          onChange={(value) => handleSettingChange("language", value)}
+          collection={collections.languages}
+          placeholder={t("settings.general.language")}
+        />
 
-      <SwitchField
-        label={t("settings.general.useCameraBackground")}
-        checked={settings.useCameraBackground}
-        onChange={handleCameraToggle}
-      />
+        <SwitchField
+          label={t("settings.general.useCameraBackground")}
+          checked={settings.useCameraBackground}
+          onChange={handleCameraToggle}
+        />
 
-      <SwitchField
-        label={t("settings.general.showSubtitle")}
-        checked={showSubtitle}
-        onChange={setShowSubtitle}
-      />
+        <SwitchField
+          label={t("settings.general.showSubtitle")}
+          checked={showSubtitle}
+          onChange={setShowSubtitle}
+        />
 
-      <SwitchField
-        label={t("settings.general.voiceOutput")}
-        checked={voiceOutputEnabled}
-        onChange={setVoiceOutputEnabled}
-        help={t("settings.general.voiceOutputHelp")}
-      />
+        <SwitchField
+          label={t("settings.general.voiceOutput")}
+          checked={voiceOutputEnabled}
+          onChange={setVoiceOutputEnabled}
+          help={t("settings.general.voiceOutputHelp")}
+        />
 
-      <SwitchField
-        label={t("settings.general.lifeState")}
-        checked={lifeStateEnabled}
-        onChange={setLifeStateEnabled}
-        help={t("settings.general.lifeStateHelp")}
-      />
+        <SwitchField
+          label={t("settings.general.lifeState")}
+          checked={lifeStateEnabled}
+          onChange={setLifeStateEnabled}
+          help={t("settings.general.lifeStateHelp")}
+        />
+      </SettingSection>
 
       {!settings.useCameraBackground && (
-        <>
+        <SettingSection title={t("settings.sections.background")}>
           <SelectField
             label={t("settings.general.backgroundImage")}
             value={settings.selectedBgUrl}
@@ -134,58 +136,64 @@ function General({ onSave, onCancel }: GeneralProps): JSX.Element {
             onChange={(value) => handleSettingChange("customBgUrl", value)}
             placeholder={t("settings.general.customBgUrlPlaceholder")}
           />
-        </>
+        </SettingSection>
       )}
 
-      <SelectField
-        label={t("settings.general.characterPreset")}
-        value={settings.selectedCharacterPreset}
-        onChange={handleCharacterPresetChange}
-        collection={collections.characterPresets}
-        placeholder={confName || t("settings.general.characterPreset")}
-      />
+      <SettingSection title={t("settings.sections.character")}>
+        <SelectField
+          label={t("settings.general.characterPreset")}
+          value={settings.selectedCharacterPreset}
+          onChange={handleCharacterPresetChange}
+          collection={collections.characterPresets}
+          placeholder={confName || t("settings.general.characterPreset")}
+        />
+      </SettingSection>
 
-      <InputField
-        label={t("settings.general.wsUrl")}
-        value={settings.wsUrl}
-        onChange={(value) => handleSettingChange("wsUrl", value)}
-        placeholder="Enter WebSocket URL"
-      />
+      <SettingSection title={t("settings.sections.connection")}>
+        <InputField
+          label={t("settings.general.wsUrl")}
+          value={settings.wsUrl}
+          onChange={(value) => handleSettingChange("wsUrl", value)}
+          placeholder="Enter WebSocket URL"
+        />
 
-      <InputField
-        label={t("settings.general.baseUrl")}
-        value={settings.baseUrl}
-        onChange={(value) => handleSettingChange("baseUrl", value)}
-        placeholder="Enter Base URL"
-      />
+        <InputField
+          label={t("settings.general.baseUrl")}
+          value={settings.baseUrl}
+          onChange={(value) => handleSettingChange("baseUrl", value)}
+          placeholder="Enter Base URL"
+        />
+      </SettingSection>
 
-      <InputField
-        label={t("settings.general.imageCompressionQuality")}
-        value={settings.imageCompressionQuality.toString()}
-        onChange={(value) => {
-          const quality = parseFloat(value as string);
-          if (!Number.isNaN(quality) && quality >= 0.1 && quality <= 1.0) {
-            handleSettingChange("imageCompressionQuality", quality);
-          } else if (value === "") {
-            handleSettingChange("imageCompressionQuality", settings.imageCompressionQuality);
-          }
-        }}
-        help={t("settings.general.imageCompressionQualityHelp")}
-      />
+      <SettingSection title={t("settings.sections.images")}>
+        <InputField
+          label={t("settings.general.imageCompressionQuality")}
+          value={settings.imageCompressionQuality.toString()}
+          onChange={(value) => {
+            const quality = parseFloat(value as string);
+            if (!Number.isNaN(quality) && quality >= 0.1 && quality <= 1.0) {
+              handleSettingChange("imageCompressionQuality", quality);
+            } else if (value === "") {
+              handleSettingChange("imageCompressionQuality", settings.imageCompressionQuality);
+            }
+          }}
+          help={t("settings.general.imageCompressionQualityHelp")}
+        />
 
-      <InputField
-        label={t("settings.general.imageMaxWidth")}
-        value={settings.imageMaxWidth.toString()}
-        onChange={(value) => {
-          const maxWidth = parseInt(value as string, 10);
-          if (!Number.isNaN(maxWidth) && maxWidth >= 0) {
-            handleSettingChange("imageMaxWidth", maxWidth);
-          } else if (value === "") {
-            handleSettingChange("imageMaxWidth", settings.imageMaxWidth);
-          }
-        }}
-        help={t("settings.general.imageMaxWidthHelp")}
-      />
+        <InputField
+          label={t("settings.general.imageMaxWidth")}
+          value={settings.imageMaxWidth.toString()}
+          onChange={(value) => {
+            const maxWidth = parseInt(value as string, 10);
+            if (!Number.isNaN(maxWidth) && maxWidth >= 0) {
+              handleSettingChange("imageMaxWidth", maxWidth);
+            } else if (value === "") {
+              handleSettingChange("imageMaxWidth", settings.imageMaxWidth);
+            }
+          }}
+          help={t("settings.general.imageMaxWidthHelp")}
+        />
+      </SettingSection>
     </Stack>
   );
 }

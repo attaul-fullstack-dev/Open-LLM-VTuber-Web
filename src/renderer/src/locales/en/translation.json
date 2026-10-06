@@ -15,6 +15,23 @@
       "agent": "Agent",
       "about": "About"
     },
+    "sections": {
+      "interface": "Interface",
+      "background": "Background",
+      "character": "Character",
+      "connection": "Connection",
+      "images": "Images",
+      "microphone": "Microphone",
+      "detection": "Detection",
+      "interaction": "Interaction",
+      "proactive": "Proactive",
+      "memory": "Memory",
+      "danger": "Danger zone"
+    },
+    "tts": {
+      "emptyTitle": "Voice settings live with the character",
+      "emptyBody": "TTS is controlled by the active character preset on the backend. There is nothing to configure here yet."
+    },
     "general": {
       "language": "Language",
       "useCameraBackground": "Use Camera Background",

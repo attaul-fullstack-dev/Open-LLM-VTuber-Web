@@ -4,6 +4,7 @@
 import { memo, useRef, useEffect, useState } from "react";
 import { VStack, IconButton } from "@chakra-ui/react";
 import { FiMinus, FiPlus, FiMaximize2 } from "react-icons/fi";
+import { miliTokens } from "@/theme/design-tokens";
 import { useLive2DConfig } from "@/context/live2d-config-context";
 import { useIpcHandlers } from "@/hooks/utils/use-ipc-handlers";
 import { useInterrupt } from "@/hooks/utils/use-interrupt";
@@ -241,20 +242,21 @@ export const Live2D = memo(
             zIndex="30"
             gap="1"
             p="5px"
-            borderRadius="20px"
-            bg="rgba(8, 15, 28, .84)"
-            border="1px solid rgba(255,255,255,.22)"
-            backdropFilter="blur(12px)"
-            boxShadow="0 8px 24px rgba(0,0,0,.28)"
+            borderRadius={miliTokens.radius.lg}
+            bg={miliTokens.color.elevated}
+            border="1px solid"
+            borderColor={miliTokens.color.borderStrong}
+            backdropFilter={miliTokens.blur.card}
+            boxShadow={miliTokens.shadow.float}
             onPointerDown={(event) => event.stopPropagation()}
           >
-            <IconButton aria-label="Zoom in avatar" size="sm" borderRadius="15px" color="white" bg="#6d5dfc" _hover={{ bg: "#7c6dff" }} onClick={zoomIn}>
+            <IconButton aria-label="Zoom in avatar" borderRadius={miliTokens.radius.md} color="white" bg={miliTokens.color.accent} _hover={{ filter: 'brightness(1.12)' }} _active={{ filter: 'brightness(1.2)' }} onClick={zoomIn} width={{ base: '44px', lg: '40px' }} minW={{ base: '44px', lg: '40px' }} height={{ base: '44px', lg: '40px' }}>
               <FiPlus size="21" strokeWidth="2.6" />
             </IconButton>
-            <IconButton aria-label="Reset avatar zoom" size="sm" borderRadius="15px" color="white" bg="whiteAlpha.160" _hover={{ bg: "whiteAlpha.260" }} onClick={resetZoom}>
+            <IconButton aria-label="Reset avatar zoom" borderRadius={miliTokens.radius.md} color={miliTokens.color.textSecondary} bg={miliTokens.color.surface} _hover={{ bg: 'whiteAlpha.100', color: miliTokens.color.textPrimary }} _active={{ bg: 'whiteAlpha.200' }} onClick={resetZoom} width={{ base: '44px', lg: '40px' }} minW={{ base: '44px', lg: '40px' }} height={{ base: '44px', lg: '40px' }}>
               <FiMaximize2 size="19" strokeWidth="2.4" />
             </IconButton>
-            <IconButton aria-label="Zoom out avatar" size="sm" borderRadius="15px" color="white" bg="whiteAlpha.160" _hover={{ bg: "whiteAlpha.260" }} onClick={zoomOut}>
+            <IconButton aria-label="Zoom out avatar" borderRadius={miliTokens.radius.md} color={miliTokens.color.textSecondary} bg={miliTokens.color.surface} _hover={{ bg: 'whiteAlpha.100', color: miliTokens.color.textPrimary }} _active={{ bg: 'whiteAlpha.200' }} onClick={zoomOut} width={{ base: '44px', lg: '40px' }} minW={{ base: '44px', lg: '40px' }} height={{ base: '44px', lg: '40px' }}>
               <FiMinus size="21" strokeWidth="2.6" />
             </IconButton>
           </VStack>

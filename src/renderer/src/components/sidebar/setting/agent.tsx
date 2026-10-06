@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { settingStyles } from './setting-styles';
 import { useAgentSettings } from '@/hooks/sidebar/setting/use-agent-settings';
-import { SwitchField, NumberField } from './common';
+import { SwitchField, NumberField, SettingSection } from './common';
 import { useWebSocket } from '@/context/websocket-context';
 import { useChatHistory } from '@/context/chat-history-context';
 import { wsService, MessageEvent } from '@/services/websocket-service';
@@ -53,33 +53,32 @@ function Agent({ onSave, onCancel }: AgentProps): JSX.Element {
 
   return (
     <Stack {...settingStyles.common.container}>
-      <SwitchField
-        label={t('settings.agent.allowProactiveSpeak')}
-        checked={settings.allowProactiveSpeak}
-        onChange={handleAllowProactiveSpeakChange}
-      />
-
-      {settings.allowProactiveSpeak && (
-        <NumberField
-          label={t('settings.agent.idleSecondsToSpeak')}
-          value={settings.idleSecondsToSpeak}
-          onChange={(value) => handleIdleSecondsChange(Number(value))}
-          min={0}
-          step={0.1}
-          allowMouseWheel
+      <SettingSection title={t('settings.sections.proactive')}>
+        <SwitchField
+          label={t('settings.agent.allowProactiveSpeak')}
+          checked={settings.allowProactiveSpeak}
+          onChange={handleAllowProactiveSpeakChange}
         />
-      )}
 
-      <SwitchField
-        label={t('settings.agent.allowButtonTrigger')}
-        checked={settings.allowButtonTrigger}
-        onChange={handleAllowButtonTriggerChange}
-      />
+        {settings.allowProactiveSpeak && (
+          <NumberField
+            label={t('settings.agent.idleSecondsToSpeak')}
+            value={settings.idleSecondsToSpeak}
+            onChange={(value) => handleIdleSecondsChange(Number(value))}
+            min={0}
+            step={0.1}
+            allowMouseWheel
+          />
+        )}
 
-      <Stack gap={2} pt={4} borderTopWidth="1px" borderColor="whiteAlpha.200">
-        <Text fontSize="sm" fontWeight="semibold">
-          {t('settings.agent.characterMemory')}
-        </Text>
+        <SwitchField
+          label={t('settings.agent.allowButtonTrigger')}
+          checked={settings.allowButtonTrigger}
+          onChange={handleAllowButtonTriggerChange}
+        />
+      </SettingSection>
+
+      <SettingSection title={t('settings.sections.memory')}>
         <Text fontSize="sm" color="fg.muted">
           {t('settings.agent.characterMemoryHelp')}
         </Text>
@@ -98,43 +97,45 @@ function Agent({ onSave, onCancel }: AgentProps): JSX.Element {
           })}
           onDeleteAll={() => sendMessage({ type: 'reset-character-memory' })}
         />
-      </Stack>
+      </SettingSection>
 
-      <Stack gap={2} pt={4} borderTopWidth="1px" borderColor="whiteAlpha.200">
-        <Text fontSize="sm" color="fg.muted">
-          {t('settings.agent.resetRelationshipHelp')}
-        </Text>
-        <Button
-          colorPalette="red"
-          variant="outline"
-          disabled={!currentHistoryUid || wsState !== 'OPEN'}
-          onClick={() => {
-            if (window.confirm(t('settings.agent.resetRelationshipConfirm'))) {
-              sendMessage({ type: 'reset-relationship' });
-            }
-          }}
-        >
-          {t('settings.agent.resetRelationship')}
-        </Button>
-      </Stack>
+      <SettingSection title={t('settings.sections.danger')}>
+        <Stack gap={2}>
+          <Text fontSize="sm" color="fg.muted">
+            {t('settings.agent.resetRelationshipHelp')}
+          </Text>
+          <Button
+            colorPalette="red"
+            variant="outline"
+            disabled={!currentHistoryUid || wsState !== 'OPEN'}
+            onClick={() => {
+              if (window.confirm(t('settings.agent.resetRelationshipConfirm'))) {
+                sendMessage({ type: 'reset-relationship' });
+              }
+            }}
+          >
+            {t('settings.agent.resetRelationship')}
+          </Button>
+        </Stack>
 
-      <Stack gap={2} pt={4} borderTopWidth="1px" borderColor="whiteAlpha.200">
-        <Text fontSize="sm" color="fg.muted">
-          {t('settings.agent.resetCharacterStateHelp')}
-        </Text>
-        <Button
-          colorPalette="red"
-          variant="outline"
-          disabled={wsState !== 'OPEN'}
-          onClick={() => {
-            if (window.confirm(t('settings.agent.resetCharacterStateConfirm'))) {
-              sendMessage({ type: 'reset-character-state' });
-            }
-          }}
-        >
-          {t('settings.agent.resetCharacterState')}
-        </Button>
-      </Stack>
+        <Stack gap={2}>
+          <Text fontSize="sm" color="fg.muted">
+            {t('settings.agent.resetCharacterStateHelp')}
+          </Text>
+          <Button
+            colorPalette="red"
+            variant="outline"
+            disabled={wsState !== 'OPEN'}
+            onClick={() => {
+              if (window.confirm(t('settings.agent.resetCharacterStateConfirm'))) {
+                sendMessage({ type: 'reset-character-state' });
+              }
+            }}
+          >
+            {t('settings.agent.resetCharacterState')}
+          </Button>
+        </Stack>
+      </SettingSection>
     </Stack>
   );
 }

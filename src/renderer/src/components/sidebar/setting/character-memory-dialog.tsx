@@ -4,6 +4,7 @@ import {
 } from '@chakra-ui/react';
 import { FiBookOpen, FiChevronRight, FiTrash2 } from 'react-icons/fi';
 import { useTranslation } from 'react-i18next';
+import { miliTokens } from '@/theme/design-tokens';
 import {
   DialogBody,
   DialogCloseTrigger,
@@ -49,9 +50,9 @@ export function CharacterMemoryLauncher({
       px={3}
       py={2.5}
       justifyContent="space-between"
-      borderColor="whiteAlpha.200"
-      bg="whiteAlpha.50"
-      _hover={{ bg: 'whiteAlpha.100', borderColor: 'whiteAlpha.300' }}
+      borderColor={miliTokens.color.border}
+      bg={miliTokens.color.surface}
+      _hover={{ bg: 'whiteAlpha.100', borderColor: miliTokens.color.borderStrong }}
     >
       <Flex align="center" gap={3} minWidth={0} textAlign="left">
         <Flex
@@ -61,21 +62,21 @@ export function CharacterMemoryLauncher({
           align="center"
           justify="center"
           borderRadius="full"
-          bg="purple.500/20"
-          color="purple.200"
+          bg={miliTokens.color.accentSoft}
+          color={miliTokens.color.accentText}
         >
           <Icon as={FiBookOpen} boxSize="18px" />
         </Flex>
         <Box minWidth={0}>
-          <Text color="whiteAlpha.950" fontSize="sm" fontWeight="semibold">
+          <Text color={miliTokens.color.textPrimary} fontSize="sm" fontWeight="semibold">
             {t('settings.agent.openMemory')}
           </Text>
-          <Text color="whiteAlpha.600" fontSize="xs">
+          <Text color={miliTokens.color.textMuted} fontSize="xs">
             {t('settings.agent.memoryCount', { count })}
           </Text>
         </Box>
       </Flex>
-      <Flex align="center" gap={1} color="whiteAlpha.700" flexShrink={0}>
+      <Flex align="center" gap={1} color={miliTokens.color.textSecondary} flexShrink={0}>
         <Text fontSize="sm" fontWeight="semibold">{count}</Text>
         <Icon as={FiChevronRight} boxSize="18px" />
       </Flex>
@@ -96,15 +97,15 @@ export function CharacterMemoryDialog({
   return (
     <DialogRoot open={open} onOpenChange={(details) => onOpenChange(details.open)}>
       <DialogContent
-        bg="gray.900"
-        color="white"
+        bg={miliTokens.color.drawer}
+        color={miliTokens.color.textPrimary}
         width={{ base: '100vw', sm: 'min(92vw, 620px)' }}
         maxWidth={{ base: '100vw', sm: '620px' }}
         height={{ base: '100dvh', sm: 'min(86dvh, 720px)' }}
         maxHeight={{ base: '100dvh', sm: '720px' }}
         borderRadius={{ base: 0, sm: '2xl' }}
         borderWidth={{ base: 0, sm: '1px' }}
-        borderColor="whiteAlpha.200"
+        borderColor={miliTokens.color.border}
         overflow="hidden"
         display="flex"
         flexDirection="column"
@@ -115,17 +116,17 @@ export function CharacterMemoryDialog({
           pb={4}
           pr={{ base: 14, sm: 16 }}
           borderBottomWidth="1px"
-          borderColor="whiteAlpha.200"
+          borderColor={miliTokens.color.border}
           flexShrink={0}
         >
           <Stack gap={1}>
             <DialogTitle fontSize={{ base: 'lg', sm: 'xl' }} fontWeight="bold">
               {t('settings.agent.characterMemory')}
             </DialogTitle>
-            <Text color="whiteAlpha.650" fontSize="sm" lineHeight="1.45">
+            <Text color={miliTokens.color.textSecondary} fontSize="sm" lineHeight="1.45">
               {t('settings.agent.memoryDescription')}
             </Text>
-            <Text color="whiteAlpha.850" fontSize="sm" fontWeight="semibold" pt={1}>
+            <Text color={miliTokens.color.textPrimary} fontSize="sm" fontWeight="semibold" pt={1}>
               {t('settings.agent.memoryCount', { count: memories.length })}
             </Text>
           </Stack>
@@ -135,7 +136,7 @@ export function CharacterMemoryDialog({
             right={{ base: 3, sm: 4 }}
             width="44px"
             height="44px"
-            color="whiteAlpha.850"
+            color={miliTokens.color.textSecondary}
           />
         </DialogHeader>
 
@@ -157,7 +158,7 @@ export function CharacterMemoryDialog({
               align="center"
               justify="center"
               textAlign="center"
-              color="whiteAlpha.550"
+              color={miliTokens.color.textMuted}
             >
               <Text fontSize="sm">{t('settings.agent.noCharacterMemory')}</Text>
             </Flex>
@@ -171,13 +172,13 @@ export function CharacterMemoryDialog({
                   p={{ base: 3, sm: 4 }}
                   borderRadius="xl"
                   borderWidth="1px"
-                  borderColor="whiteAlpha.150"
-                  bg="whiteAlpha.50"
+                  borderColor={miliTokens.color.border}
+                  bg={miliTokens.color.surface}
                 >
                   <Text
                     flex="1"
                     minWidth={0}
-                    color="whiteAlpha.900"
+                    color={miliTokens.color.textPrimary}
                     fontSize="sm"
                     lineHeight="1.5"
                     whiteSpace="pre-wrap"
@@ -214,8 +215,8 @@ export function CharacterMemoryDialog({
           pt={3}
           pb={{ base: 'max(14px, env(safe-area-inset-bottom))', sm: 5 }}
           borderTopWidth="1px"
-          borderColor="whiteAlpha.200"
-          bg="gray.900"
+          borderColor={miliTokens.color.border}
+          bg={miliTokens.color.drawer}
           flexShrink={0}
         >
           <Button

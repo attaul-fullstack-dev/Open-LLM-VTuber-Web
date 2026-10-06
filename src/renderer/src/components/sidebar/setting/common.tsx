@@ -1,12 +1,13 @@
 /* eslint-disable react/require-default-props */
 import { useState } from 'react';
 import {
-  Text, Input, NumberInput, createListCollection, Flex, Box,
+  Text, Input, NumberInput, createListCollection, Flex, Box, Stack,
 } from '@chakra-ui/react';
 import { HiQuestionMarkCircle } from 'react-icons/hi';
 import { Field } from '@/components/ui/field';
 import { Switch } from '@/components/ui/switch';
 import { Tooltip } from '@/components/ui/tooltip';
+import { miliTokens } from '@/theme/design-tokens';
 import {
   SelectContent,
   SelectItem,
@@ -39,8 +40,8 @@ function HelpIcon({ content }: HelpIconProps): JSX.Element {
     >
       <Box
         as={HiQuestionMarkCircle}
-        color="gray.400"
-        _hover={{ color: 'gray.600' }}
+        color={miliTokens.color.textMuted}
+        _hover={{ color: miliTokens.color.textSecondary }}
         cursor="help"
         w="16px"
         h="16px"
@@ -89,6 +90,9 @@ interface InputFieldProps {
 }
 
 // Reusable Components
+// One form language: every field (select/number/switch/input) renders on
+// the shared `common` surface styles, so tabs never drift into separate
+// visual dialects.
 export function SelectField({
   label,
   value,
@@ -98,8 +102,8 @@ export function SelectField({
 }: SelectFieldProps): JSX.Element {
   return (
     <Field
-      {...settingStyles.general.field}
-      label={<Text {...settingStyles.general.field.label}>{label}</Text>}
+      {...settingStyles.common.field}
+      label={<Text {...settingStyles.common.fieldLabel}>{label}</Text>}
     >
       <SelectRoot
         {...settingStyles.general.select.root}
@@ -107,7 +111,7 @@ export function SelectField({
         value={value}
         onValueChange={(e) => onChange(e.value)}
       >
-        <SelectTrigger {...settingStyles.general.select.trigger}>
+        <SelectTrigger {...settingStyles.common.input}>
           <SelectValueText placeholder={placeholder} />
         </SelectTrigger>
         <SelectContent>
@@ -187,20 +191,36 @@ export function InputField({
 }: InputFieldProps): JSX.Element {
   return (
     <Field
-      {...settingStyles.general.field}
+      {...settingStyles.common.field}
       label={
         <Flex align="center">
-          <Text {...settingStyles.general.field.label}>{label}</Text>
+          <Text {...settingStyles.common.fieldLabel}>{label}</Text>
           {help && <HelpIcon content={help} />}
         </Flex>
       }
     >
       <Input
-        {...settingStyles.general.input}
+        {...settingStyles.common.input}
         placeholder={placeholder}
         value={value}
         onChange={(e) => onChange(e.target.value)}
       />
     </Field>
+  );
+}
+
+// Settings section: quiet uppercase title + rows. Grouping comes from
+// spacing and the title — never from cards or extra borders.
+interface SettingSectionProps {
+  title: string
+  children: React.ReactNode
+}
+
+export function SettingSection({ title, children }: SettingSectionProps): JSX.Element {
+  return (
+    <Stack {...settingStyles.section.container}>
+      <Text {...settingStyles.section.title}>{title}</Text>
+      {children}
+    </Stack>
   );
 }

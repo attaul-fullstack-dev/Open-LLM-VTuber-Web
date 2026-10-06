@@ -73,10 +73,13 @@ const HistoryItem = memo(({
           cursor="pointer"
           onClick={onSelect}
         >
-          <Box {...sidebarStyles.historyDrawer.title} title={displayTitle}>
+          <Box
+            {...sidebarStyles.historyDrawer.title}
+            {...(isSelected ? sidebarStyles.historyDrawer.titleSelected : {})}
+            title={displayTitle}
+          >
             {displayTitle}
           </Box>
-          <Box {...sidebarStyles.historyDrawer.sessionDivider} />
         </Box>
         <Menu.Root positioning={{ placement: 'bottom-end' }}>
           <Menu.Trigger asChild>

@@ -11,7 +11,7 @@ import {
   DrawerBackdrop,
   DrawerCloseTrigger,
 } from '@chakra-ui/react';
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { CloseButton } from '@/components/ui/close-button';
 
@@ -34,6 +34,18 @@ function SettingUI({ open, onClose }: SettingUIProps): JSX.Element {
   const [saveHandlers, setSaveHandlers] = useState<(() => void)[]>([]);
   const [cancelHandlers, setCancelHandlers] = useState<(() => void)[]>([]);
   const [activeTab, setActiveTab] = useState('general');
+  const tabsListRef = useRef<HTMLDivElement>(null);
+
+  // Visual only: keep the active tab visible in narrow scrollable tab bars.
+  // No selection logic changes; a missing node is a no-op.
+  useEffect(() => {
+    const list = tabsListRef.current;
+    if (!list) return;
+    const selected = list.querySelector('[aria-selected="true"], [data-selected]');
+    if (selected instanceof HTMLElement) {
+      selected.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
+    }
+  }, [activeTab, open]);
 
   const handleSaveCallback = useCallback((handler: () => void) => {
     setSaveHandlers((prev) => [...prev, handler]);
@@ -120,7 +132,7 @@ function SettingUI({ open, onClose }: SettingUIProps): JSX.Element {
             onValueChange={(details) => setActiveTab(details.value)}
             {...settingStyles.settingUI.tabs.root}
           >
-            <Tabs.List {...settingStyles.settingUI.tabs.list}>
+            <Tabs.List ref={tabsListRef} {...settingStyles.settingUI.tabs.list}>
               <Tabs.Trigger
                 value="general"
                 {...settingStyles.settingUI.tabs.trigger}
@@ -164,10 +176,10 @@ function SettingUI({ open, onClose }: SettingUIProps): JSX.Element {
         </DrawerBody>
 
         <DrawerFooter {...settingStyles.settingUI.drawerFooter}>
-          <Button colorPalette="red" onClick={handleCancel}>
+          <Button {...settingStyles.settingUI.cancelButton} onClick={handleCancel}>
             {t('common.cancel')}
           </Button>
-          <Button colorPalette="blue" onClick={handleSave}>
+          <Button {...settingStyles.settingUI.saveButton} onClick={handleSave}>
             {t('common.save')}
           </Button>
         </DrawerFooter>

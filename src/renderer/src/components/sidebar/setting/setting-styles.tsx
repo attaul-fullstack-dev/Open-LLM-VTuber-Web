@@ -1,3 +1,5 @@
+import { miliTokens } from '@/theme/design-tokens';
+
 const isElectron = window.api !== undefined;
 export const settingStyles = {
   settingUI: {
@@ -40,17 +42,20 @@ export const settingStyles = {
         colorPalette: 'gray',
       },
       content: {},
+      // One tab system: quiet labels, subtle accent on the active tab only.
       trigger: {
-        color: 'whiteAlpha.600',
+        color: miliTokens.color.textMuted,
         flexShrink: 0,
         px: { base: 3, lg: 4 },
         py: { base: 2, lg: 3 },
         fontSize: { base: 'sm', lg: 'md' },
+        borderRadius: miliTokens.radius.sm,
         _selected: {
-          color: 'white',
+          color: miliTokens.color.accentText,
+          boxShadow: `inset 0 -2px 0 ${miliTokens.color.accent}`,
         },
         _hover: {
-          color: 'white',
+          color: miliTokens.color.textPrimary,
         },
       },
       list: {
@@ -61,7 +66,7 @@ export const settingStyles = {
         overflowY: 'hidden',
         scrollSnapType: 'x proximity',
         borderBottom: '1px solid',
-        borderColor: 'whiteAlpha.200',
+        borderColor: miliTokens.color.border,
         mb: { base: 3, lg: 4 },
         pl: 0,
         css: {
@@ -81,13 +86,13 @@ export const settingStyles = {
       borderColor: 'whiteAlpha.200',
     },
     drawerContent: {
-      bg: 'gray.900',
+      bg: miliTokens.color.drawer,
       width: { base: '84vw', sm: '340px', lg: '440px' },
       maxWidth: { base: '84vw', sm: '340px', lg: '440px' },
       height: isElectron ? 'calc(100dvh - 30px)' : '100dvh',
       overflow: 'hidden',
       borderLeft: '1px solid',
-      borderColor: 'whiteAlpha.200',
+      borderColor: miliTokens.color.border,
     },
     drawerHeader: {
       display: 'flex',
@@ -99,7 +104,7 @@ export const settingStyles = {
       py: { base: 3, lg: 4 },
     },
     drawerTitle: {
-      color: 'white',
+      color: miliTokens.color.textPrimary,
       fontSize: { base: 'md', lg: 'lg' },
       fontWeight: 'semibold',
     },
@@ -115,14 +120,28 @@ export const settingStyles = {
       py: { base: 3, lg: 4 },
       gap: 2,
       borderTop: '1px solid',
-      borderColor: 'whiteAlpha.200',
-      bg: 'rgba(17, 24, 39, .96)',
-      backdropFilter: 'blur(12px)',
+      borderColor: miliTokens.color.border,
+      bg: miliTokens.color.drawer,
       '& button': {
         flex: { base: 1, lg: 'initial' },
         minW: { base: '84px', lg: '96px' },
         height: { base: '40px', lg: '44px' },
       },
+    },
+    // Intentional action bar: Save is the single primary action, Cancel is
+    // a quiet secondary. Neither dominates the panel.
+    cancelButton: {
+      variant: 'ghost' as const,
+      color: miliTokens.color.textSecondary,
+      _hover: { bg: miliTokens.color.surface, color: miliTokens.color.textPrimary },
+      _active: { bg: miliTokens.color.surface },
+    },
+    saveButton: {
+      variant: 'solid' as const,
+      bg: miliTokens.color.accent,
+      color: 'white',
+      _hover: { filter: 'brightness(1.1)' },
+      _active: { filter: 'brightness(1.15)' },
     },
     closeButton: {
       display: { base: 'none', lg: 'block' },
@@ -141,20 +160,27 @@ export const settingStyles = {
     },
     field: {
       label: {
-        color: 'whiteAlpha.800',
+        color: miliTokens.color.textSecondary,
       },
     },
     select: {
       root: {
         colorPalette: 'gray',
-        bg: 'gray.800',
       },
       trigger: {
-        bg: 'gray.800',
+        bg: miliTokens.color.surface,
+        borderColor: miliTokens.color.border,
+        _hover: {
+          bg: 'whiteAlpha.100',
+        },
       },
     },
     input: {
-      bg: 'gray.800',
+      bg: miliTokens.color.surface,
+      borderColor: miliTokens.color.border,
+      _hover: {
+        bg: 'whiteAlpha.100',
+      },
     },
     buttonGroup: {
       gap: 4,
@@ -171,7 +197,7 @@ export const settingStyles = {
     },
     fieldLabel: {
       fontSize: '14px',
-      color: 'gray.600',
+      color: miliTokens.color.textSecondary,
     },
   },
   common: {
@@ -180,7 +206,7 @@ export const settingStyles = {
     },
     fieldLabel: {
       fontSize: 'sm',
-      color: 'whiteAlpha.800',
+      color: miliTokens.color.textSecondary,
       whiteSpace: 'normal' as const,
       lineHeight: '1.35',
     },
@@ -195,10 +221,10 @@ export const settingStyles = {
         inputMode: 'decimal' as const,
       },
       input: {
-        bg: 'whiteAlpha.100',
-        borderColor: 'whiteAlpha.200',
+        bg: miliTokens.color.surface,
+        borderColor: miliTokens.color.border,
         _hover: {
-          bg: 'whiteAlpha.200',
+          bg: 'whiteAlpha.100',
         },
       },
     },
@@ -210,11 +236,50 @@ export const settingStyles = {
       css: { '--field-label-width': '120px' },
     },
     input: {
-      bg: 'whiteAlpha.100',
-      borderColor: 'whiteAlpha.200',
+      bg: miliTokens.color.surface,
+      borderColor: miliTokens.color.border,
       _hover: {
-        bg: 'whiteAlpha.200',
+        bg: 'whiteAlpha.100',
       },
+    },
+  },
+  // Settings section: quiet uppercase title + rows. Grouping comes from
+  // spacing and the title — never from cards or extra borders.
+  section: {
+    container: {
+      gap: 4,
+      width: '100%',
+    },
+    title: {
+      fontSize: miliTokens.font.xs,
+      fontWeight: 'semibold',
+      letterSpacing: '0.08em',
+      textTransform: 'uppercase' as const,
+      color: miliTokens.color.textMuted,
+    },
+  },
+  // Intentional empty state for tabs with no configurable content yet.
+  // Subtle and honest: never fake settings.
+  emptyState: {
+    container: {
+      display: 'flex',
+      flexDirection: 'column' as const,
+      alignItems: 'center',
+      justifyContent: 'center',
+      textAlign: 'center' as const,
+      gap: 2,
+      py: 10,
+      px: 4,
+    },
+    title: {
+      fontSize: miliTokens.font.md,
+      fontWeight: 'semibold',
+      color: miliTokens.color.textSecondary,
+    },
+    body: {
+      fontSize: miliTokens.font.sm,
+      color: miliTokens.color.textMuted,
+      lineHeight: '1.5',
     },
   },
   live2d: {

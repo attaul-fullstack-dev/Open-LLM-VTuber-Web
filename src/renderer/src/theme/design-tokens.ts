@@ -90,6 +90,15 @@ export const miliTokens = {
     bar: 'blur(18px)',
     card: 'blur(12px)',
   },
+  /**
+   * Chat transcript: Mili replies render borderless (primary content);
+   * the user bubble keeps the deliberate teal fill. Tokenized here so the
+   * fill/border are defined once — never re-hardcoded per override block.
+   */
+  chat: {
+    userBubble: '#20b8a6',
+    userBubbleBorder: 'rgba(255, 255, 255, 0.16)',
+  },
 } as const;
 
 export type MiliTokens = typeof miliTokens;

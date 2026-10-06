@@ -5,7 +5,7 @@ import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { settingStyles } from './setting-styles';
 import { useLive2dSettings } from '@/hooks/sidebar/setting/use-live2d-settings';
-import { SwitchField } from './common';
+import { SwitchField, SettingSection } from './common';
 
 interface live2DProps {
   onSave?: (callback: () => void) => () => void
@@ -35,17 +35,19 @@ function live2D({ onSave, onCancel }: live2DProps): JSX.Element {
 
   return (
     <Stack {...settingStyles.common.container}>
-      <SwitchField
-        label={t('settings.live2d.pointerInteractive')}
-        checked={modelInfo.pointerInteractive ?? false}
-        onChange={(checked) => handleInputChange('pointerInteractive', checked)}
-      />
+      <SettingSection title={t('settings.sections.interaction')}>
+        <SwitchField
+          label={t('settings.live2d.pointerInteractive')}
+          checked={modelInfo.pointerInteractive ?? false}
+          onChange={(checked) => handleInputChange('pointerInteractive', checked)}
+        />
 
-      <SwitchField
-        label={t('settings.live2d.scrollToResize')}
-        checked={modelInfo.scrollToResize ?? true}
-        onChange={(checked) => handleInputChange('scrollToResize', checked)}
-      />
+        <SwitchField
+          label={t('settings.live2d.scrollToResize')}
+          checked={modelInfo.scrollToResize ?? true}
+          onChange={(checked) => handleInputChange('scrollToResize', checked)}
+        />
+      </SettingSection>
     </Stack>
   );
 }

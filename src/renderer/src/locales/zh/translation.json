@@ -15,6 +15,23 @@
       "agent": "代理",
       "about": "关于"
     },
+    "sections": {
+      "interface": "界面",
+      "background": "背景",
+      "character": "角色",
+      "connection": "连接",
+      "images": "图片",
+      "microphone": "麦克风",
+      "detection": "检测",
+      "interaction": "交互",
+      "proactive": "主动发言",
+      "memory": "记忆",
+      "danger": "危险操作"
+    },
+    "tts": {
+      "emptyTitle": "语音设置跟随角色",
+      "emptyBody": "TTS 由后端当前角色预设控制，此处暂无可配置项。"
+    },
     "general": {
       "language": "语言",
       "useCameraBackground": "使用摄像头背景",
