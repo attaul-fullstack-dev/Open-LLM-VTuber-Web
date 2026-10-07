@@ -45,7 +45,10 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
   } = useAiState();
   const { setModelInfo } = useLive2DConfig();
   const { setSubtitleText, startSubtitleResponse } = useSubtitle();
-  const { clearResponse, setForceNewMessage, appendHumanMessage, appendOrUpdateToolCallMessage } = useChatHistory();
+  const {
+    clearResponse, setForceNewMessage, appendHumanMessage, appendOrUpdateToolCallMessage,
+    applyHistoryData, noteChainStart,
+  } = useChatHistory();
   const { addAudioTask } = useAudioTask();
   const bgUrlContext = useBgUrl();
   const { confUid, setConfName, setConfUid, setConfigFiles } = useConfig();
@@ -75,10 +78,10 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
   }, [pendingModelInfo, setModelInfo, confUid]);
 
   const {
-    setCurrentHistoryUid, setMessages, setHistoryList,
+    setCurrentHistoryUid, setHistoryList,
   } = useChatHistory();
 
-  const handleControlMessage = useCallback((controlText: string) => {
+  const handleControlMessage = useCallback((controlText: string, message?: MessageEvent) => {
     switch (controlText) {
       case 'start-mic':
         console.log('Starting microphone...');
@@ -88,9 +91,24 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
         console.log('Stopping microphone...');
         stopMic();
         break;
+      case 'conversation-turn-queued':
+        // Backend-accepted turn waiting behind a detached in-flight turn on
+        // the same history. Thinking is truthful here (the turn WILL run);
+        // unlike chain-start this clears nothing and starts no new bubble.
+        logWsDiag('CHAIN_QUEUED', wsService.getConnectionId());
+        setAiState('thinking-speaking');
+        setFirstTokenAt(null);
+        break;
       case 'conversation-chain-start':
         logWsDiag('CHAIN_START', wsService.getConnectionId());
         setAiState('thinking-speaking');
+        // The turn on this history actually started: older turns there are
+        // done or cancelled by construction, so their leftovers retire —
+        // except the just-accepted send, kept until the snapshot confirms it.
+        noteChainStart(message?.history_uid);
+        // A new turn owns the next AI bubble: chunks must never merge into a
+        // stale bubble left behind by a resync that raced the previous turn.
+        setForceNewMessage(true);
         // The dedicated thinking indicator owns the waiting state now; the
         // subtitle only carries real response text.
         setFirstTokenAt(null);
@@ -126,14 +144,14 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
       default:
         console.warn('Unknown control command:', controlText);
     }
-  }, [setAiState, setSubtitleText, clearResponse, setForceNewMessage, startMic, stopMic, startSubtitleResponse, t]);
+  }, [setAiState, setSubtitleText, clearResponse, setForceNewMessage, noteChainStart, startMic, stopMic, startSubtitleResponse, t]);
 
   const handleWebSocketMessage = useCallback((message: MessageEvent) => {
     console.debug('WebSocket event received:', message.type);
     switch (message.type) {
       case 'control':
         if (message.text) {
-          handleControlMessage(message.text);
+          handleControlMessage(message.text, message);
         }
         break;
       case 'set-model-and-conf':
@@ -240,7 +258,10 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
             'HISTORY_DATA_RECEIVED', wsService.getConnectionId(),
             `count=${message.messages.length}`,
           );
-          setMessages(message.messages);
+          // Reconcile, never blindly replace: an accepted-but-unpersisted
+          // local message survives a resync that raced the turn. The toast
+          // below still fires so the resync stays visible.
+          applyHistoryData(message.messages, message.history_uid);
         }
         toaster.create({
           title: t('notification.historyLoaded'),
@@ -260,7 +281,10 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
           );
           setLastHistoryUid(activeConfUidRef.current, message.history_uid);
           setCurrentHistoryUid(message.history_uid);
-          setMessages([]);
+          // Fresh session starts empty, but an optimistic message accepted
+          // just before creation (uid == null at send time) is adopted, not
+          // dropped: same invariant as any other resync.
+          applyHistoryData([], message.history_uid);
           const newHistory: HistoryInfo = {
             uid: message.history_uid,
             latest_message: null,
@@ -468,7 +492,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
       default:
         console.warn('Unknown message type:', message.type);
     }
-  }, [aiState, addAudioTask, appendHumanMessage, baseUrl, bgUrlContext, setAiState, setConfName, setConfUid, setConfigFiles, setCurrentHistoryUid, setHistoryList, setMessages, setModelInfo, setSubtitleText, startMic, stopMic, setSelfUid, setGroupMembers, setIsOwner, backendSynthComplete, setBackendSynthComplete, clearResponse, handleControlMessage, appendOrUpdateToolCallMessage, interrupt, setBrowserViewData, t]);
+  }, [aiState, addAudioTask, appendHumanMessage, baseUrl, bgUrlContext, setAiState, setConfName, setConfUid, setConfigFiles, setCurrentHistoryUid, setHistoryList, applyHistoryData, noteChainStart, setModelInfo, setSubtitleText, startMic, stopMic, setSelfUid, setGroupMembers, setIsOwner, backendSynthComplete, setBackendSynthComplete, clearResponse, handleControlMessage, appendOrUpdateToolCallMessage, interrupt, setBrowserViewData, t]);
 
   useEffect(() => {
     wsService.connect(wsUrl);

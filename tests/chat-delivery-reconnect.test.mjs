@@ -17,7 +17,9 @@ test('websocket send reports whether an open socket accepted the payload', () =>
 test('a failed send cannot create a phantom bubble or erase the draft', () => {
   const sendPosition = input.indexOf('const sent = wsContext.sendMessage');
   const guardPosition = input.indexOf('if (!sent) return');
-  const appendPosition = input.indexOf('appendHumanMessage(messageText)');
+  // Accepted sends tag the optimistic bubble with the backend request id
+  // (exact supersede matching); the ordering below must hold regardless.
+  const appendPosition = input.indexOf('appendHumanMessage(messageText');
   const clearPosition = input.indexOf("setInputText('')");
 
   assert.ok(sendPosition >= 0);

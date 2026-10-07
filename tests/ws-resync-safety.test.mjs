@@ -27,11 +27,13 @@ for (const branch of streamingBranches) {
   });
 }
 
-test('history-data replaces messages but never touches the draft', () => {
+test('history-data reconciles (never blindly replaces) and never touches the draft', () => {
   const start = handler.indexOf("case 'history-data'");
   assert.ok(start >= 0);
-  const window = handler.slice(start, start + 1200);
-  assert.ok(window.includes('setMessages('));
+  const window = handler.slice(start, start + 1400);
+  // Accepted-but-unpersisted local messages survive a racing resync.
+  assert.ok(window.includes('applyHistoryData('));
+  assert.ok(!window.includes('setMessages(message.messages)'));
   for (const token of ['setInputText', 'clearDraft', 'saveDraft', 'inputText']) {
     assert.ok(!window.includes(token), `history-data touches ${token}`);
   }

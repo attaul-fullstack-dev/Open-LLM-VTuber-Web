@@ -1,9 +1,14 @@
 /* eslint-disable no-else-return */
 import {
-  createContext, useContext, useState, useMemo, useCallback,
+  createContext, useContext, useState, useMemo, useCallback, useEffect, useRef,
 } from 'react';
 import { Message } from '@/services/websocket-service';
 import { HistoryInfo } from './websocket-context';
+import {
+  PendingEntry,
+  capPending,
+  reconcileHistoryData,
+} from '@/utils/history-reconcile';
 
 /**
  * Chat history context state interface
@@ -13,10 +18,21 @@ interface ChatHistoryState {
   messages: Message[]; // Use the unified Message type
   historyList: HistoryInfo[];
   currentHistoryUid: string | null;
-  appendHumanMessage: (content: string) => void;
+  appendHumanMessage: (content: string, requestId?: string) => void;
   appendAIMessage: (content: string, name?: string, avatar?: string) => void;
   appendOrUpdateToolCallMessage: (toolMessageData: Partial<Message>) => void; // Accept partial data
   setMessages: (messages: Message[]) => void; // Use the unified Message type
+  /**
+   * History-resync entry point. Merges (never blindly replaces) so an
+   * accepted-but-unpersisted local message survives a racing resync.
+   */
+  applyHistoryData: (messages: Message[], historyUid?: string | null) => void;
+  /**
+   * Turn-lifecycle entry point. Drops superseded pending entries for one
+   * history when its next turn actually starts (previous turns there are
+   * done or cancelled by construction). Never touches other histories.
+   */
+  noteChainStart: (historyUid?: string | null) => void;
   setHistoryList: (
     value: HistoryInfo[] | ((prev: HistoryInfo[]) => HistoryInfo[])
   ) => void;
@@ -61,54 +77,115 @@ export function ChatHistoryProvider({ children }: { children: React.ReactNode })
   const [fullResponse, setFullResponse] = useState(DEFAULT_HISTORY.fullResponse);
   const [forceNewMessage, setForceNewMessage] = useState<boolean>(false);
 
+  // Accepted-but-unconfirmed local messages. An entry leaves this list only
+  // when a server snapshot contains it (multiset match) or when a newer turn
+  // on the same history starts (superseded). Bounded; never timers.
+  const pendingRef = useRef<PendingEntry[]>([]);
+  // Latest accepted send per history (backend request_id). Lets a chain-start
+  // retire older turns' leftovers while keeping the current turn's message.
+  const lastRequestRef = useRef<Map<string | null, string>>(new Map());
+  const historyUidRef = useRef<string | null>(DEFAULT_HISTORY.currentHistoryUid);
+  useEffect(() => {
+    historyUidRef.current = currentHistoryUid;
+  }, [currentHistoryUid]);
+  // Read mirror for append decisions. State updaters must stay pure (they
+  // can run more than once), so every side effect — ids, pending tracking,
+  // flag resets — happens outside, exactly once per call. Same-tick double
+  // appends would read a stale mirror; all call sites are separated by
+  // awaits/network events, so at most a cosmetic extra bubble could result
+  // (never a lost message: reconciliation is id/content based).
+  const messagesRef = useRef<Message[]>(DEFAULT_HISTORY.messages);
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+  const idSeqRef = useRef(0);
+
+  const nextMessageId = useCallback((): string => {
+    idSeqRef.current += 1;
+    return `${Date.now().toString()}-${idSeqRef.current.toString()}`;
+  }, []);
+
+  const trackPending = useCallback((entry: PendingEntry): void => {
+    // Idempotent by message id: state updaters may run more than once, and
+    // a duplicate track must never create a duplicate pending entry.
+    const exists = pendingRef.current.some((item) => item.id === entry.id);
+    if (!exists) {
+      pendingRef.current = capPending([...pendingRef.current, entry]);
+    }
+  }, []);
+
+  const refreshPendingContent = useCallback((id: string, content: string): void => {
+    const entry = pendingRef.current.find((item) => item.id === id);
+    if (entry) {
+      entry.content = content;
+    } else {
+      // Merging into a snapshot bubble (e.g. stream continuing right after
+      // a resync): track it from here so later resyncs stay consistent.
+      trackPending({
+        uid: historyUidRef.current, id, role: 'ai', content,
+      });
+    }
+  }, [trackPending]);
+
   /**
    * Append a human message to the chat history
    * @param content - Message content
+   * @param requestId - Backend request_id of the accepted send, if any
    */
-  const appendHumanMessage = useCallback((content: string) => {
+  const appendHumanMessage = useCallback((content: string, requestId?: string) => {
+    const id = nextMessageId();
+    const uid = historyUidRef.current;
+    if (requestId) {
+      lastRequestRef.current.set(uid, requestId);
+    }
     const newMessage: Message = {
-      id: Date.now().toString(),
+      id,
       content,
       role: 'human',
       type: 'text', // Explicitly set type for human messages
       timestamp: new Date().toISOString(),
     };
+    trackPending({ uid, id, role: 'human', content, requestId });
     setMessages((prevMessages) => [...prevMessages, newMessage]);
-  }, []);
+  }, [nextMessageId, trackPending]);
 
   /**
    * Append or update an AI message in the chat history
    * @param content - Message content
    */
   const appendAIMessage = useCallback((content: string, name?: string, avatar?: string) => {
-    setMessages((prevMessages) => {
-      const lastMessage = prevMessages[prevMessages.length - 1];
+    const prevMessages = messagesRef.current;
+    const lastMessage = prevMessages[prevMessages.length - 1];
 
-      // If forceNewMessage is true or last message is not an AI text message, create new message
-      if (forceNewMessage || !lastMessage || lastMessage.role !== 'ai' || lastMessage.type !== 'text') {
-        setForceNewMessage(false); // Reset the flag
-        return [...prevMessages, {
-          id: Date.now().toString(),
-          content,
-          role: 'ai',
-          type: 'text', // Explicitly set type for AI text messages
-          timestamp: new Date().toISOString(),
-          name,
-          avatar,
-        }];
-      }
+    // If forceNewMessage is true or last message is not an AI text message, create new message
+    if (forceNewMessage || !lastMessage || lastMessage.role !== 'ai' || lastMessage.type !== 'text') {
+      setForceNewMessage(false); // Reset the flag
+      const id = nextMessageId();
+      trackPending({ uid: historyUidRef.current, id, role: 'ai', content });
+      setMessages([...prevMessages, {
+        id,
+        content,
+        role: 'ai',
+        type: 'text', // Explicitly set type for AI text messages
+        timestamp: new Date().toISOString(),
+        name,
+        avatar,
+      }]);
+      return;
+    }
 
-      // Otherwise, merge with last AI text message
-      return [
-        ...prevMessages.slice(0, -1),
-        {
-          ...lastMessage,
-          content: lastMessage.content + content,
-          timestamp: new Date().toISOString(),
-        },
-      ];
-    });
-  }, [forceNewMessage, setForceNewMessage]);
+    // Otherwise, merge with last AI text message
+    const merged = {
+      ...lastMessage,
+      content: lastMessage.content + content,
+      timestamp: new Date().toISOString(),
+    };
+    refreshPendingContent(lastMessage.id, merged.content);
+    setMessages([
+      ...prevMessages.slice(0, -1),
+      merged,
+    ]);
+  }, [forceNewMessage, setForceNewMessage, nextMessageId, trackPending, refreshPendingContent]);
 
   /**
    * Append or update a Tool Call message using its tool_id
@@ -195,6 +272,51 @@ export function ChatHistoryProvider({ children }: { children: React.ReactNode })
     setFullResponse((prev) => prev + (text || ''));
   }, []);
 
+  /**
+   * Apply a server transcript WITHOUT dropping accepted local messages.
+   * Only pending entries scoped to the target history participate; entries
+   * for other histories are retained untouched for their own resync.
+   */
+  const applyHistoryData = useCallback((serverMessages: Message[], historyUid?: string | null) => {
+    const target = historyUid ?? historyUidRef.current;
+    const scoped = pendingRef.current.filter(
+      (entry) => entry.uid === target || entry.uid == null,
+    );
+    const others = pendingRef.current.filter(
+      (entry) => !(entry.uid === target || entry.uid == null),
+    );
+    const { messages: merged, remaining } = reconcileHistoryData(
+      (Array.isArray(serverMessages) ? serverMessages : []).map((row) => ({
+        id: String(row?.id ?? ''),
+        role: row?.role,
+        content: typeof row?.content === 'string' ? row.content : '',
+        type: row?.type,
+      })),
+      scoped.map((entry) => ({
+        uid: entry.uid, id: entry.id, role: entry.role, content: entry.content,
+      })),
+    );
+    pendingRef.current = capPending([...others, ...remaining]);
+    setMessages(merged as Message[]);
+  }, []);
+
+  /**
+   * A turn on one history actually started: older turns there are done or
+   * cancelled by construction, so their leftovers stop being pending — but
+   * the just-accepted send (latest request_id) is kept until the snapshot
+   * confirms it. Other histories are untouched.
+   */
+  const noteChainStart = useCallback((historyUid?: string | null) => {
+    const target = historyUid ?? historyUidRef.current;
+    const latest = lastRequestRef.current.get(target);
+    pendingRef.current = pendingRef.current.filter((entry) => {
+      if (!(entry.uid === target || entry.uid == null)) return true;
+      if (entry.role !== 'human') return false;
+      if (!entry.requestId || !latest) return true;
+      return entry.requestId === latest;
+    });
+  }, []);
+
   const clearResponse = useCallback(() => {
     setFullResponse(DEFAULT_HISTORY.fullResponse);
   }, []);
@@ -209,6 +331,8 @@ export function ChatHistoryProvider({ children }: { children: React.ReactNode })
       appendAIMessage,
       appendOrUpdateToolCallMessage, // Add to context value
       setMessages,
+      applyHistoryData,
+      noteChainStart,
       setHistoryList,
       setCurrentHistoryUid,
       updateHistoryList,
@@ -225,6 +349,8 @@ export function ChatHistoryProvider({ children }: { children: React.ReactNode })
       appendHumanMessage,
       appendAIMessage,
       appendOrUpdateToolCallMessage, // Add dependency
+      applyHistoryData,
+      noteChainStart,
       updateHistoryList,
       fullResponse,
       appendResponse,

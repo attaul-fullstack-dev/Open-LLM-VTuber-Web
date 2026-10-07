@@ -108,7 +108,7 @@ export function useTextInput() {
       if (!sent) return;
 
       markUserActivity();
-      appendHumanMessage(messageText);
+      appendHumanMessage(messageText, timing.requestId);
       if (autoStopMic) stopMic();
       // Keystrokes typed during the media-capture await were never sent;
       // resolvePostSendDraft keeps them instead of wiping unsent input.
