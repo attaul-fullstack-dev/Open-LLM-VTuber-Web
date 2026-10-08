@@ -9,6 +9,10 @@ import {
   capPending,
   reconcileHistoryData,
 } from '@/utils/history-reconcile';
+import {
+  applyCanonicalFinal,
+  resolveAiTarget,
+} from '@/utils/turn-identity';
 
 /**
  * Chat history context state interface
@@ -19,7 +23,7 @@ interface ChatHistoryState {
   historyList: HistoryInfo[];
   currentHistoryUid: string | null;
   appendHumanMessage: (content: string, requestId?: string) => void;
-  appendAIMessage: (content: string, name?: string, avatar?: string) => void;
+  appendAIMessage: (content: string, name?: string, avatar?: string, requestId?: string) => void;
   appendOrUpdateToolCallMessage: (toolMessageData: Partial<Message>) => void; // Accept partial data
   setMessages: (messages: Message[]) => void; // Use the unified Message type
   /**
@@ -33,6 +37,17 @@ interface ChatHistoryState {
    * done or cancelled by construction). Never touches other histories.
    */
   noteChainStart: (historyUid?: string | null) => void;
+  /**
+   * Canonical-final entry point. Reconciles live bubble(s) of one backend
+   * turn to the persisted canonical text (idempotent; split parts of the
+   * same turn collapse into one bubble). Never creates bubbles, never
+   * replays audio. Returns true when a bubble of the turn was found.
+   */
+  applyCanonicalFinalToBubble: (
+    requestId: string,
+    text: string,
+    historyUid?: string | null,
+  ) => boolean;
   setHistoryList: (
     value: HistoryInfo[] | ((prev: HistoryInfo[]) => HistoryInfo[])
   ) => void;
@@ -99,6 +114,11 @@ export function ChatHistoryProvider({ children }: { children: React.ReactNode })
     messagesRef.current = messages;
   }, [messages]);
   const idSeqRef = useRef(0);
+  // Bubbles already reconciled to their canonical persisted text. A later
+  // chunk of the same turn is necessarily a duplicate of part of it, so it
+  // is ignored (identity-based, never text comparison). Bounded; ids are
+  // unique per bubble and never reused.
+  const finalizedRef = useRef<Set<string>>(new Set());
 
   const nextMessageId = useCallback((): string => {
     idSeqRef.current += 1;
@@ -152,39 +172,54 @@ export function ChatHistoryProvider({ children }: { children: React.ReactNode })
   /**
    * Append or update an AI message in the chat history
    * @param content - Message content
+   * @param requestId - Backend turn request_id when the chunk carries one.
+   * A chunk that knows its turn always joins its own turn's bubble, even
+   * when a newer turn already forced a new message (fixes stray bubbles
+   * from trailing payloads without any timing hacks).
    */
-  const appendAIMessage = useCallback((content: string, name?: string, avatar?: string) => {
+  const appendAIMessage = useCallback((content: string, name?: string, avatar?: string, requestId?: string) => {
     const prevMessages = messagesRef.current;
-    const lastMessage = prevMessages[prevMessages.length - 1];
-
-    // If forceNewMessage is true or last message is not an AI text message, create new message
-    if (forceNewMessage || !lastMessage || lastMessage.role !== 'ai' || lastMessage.type !== 'text') {
-      setForceNewMessage(false); // Reset the flag
-      const id = nextMessageId();
-      trackPending({ uid: historyUidRef.current, id, role: 'ai', content });
-      setMessages([...prevMessages, {
-        id,
-        content,
-        role: 'ai',
-        type: 'text', // Explicitly set type for AI text messages
+    const target = resolveAiTarget(prevMessages, {
+      requestId: requestId ?? null,
+      forceNew: forceNewMessage,
+    });
+    if (target.mode === 'merge') {
+      const lastMessage = prevMessages[target.index];
+      // Canonically finalized bubbles already hold the persisted full
+      // text; a later chunk of the same turn is a duplicate by identity.
+      if (finalizedRef.current.has(lastMessage.id)) return;
+      // Otherwise, merge with the owning AI text message
+      const merged = {
+        ...lastMessage,
+        content: lastMessage.content + content,
         timestamp: new Date().toISOString(),
-        name,
-        avatar,
-      }]);
+      };
+      if (requestId && !merged.requestId) {
+        merged.requestId = requestId;
+      }
+      refreshPendingContent(lastMessage.id, merged.content);
+      const next = [...prevMessages];
+      next[target.index] = merged;
+      setMessages(next);
       return;
     }
 
-    // Otherwise, merge with last AI text message
-    const merged = {
-      ...lastMessage,
-      content: lastMessage.content + content,
+    // Otherwise, create a new AI text message
+    setForceNewMessage(false); // Reset the flag
+    const id = nextMessageId();
+    trackPending({
+      uid: historyUidRef.current, id, role: 'ai', content, requestId,
+    });
+    setMessages([...prevMessages, {
+      id,
+      content,
+      role: 'ai',
+      type: 'text', // Explicitly set type for AI text messages
       timestamp: new Date().toISOString(),
-    };
-    refreshPendingContent(lastMessage.id, merged.content);
-    setMessages([
-      ...prevMessages.slice(0, -1),
-      merged,
-    ]);
+      name,
+      avatar,
+      requestId,
+    }]);
   }, [forceNewMessage, setForceNewMessage, nextMessageId, trackPending, refreshPendingContent]);
 
   /**
@@ -321,6 +356,41 @@ export function ChatHistoryProvider({ children }: { children: React.ReactNode })
     setFullResponse(DEFAULT_HISTORY.fullResponse);
   }, []);
 
+  /**
+   * Reconcile live bubble(s) of one backend turn to the persisted canonical
+   * text. Only applies to the currently open history; split parts of the
+   * same turn collapse into the first bubble (identity merge). Pure helper
+   * does the work; this callback syncs pending tracking + finalized ids.
+   */
+  const applyCanonicalFinalToBubble = useCallback((
+    requestId: string,
+    text: string,
+    historyUid?: string | null,
+  ): boolean => {
+    const target = historyUid ?? historyUidRef.current;
+    // Scope to the open history when known. When the current history is
+    // unknown (null), request_id — unique per backend turn — is already
+    // sufficient scoping: messages state only ever holds one history, so a
+    // requestId match cannot touch another history.
+    const current = historyUidRef.current;
+    if (target != null && current != null && target !== current) return false;
+    if (!requestId || typeof text !== 'string' || text.length === 0) return false;
+    const result = applyCanonicalFinal(messagesRef.current, requestId, text);
+    if (!result.matched) return false;
+    result.finalizedIds.forEach((id) => {
+      finalizedRef.current.add(id);
+      refreshPendingContent(id, text);
+    });
+    if (finalizedRef.current.size > 200) {
+      const ids = Array.from(finalizedRef.current);
+      finalizedRef.current = new Set(ids.slice(ids.length - 200));
+    }
+    if (result.changed) {
+      setMessages(result.bubbles as Message[]);
+    }
+    return true;
+  }, [refreshPendingContent]);
+
   // Memoized context value
   const contextValue = useMemo(
     () => ({
@@ -333,6 +403,7 @@ export function ChatHistoryProvider({ children }: { children: React.ReactNode })
       setMessages,
       applyHistoryData,
       noteChainStart,
+      applyCanonicalFinalToBubble,
       setHistoryList,
       setCurrentHistoryUid,
       updateHistoryList,
@@ -351,6 +422,7 @@ export function ChatHistoryProvider({ children }: { children: React.ReactNode })
       appendOrUpdateToolCallMessage, // Add dependency
       applyHistoryData,
       noteChainStart,
+      applyCanonicalFinalToBubble,
       updateHistoryList,
       fullResponse,
       appendResponse,

@@ -11,6 +11,7 @@ import { ModelInfo, useLive2DConfig } from '@/context/live2d-config-context';
 import { useSubtitle } from '@/context/subtitle-context';
 import { audioTaskQueue } from '@/utils/task-queue';
 import { useAudioTask } from '@/components/canvas/live2d';
+import { flushPendingSegmentTexts } from '@/hooks/utils/use-audio-task';
 import { useBgUrl } from '@/context/bgurl-context';
 import { useConfig } from '@/context/character-config-context';
 import { useChatHistory } from '@/context/chat-history-context';
@@ -47,7 +48,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
   const { setSubtitleText, startSubtitleResponse } = useSubtitle();
   const {
     clearResponse, setForceNewMessage, appendHumanMessage, appendOrUpdateToolCallMessage,
-    applyHistoryData, noteChainStart,
+    applyHistoryData, noteChainStart, appendAIMessage, applyCanonicalFinalToBubble,
   } = useChatHistory();
   const { addAudioTask } = useAudioTask();
   const bgUrlContext = useBgUrl();
@@ -101,6 +102,20 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
         break;
       case 'conversation-chain-start':
         logWsDiag('CHAIN_START', wsService.getConnectionId());
+        // Preserve-before-clear (canonical-sync Phase 3): unplayed queued
+        // sentences are received response text — flush them into the live
+        // bubble BEFORE force-new/clear can strand them. Text only; the
+        // audio tasks themselves are still cleared below (no replay).
+        // Must run before setForceNewMessage so the flush merges into the
+        // finishing turn's bubble instead of opening a new one.
+        try {
+          const unplayed = flushPendingSegmentTexts();
+          unplayed.forEach((seg) => {
+            if (seg.text) appendAIMessage(seg.text, seg.name, seg.avatar, seg.requestId ?? undefined);
+          });
+        } catch {
+          // Flush is best-effort; clearing below still proceeds.
+        }
         setAiState('thinking-speaking');
         // The turn on this history actually started: older turns there are
         // done or cancelled by construction, so their leftovers retire —
@@ -144,7 +159,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
       default:
         console.warn('Unknown control command:', controlText);
     }
-  }, [setAiState, setSubtitleText, clearResponse, setForceNewMessage, noteChainStart, startMic, stopMic, startSubtitleResponse, t]);
+  }, [setAiState, setSubtitleText, clearResponse, setForceNewMessage, noteChainStart, startMic, stopMic, startSubtitleResponse, t, appendAIMessage, applyCanonicalFinalToBubble]);
 
   const handleWebSocketMessage = useCallback((message: MessageEvent) => {
     console.debug('WebSocket event received:', message.type);
@@ -188,6 +203,20 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
           setSubtitleText(message.text);
         }
         break;
+      case 'ai-final': {
+        // Canonical final: the backend persisted this turn's AI row and its
+        // text is authoritative. Reconcile the live bubble(s) of that turn
+        // to it (idempotent; split parts collapse by turn identity; never
+        // creates bubbles, never replays audio). Routed by message type so
+        // the canonical text itself can travel in `text`.
+        const canonicalId = message.request_id ?? null;
+        const canonicalText = typeof message.text === 'string' ? message.text : '';
+        if (canonicalId && canonicalText) {
+          logWsDiag('CANONICAL_FINAL', wsService.getConnectionId(), `chars=${canonicalText.length}`);
+          applyCanonicalFinalToBubble(canonicalId, canonicalText, message.history_uid ?? null);
+        }
+        break;
+      }
       case 'latency-event':
         markBackendLatencyEvent(
           message.request_id,
@@ -248,6 +277,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
             expressions: message.actions?.expressions || null,
             emotions: message.actions?.emotions || null,
             forwarded: message.forwarded || false,
+            requestId: message.request_id ?? null,
           });
         }
         break;

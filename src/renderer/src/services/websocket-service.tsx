@@ -49,6 +49,8 @@ export interface Message {
   timestamp: string;
   name?: string;
   avatar?: string;
+  /** Backend turn request_id for AI bubbles built from audio payloads. */
+  requestId?: string;
 
   // Fields for different message types (make optional)
   type?: 'text' | 'tool_call_status'; // Add possible types, default to 'text' if omitted

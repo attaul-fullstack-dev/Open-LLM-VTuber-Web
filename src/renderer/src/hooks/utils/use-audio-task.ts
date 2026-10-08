@@ -20,6 +20,7 @@ import {
   addResponseChars,
   decideTurnFinalize,
 } from '@/utils/response-turn-lifecycle';
+import { createSegmentTextBuffer, type SegmentText } from '@/utils/turn-identity';
 import { subtitlePlaybackCoordinator } from '@/utils/subtitle-playback';
 import * as LAppDefine from '../../../WebSDK/src/lappdefine';
 import { useAvatarActivityState } from '@/context/avatar-activity-context';
@@ -33,6 +34,19 @@ interface AudioTaskOptions {
   emotions?: (string | null)[] | null
   speaker_uid?: string
   forwarded?: boolean
+  /** Backend turn request_id carried on the audio payload (may be absent). */
+  requestId?: string | null
+}
+
+// Display texts queued for playback but not yet executed (see
+// createSegmentTextBuffer in turn-identity for the ownership contract).
+// Module-scoped like turnState: useAudioTask mounts in several components,
+// so per-instance bookkeeping would double-append or lose entries.
+const segmentTextBuffer = createSegmentTextBuffer();
+
+/** Drain unplayed queued segment texts (text-only, no audio replay). */
+export function flushPendingSegmentTexts(): SegmentText[] {
+  return segmentTextBuffer.flush();
 }
 
 // SHARED per-assistant-turn lifecycle state. `useAudioTask` is mounted by
@@ -131,9 +145,13 @@ export const useAudioTask = () => {
     }
 
     const {
-      audioBase64, displayText, expressions, emotions, forwarded,
+      audioBase64, displayText, expressions, emotions, forwarded, requestId,
     } = options;
     const face = resolveResponseFaceId({ emotions, expressions });
+    // Shift this task's text entry (strict FIFO with queue execution).
+    if (displayText?.text) {
+      segmentTextBuffer.shiftForText(displayText.text);
+    }
     // A task arriving after a completed lifecycle starts a brand-new turn:
     // beginTurnTask resets the shared per-turn state, and any pending
     // text-only hold from the previous turn is cleared (a stale timer must
@@ -157,7 +175,7 @@ export const useAudioTask = () => {
     if (displayText?.text) {
       addResponseChars(turnState, displayText.text.length);
       appendText(displayText.text);
-      appendAI(displayText.text, displayText.name, displayText.avatar);
+      appendAI(displayText.text, displayText.name, displayText.avatar, requestId ?? undefined);
       if (!forwarded) {
         sendMessage({
           type: "audio-play-start",
@@ -363,6 +381,14 @@ export const useAudioTask = () => {
     }
 
     console.log(`Adding audio task ${options.displayText?.text} to queue`);
+    if (options.displayText?.text) {
+      segmentTextBuffer.push({
+        text: options.displayText.text,
+        name: options.displayText.name,
+        avatar: options.displayText.avatar,
+        requestId: options.requestId ?? null,
+      });
+    }
     audioTaskQueue.addTask(() => handleAudioPlayback(options));
   };
 
