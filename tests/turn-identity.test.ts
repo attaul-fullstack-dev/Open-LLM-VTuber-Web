@@ -5,6 +5,7 @@ import {
   bubbleIndexForTurn,
   createSegmentTextBuffer,
   resolveAiTarget,
+  selectFlushSegments,
   type IdentityBubble,
 } from "../src/renderer/src/utils/turn-identity.ts";
 
@@ -273,4 +274,119 @@ test("segment buffer: FIFO pairing, flush drains once, no duplicates", () => {
   // Empty/blank pushes ignored.
   buf.push({ text: "" });
   assert.equal(buf.size(), 1);
+});
+
+test("1. INTERRUPTED + PENDING: cancelled turn gains no trailing text", () => {
+  // Production shape (req 53dd52e0): turn played 61 chars, 93 more chars
+  // sat unplayed when the interrupt + next chain-start landed. No ai-final
+  // exists for a cancelled turn, so every pending segment must drop.
+  const live: IdentityBubble[] = [
+    human("h1", "q"),
+    ai("a1", "played part. ", "req-C"),
+  ];
+  const pending = [
+    { text: "unplayed one. ", requestId: "req-C" },
+    { text: "unplayed two. ", requestId: "req-C" },
+  ];
+  const { heal, drop } = selectFlushSegments(pending, new Set(), live);
+  assert.deepEqual(heal, []);
+  assert.equal(drop.length, 2);
+  // Live bubble stays exactly what was played: no invention.
+  assert.equal(live[1].content, "played part. ");
+});
+
+test("2. COMPLETED + PENDING: finalized turn keeps healing path", () => {
+  const live: IdentityBubble[] = [
+    human("h1", "q"),
+    ai("a1", "full text. ", "req-D"),
+  ];
+  const pending = [{ text: "full text. ", requestId: "req-D" }];
+  const { heal, drop } = selectFlushSegments(pending, new Set(["req-D"]), live);
+  // Gated through: at runtime the finalized guard turns this append into a
+  // verified no-op, so healing is preserved without ever duplicating.
+  assert.equal(heal.length, 1);
+  assert.deepEqual(drop, []);
+});
+
+test("3. RAPID FOLLOW-UP: turns stay isolated at flush", () => {
+  const live: IdentityBubble[] = [
+    human("h1", "q1"),
+    ai("a1", "first. ", "req-A"),
+    human("h2", "q2"),
+  ];
+  const pending = [
+    { text: "first-tail. ", requestId: "req-A" },
+    { text: "second-head. ", requestId: "req-B" },
+  ];
+  // Neither finalized (turn A interrupted, turn B just started).
+  const gated = selectFlushSegments(pending, new Set(), live);
+  assert.deepEqual(gated.heal, []);
+  assert.equal(gated.drop.length, 2);
+  // After turn B completes (ai-final received) AND its bubble exists,
+  // only B heals; A's interrupted tail still drops.
+  const liveB: IdentityBubble[] = [...live, ai("b1", "second", "req-B")];
+  const healed = selectFlushSegments(pending, new Set(["req-B"]), liveB);
+  assert.deepEqual(
+    healed.heal.map((s) => s.text),
+    ["second-head. "],
+  );
+  assert.deepEqual(
+    healed.drop.map((s) => s.text),
+    ["first-tail. "],
+  );
+});
+
+test("4. NORMAL MULTI-TURN: one correct bubble per finalized turn", () => {
+  const live: IdentityBubble[] = [
+    human("h1", "q1"),
+    ai("a1", "one. ", "req-1"),
+    human("h2", "q2"),
+    ai("a2", "two. ", "req-2"),
+  ];
+  const r1 = applyCanonicalFinal(live, "req-1", "one. ");
+  const r2 = applyCanonicalFinal(r1.bubbles, "req-2", "two. ");
+  assert.equal(r1.changed, false);
+  assert.equal(r2.changed, false);
+  assert.equal(r2.bubbles.filter((m) => m.role === "ai").length, 2);
+  assert.equal(r2.bubbles[1].content, "one. ");
+  assert.equal(r2.bubbles[3].content, "two. ");
+});
+
+test("7. RESYNC/RELOAD path untouched by the gate", () => {
+  // Legacy segments without identity keep legacy append-everything.
+  const live: IdentityBubble[] = [human("h1", "q"), ai("a1", "part. ")];
+  const { heal, drop } = selectFlushSegments(
+    [{ text: "more. ", requestId: null }],
+    new Set(),
+    live,
+  );
+  assert.equal(heal.length, 1);
+  assert.deepEqual(drop, []);
+  // Unknown turns drop even when other turns finalized (and the
+  // finalized turn heals only while its bubble still exists).
+  const liveOk: IdentityBubble[] = [...live, ai("b9", "y", "req-ok")];
+  const mixed = selectFlushSegments(
+    [
+      { text: "x. ", requestId: "req-ghost" },
+      { text: "y. ", requestId: "req-ok" },
+    ],
+    new Set(["req-ok"]),
+    liveOk,
+  );
+  assert.deepEqual(
+    mixed.heal.map((s) => s.text),
+    ["y. "],
+  );
+  assert.deepEqual(
+    mixed.drop.map((s) => s.text),
+    ["x. "],
+  );
+  // Missing bubble (e.g. replaced by resync): drop, never stray.
+  const gone = selectFlushSegments(
+    [{ text: "z. ", requestId: "req-ok" }],
+    new Set(["req-ok"]),
+    [human("h1", "q")],
+  );
+  assert.deepEqual(gone.heal, []);
+  assert.equal(gone.drop.length, 1);
 });

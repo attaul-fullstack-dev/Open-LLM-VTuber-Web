@@ -12,6 +12,8 @@ import {
 import {
   applyCanonicalFinal,
   resolveAiTarget,
+  selectFlushSegments,
+  type SegmentText,
 } from '@/utils/turn-identity';
 
 /**
@@ -48,6 +50,18 @@ interface ChatHistoryState {
     text: string,
     historyUid?: string | null,
   ) => boolean;
+  /**
+   * Gated flush entry point for unplayed queued segment texts (chain-start).
+   * Only segments of finalized turns (ai-final received) may still join
+   * the live UI — where the finalized guard turns them into verified
+   * no-ops. Segments of interrupted/cancelled/unknown turns, or turns
+   * whose bubble is gone, are drained and dropped so a chain-start can
+   * never invent live text the canonical history lacks. Returns counts.
+   */
+  appendFlushedSegments: (segments: SegmentText[]) => {
+    healed: number;
+    dropped: number;
+  };
   setHistoryList: (
     value: HistoryInfo[] | ((prev: HistoryInfo[]) => HistoryInfo[])
   ) => void;
@@ -119,6 +133,11 @@ export function ChatHistoryProvider({ children }: { children: React.ReactNode })
   // is ignored (identity-based, never text comparison). Bounded; ids are
   // unique per bubble and never reused.
   const finalizedRef = useRef<Set<string>>(new Set());
+  // Backend turns with a received ai-final, by request_id. The flush gate
+  // consults this: only segments of finalized turns may still join the
+  // live UI (where the finalized guard turns them into verified no-ops).
+  // Bounded like finalizedRef.
+  const finalizedTurnsRef = useRef<Set<string>>(new Set());
 
   const nextMessageId = useCallback((): string => {
     idSeqRef.current += 1;
@@ -381,15 +400,37 @@ export function ChatHistoryProvider({ children }: { children: React.ReactNode })
       finalizedRef.current.add(id);
       refreshPendingContent(id, text);
     });
+    finalizedTurnsRef.current.add(requestId);
     if (finalizedRef.current.size > 200) {
       const ids = Array.from(finalizedRef.current);
       finalizedRef.current = new Set(ids.slice(ids.length - 200));
+    }
+    if (finalizedTurnsRef.current.size > 200) {
+      const ids = Array.from(finalizedTurnsRef.current);
+      finalizedTurnsRef.current = new Set(ids.slice(ids.length - 200));
     }
     if (result.changed) {
       setMessages(result.bubbles as Message[]);
     }
     return true;
   }, [refreshPendingContent]);
+
+  const appendFlushedSegments = useCallback((segments: SegmentText[]): {
+    healed: number;
+    dropped: number;
+  } => {
+    const { heal } = selectFlushSegments(
+      segments,
+      finalizedTurnsRef.current,
+      messagesRef.current,
+    );
+    heal.forEach((seg) => {
+      if (seg.text) {
+        appendAIMessage(seg.text, seg.name, seg.avatar, seg.requestId ?? undefined);
+      }
+    });
+    return { healed: heal.length, dropped: segments.length - heal.length };
+  }, [appendAIMessage]);
 
   // Memoized context value
   const contextValue = useMemo(
@@ -404,6 +445,7 @@ export function ChatHistoryProvider({ children }: { children: React.ReactNode })
       applyHistoryData,
       noteChainStart,
       applyCanonicalFinalToBubble,
+      appendFlushedSegments,
       setHistoryList,
       setCurrentHistoryUid,
       updateHistoryList,
@@ -423,6 +465,7 @@ export function ChatHistoryProvider({ children }: { children: React.ReactNode })
       applyHistoryData,
       noteChainStart,
       applyCanonicalFinalToBubble,
+      appendFlushedSegments,
       updateHistoryList,
       fullResponse,
       appendResponse,

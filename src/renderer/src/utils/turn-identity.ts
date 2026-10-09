@@ -103,6 +103,48 @@ export function createSegmentTextBuffer() {
 
 export type SegmentTextBuffer = ReturnType<typeof createSegmentTextBuffer>;
 
+/**
+ * Decide which drained unplayed segments may still join the live UI.
+ *
+ * A segment is healable only when its turn already finalized (ai-final
+ * received): the owning bubble then holds the canonical text and the
+ * finalized guard turns the append into a verified no-op. Anything else
+ * — interrupted/cancelled turns (no ai-final will ever come), unknown
+ * turns, or turns whose bubble is gone — is dropped: appending it would
+ * invent live text the canonical history does not contain.
+ *
+ * Segments without turn identity predate identity routing; they keep the
+ * legacy append-everything behavior so old payload shapes are unchanged.
+ * Pure and deterministic: same inputs, same partition, no text heuristics.
+ */
+export function selectFlushSegments(
+  segments: SegmentText[],
+  finalizedTurnIds: Set<string> | string[] | null | undefined,
+  bubbles: IdentityBubble[],
+): { heal: SegmentText[]; drop: SegmentText[] } {
+  const finalized = new Set(finalizedTurnIds ?? []);
+  const heal: SegmentText[] = [];
+  const drop: SegmentText[] = [];
+  for (const seg of Array.isArray(segments) ? segments : []) {
+    if (!seg || typeof seg.text !== "string" || !seg.text) continue;
+    const turnId = seg.requestId ?? null;
+    if (!turnId) {
+      heal.push(seg);
+      continue;
+    }
+    if (!finalized.has(turnId)) {
+      drop.push(seg);
+      continue;
+    }
+    if (bubbleIndexForTurn(bubbles, turnId) < 0) {
+      drop.push(seg);
+      continue;
+    }
+    heal.push(seg);
+  }
+  return { heal, drop };
+}
+
 export interface CanonicalResult {
   bubbles: IdentityBubble[];
   /** Bubble ids whose content was set/kept to the canonical text. */

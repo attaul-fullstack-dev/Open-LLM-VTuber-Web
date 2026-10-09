@@ -48,7 +48,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
   const { setSubtitleText, startSubtitleResponse } = useSubtitle();
   const {
     clearResponse, setForceNewMessage, appendHumanMessage, appendOrUpdateToolCallMessage,
-    applyHistoryData, noteChainStart, appendAIMessage, applyCanonicalFinalToBubble,
+    applyHistoryData, noteChainStart, appendFlushedSegments, applyCanonicalFinalToBubble,
   } = useChatHistory();
   const { addAudioTask } = useAudioTask();
   const bgUrlContext = useBgUrl();
@@ -102,17 +102,18 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
         break;
       case 'conversation-chain-start':
         logWsDiag('CHAIN_START', wsService.getConnectionId());
-        // Preserve-before-clear (canonical-sync Phase 3): unplayed queued
-        // sentences are received response text — flush them into the live
-        // bubble BEFORE force-new/clear can strand them. Text only; the
-        // audio tasks themselves are still cleared below (no replay).
-        // Must run before setForceNewMessage so the flush merges into the
-        // finishing turn's bubble instead of opening a new one.
+        // Preserve-before-clear, gated by turn finality (interrupt fix):
+        // unplayed queued sentences are flushed through the canonical gate
+        // — only segments of finalized turns (ai-final received) may still
+        // join the live UI, where the finalized guard turns them into
+        // verified no-ops. Segments of interrupted/cancelled turns are
+        // drained and dropped so a chain-start can never invent live text
+        // the canonical history lacks. Text only; the audio tasks themselves
+        // are still cleared below (no replay). Runs before
+        // setForceNewMessage so gated healing merges into the finishing
+        // turn's bubble instead of opening a new one.
         try {
-          const unplayed = flushPendingSegmentTexts();
-          unplayed.forEach((seg) => {
-            if (seg.text) appendAIMessage(seg.text, seg.name, seg.avatar, seg.requestId ?? undefined);
-          });
+          appendFlushedSegments(flushPendingSegmentTexts());
         } catch {
           // Flush is best-effort; clearing below still proceeds.
         }
@@ -159,7 +160,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
       default:
         console.warn('Unknown control command:', controlText);
     }
-  }, [setAiState, setSubtitleText, clearResponse, setForceNewMessage, noteChainStart, startMic, stopMic, startSubtitleResponse, t, appendAIMessage, applyCanonicalFinalToBubble]);
+  }, [setAiState, setSubtitleText, clearResponse, setForceNewMessage, noteChainStart, startMic, stopMic, startSubtitleResponse, t, appendFlushedSegments, applyCanonicalFinalToBubble]);
 
   const handleWebSocketMessage = useCallback((message: MessageEvent) => {
     console.debug('WebSocket event received:', message.type);
