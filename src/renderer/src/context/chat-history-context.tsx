@@ -7,7 +7,9 @@ import { HistoryInfo } from './websocket-context';
 import {
   PendingEntry,
   capPending,
+  clonePendingEntry,
   reconcileHistoryData,
+  retireSupersededPending,
 } from '@/utils/history-reconcile';
 import {
   applyCanonicalFinal,
@@ -117,16 +119,33 @@ export function ChatHistoryProvider({ children }: { children: React.ReactNode })
   useEffect(() => {
     historyUidRef.current = currentHistoryUid;
   }, [currentHistoryUid]);
-  // Read mirror for append decisions. State updaters must stay pure (they
-  // can run more than once), so every side effect — ids, pending tracking,
-  // flag resets — happens outside, exactly once per call. Same-tick double
-  // appends would read a stale mirror; all call sites are separated by
-  // awaits/network events, so at most a cosmetic extra bubble could result
-  // (never a lost message: reconciliation is id/content based).
+  // Read mirror for append decisions. Side effects — ids, pending tracking,
+  // flag resets — happen outside the updater, exactly once per call.
+  //
+  // The mirror is written synchronously by `commitMessages`, the single
+  // place allowed to change this state. It must NOT be refreshed from a
+  // passive `useEffect`: effects run after every commit, so an unrelated
+  // render committing in between two same-tick appends would overwrite the
+  // mirror with the older rendered array — the exact stale-read race that
+  // silently dropped already-played transcript segments.
   const messagesRef = useRef<Message[]>(DEFAULT_HISTORY.messages);
-  useEffect(() => {
-    messagesRef.current = messages;
-  }, [messages]);
+  /**
+   * The one writer for `messages`.
+   *
+   * State updaters stay pure (a plain value is passed; none of the side
+   * effects below ever run inside one), while the mirror is advanced in the
+   * same synchronous step so a second append in the same tick computes from
+   * the first append's result instead of overwriting it.
+   */
+  const commitMessages = useCallback((
+    next: Message[] | ((prev: Message[]) => Message[]),
+  ) => {
+    const value = typeof next === 'function'
+      ? (next as (prev: Message[]) => Message[])(messagesRef.current)
+      : next;
+    messagesRef.current = value;
+    setMessages(value);
+  }, []);
   const idSeqRef = useRef(0);
   // Bubbles already reconciled to their canonical persisted text. A later
   // chunk of the same turn is necessarily a duplicate of part of it, so it
@@ -185,8 +204,8 @@ export function ChatHistoryProvider({ children }: { children: React.ReactNode })
       timestamp: new Date().toISOString(),
     };
     trackPending({ uid, id, role: 'human', content, requestId });
-    setMessages((prevMessages) => [...prevMessages, newMessage]);
-  }, [nextMessageId, trackPending]);
+    commitMessages([...messagesRef.current, newMessage]);
+  }, [nextMessageId, trackPending, commitMessages]);
 
   /**
    * Append or update an AI message in the chat history
@@ -219,7 +238,7 @@ export function ChatHistoryProvider({ children }: { children: React.ReactNode })
       refreshPendingContent(lastMessage.id, merged.content);
       const next = [...prevMessages];
       next[target.index] = merged;
-      setMessages(next);
+      commitMessages(next);
       return;
     }
 
@@ -229,7 +248,7 @@ export function ChatHistoryProvider({ children }: { children: React.ReactNode })
     trackPending({
       uid: historyUidRef.current, id, role: 'ai', content, requestId,
     });
-    setMessages([...prevMessages, {
+    commitMessages([...prevMessages, {
       id,
       content,
       role: 'ai',
@@ -239,7 +258,7 @@ export function ChatHistoryProvider({ children }: { children: React.ReactNode })
       avatar,
       requestId,
     }]);
-  }, [forceNewMessage, setForceNewMessage, nextMessageId, trackPending, refreshPendingContent]);
+  }, [forceNewMessage, setForceNewMessage, nextMessageId, trackPending, refreshPendingContent, commitMessages]);
 
   /**
    * Append or update a Tool Call message using its tool_id
@@ -252,41 +271,40 @@ export function ChatHistoryProvider({ children }: { children: React.ReactNode })
       return;
     }
 
-    setMessages((prevMessages) => {
-      const existingMessageIndex = prevMessages.findIndex(
-        (msg) => msg.type === 'tool_call_status' && msg.tool_id === toolMessageData.tool_id!,
-      );
+    const prevMessages = messagesRef.current;
+    const existingMessageIndex = prevMessages.findIndex(
+      (msg) => msg.type === 'tool_call_status' && msg.tool_id === toolMessageData.tool_id!,
+    );
 
-      if (existingMessageIndex !== -1) {
-        // Update existing tool call message status and content
-        const updatedMessages = [...prevMessages];
-        const existingMsg = updatedMessages[existingMessageIndex];
-        updatedMessages[existingMessageIndex] = {
-          ...existingMsg,
-          status: toolMessageData.status, // Update status
-          name: toolMessageData.name || existingMsg.name,
-          content: toolMessageData.content || existingMsg.content, // Update content (result/error or keep input)
-          timestamp: toolMessageData.timestamp!, // Update timestamp
-        };
-        return updatedMessages;
-      } else {
-        // Append new tool call message
-        const newToolMessage: Message = {
-          id: toolMessageData.tool_id!, // Use tool_id as the main ID for uniqueness
-          role: 'ai',
-          type: 'tool_call_status',
-          name: toolMessageData.name || '',
-          tool_id: toolMessageData.tool_id,
-          tool_name: toolMessageData.tool_name,
-          status: toolMessageData.status,
-          content: toolMessageData.content || '', // Initial content (input)
-          timestamp: toolMessageData.timestamp!,
-          // name/avatar could potentially be added if needed
-        };
-        return [...prevMessages, newToolMessage];
-      }
-    });
-  }, []);
+    if (existingMessageIndex !== -1) {
+      // Update existing tool call message status and content
+      const updatedMessages = [...prevMessages];
+      const existingMsg = updatedMessages[existingMessageIndex];
+      updatedMessages[existingMessageIndex] = {
+        ...existingMsg,
+        status: toolMessageData.status, // Update status
+        name: toolMessageData.name || existingMsg.name,
+        content: toolMessageData.content || existingMsg.content, // Update content (result/error or keep input)
+        timestamp: toolMessageData.timestamp!, // Update timestamp
+      };
+      commitMessages(updatedMessages);
+    } else {
+      // Append new tool call message
+      const newToolMessage: Message = {
+        id: toolMessageData.tool_id!, // Use tool_id as the main ID for uniqueness
+        role: 'ai',
+        type: 'tool_call_status',
+        name: toolMessageData.name || '',
+        tool_id: toolMessageData.tool_id,
+        tool_name: toolMessageData.tool_name,
+        status: toolMessageData.status,
+        content: toolMessageData.content || '', // Initial content (input)
+        timestamp: toolMessageData.timestamp!,
+        // name/avatar could potentially be added if needed
+      };
+      commitMessages([...prevMessages, newToolMessage]);
+    }
+  }, [commitMessages]);
 
   /**
    * Update the history list with the latest message
@@ -346,29 +364,28 @@ export function ChatHistoryProvider({ children }: { children: React.ReactNode })
         content: typeof row?.content === 'string' ? row.content : '',
         type: row?.type,
       })),
-      scoped.map((entry) => ({
-        uid: entry.uid, id: entry.id, role: entry.role, content: entry.content,
-      })),
+      scoped.map(clonePendingEntry),
     );
     pendingRef.current = capPending([...others, ...remaining]);
-    setMessages(merged as Message[]);
-  }, []);
+    commitMessages(merged as Message[]);
+  }, [commitMessages]);
 
   /**
    * A turn on one history actually started: older turns there are done or
    * cancelled by construction, so their leftovers stop being pending — but
    * the just-accepted send (latest request_id) is kept until the snapshot
    * confirms it. Other histories are untouched.
+   *
+   * Pure helper does the work: it can only retire entries that still carry
+   * their turn identity, which `applyHistoryData` must therefore preserve.
    */
   const noteChainStart = useCallback((historyUid?: string | null) => {
     const target = historyUid ?? historyUidRef.current;
-    const latest = lastRequestRef.current.get(target);
-    pendingRef.current = pendingRef.current.filter((entry) => {
-      if (!(entry.uid === target || entry.uid == null)) return true;
-      if (entry.role !== 'human') return false;
-      if (!entry.requestId || !latest) return true;
-      return entry.requestId === latest;
-    });
+    pendingRef.current = retireSupersededPending(
+      pendingRef.current,
+      lastRequestRef.current.get(target),
+      target,
+    );
   }, []);
 
   const clearResponse = useCallback(() => {
@@ -410,10 +427,10 @@ export function ChatHistoryProvider({ children }: { children: React.ReactNode })
       finalizedTurnsRef.current = new Set(ids.slice(ids.length - 200));
     }
     if (result.changed) {
-      setMessages(result.bubbles as Message[]);
+      commitMessages(result.bubbles as Message[]);
     }
     return true;
-  }, [refreshPendingContent]);
+  }, [refreshPendingContent, commitMessages]);
 
   const appendFlushedSegments = useCallback((segments: SegmentText[]): {
     healed: number;
@@ -441,7 +458,9 @@ export function ChatHistoryProvider({ children }: { children: React.ReactNode })
       appendHumanMessage,
       appendAIMessage,
       appendOrUpdateToolCallMessage, // Add to context value
-      setMessages,
+      // Expose the single writer, not the raw useState setter: any external
+      // caller then also keeps the read mirror in step with the state.
+      setMessages: commitMessages,
       applyHistoryData,
       noteChainStart,
       applyCanonicalFinalToBubble,

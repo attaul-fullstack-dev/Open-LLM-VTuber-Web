@@ -60,6 +60,53 @@ export function capPending(entries: PendingEntry[]): PendingEntry[] {
   return entries.slice(entries.length - MAX_PENDING);
 }
 
+/**
+ * Lossless re-serialization of one pending entry.
+ *
+ * `applyHistoryData` hands pending entries to `reconcileHistoryData`, which
+ * only reads `role`/`content`. That used to be done with an explicit
+ * `{ uid, id, role, content }` literal, which silently dropped `requestId`.
+ * Once lost, `retireSupersededPending` can no longer tell that the entry
+ * belongs to a superseded turn, so a cancelled/unpersisted send is re-applied
+ * by every later resync forever (a permanent phantom row the canonical
+ * transcript does not contain). Cloning through here keeps the entry's turn
+ * identity across any number of resyncs.
+ */
+export function clonePendingEntry(entry: PendingEntry): PendingEntry {
+  const cloned: PendingEntry = {
+    uid: entry.uid,
+    id: entry.id,
+    role: entry.role,
+    content: entry.content,
+  };
+  if (entry.requestId !== undefined) cloned.requestId = entry.requestId;
+  return cloned;
+}
+
+/**
+ * Retire pending leftovers of turns that a newer turn on the same history has
+ * superseded.
+ *
+ * A turn on one history actually started: older turns there are done or
+ * cancelled by construction, so their leftovers stop being pending — but the
+ * just-accepted send (latest request_id) is kept until the snapshot confirms
+ * it. Entries for other histories are kept for their own resync, and legacy
+ * entries without a request_id keep their original "never retire" behaviour,
+ * because there is no turn identity to compare against.
+ */
+export function retireSupersededPending(
+  entries: PendingEntry[],
+  latestRequestId: string | undefined,
+  target: string | null | undefined,
+): PendingEntry[] {
+  return entries.filter((entry) => {
+    if (!(entry.uid === target || entry.uid == null)) return true;
+    if (entry.role !== 'human') return false;
+    if (!entry.requestId || !latestRequestId) return true;
+    return entry.requestId === latestRequestId;
+  });
+}
+
 export function reconcileHistoryData(
   server: ChatRow[],
   pending: PendingEntry[],
