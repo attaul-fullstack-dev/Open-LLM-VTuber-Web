@@ -1,6 +1,6 @@
 /* eslint-disable import/no-extraneous-dependencies */
 import { Button, Stack, Text } from '@chakra-ui/react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { settingStyles } from './setting-styles';
 import { useAgentSettings } from '@/hooks/sidebar/setting/use-agent-settings';
@@ -21,6 +21,7 @@ import {
   normalizeAttachmentRecords,
   resolveAttachmentDeleteOutcome,
 } from '@/utils/attachment-memory-status';
+import { planMemoryFetch } from '@/utils/memory-fetch-plan';
 import type {
   AttachmentDeleteResult,
   AttachmentMemoryRecord,
@@ -70,12 +71,30 @@ function Agent({ onSave, onCancel }: AgentProps): JSX.Element {
         sendMessage({ type: 'fetch-attachment-memories' });
       }
     });
-    if (wsState === 'OPEN') {
-      sendMessage({ type: 'fetch-character-memory' });
-      sendMessage({ type: 'fetch-attachment-memories' });
-    }
     return () => subscription.unsubscribe();
-  }, [wsState, sendMessage]);
+    // Memory fetching is driven by the history-scoped effect below, so this
+    // subscription only registers listeners (no dependency on wsState).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sendMessage]);
+
+  // The backend resolves a character's conf_uid only after a history is
+  // resumed, so fetching at socket-OPEN alone (before resume) returns an
+  // empty list and nothing used to refetch it. Re-fetch whenever the active
+  // history becomes known or changes; never repeat the same uid.
+  const lastFetchedHistoryUidRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (wsState !== 'OPEN') {
+      // Reconnect resets the guard so the resumed history refetches.
+      lastFetchedHistoryUidRef.current = null;
+      return;
+    }
+    if (planMemoryFetch(wsState, currentHistoryUid, lastFetchedHistoryUidRef.current) !== 'fetch') {
+      return;
+    }
+    lastFetchedHistoryUidRef.current = currentHistoryUid ?? null;
+    sendMessage({ type: 'fetch-character-memory' });
+    sendMessage({ type: 'fetch-attachment-memories' });
+  }, [wsState, currentHistoryUid, sendMessage]);
 
   return (
     <Stack {...settingStyles.common.container}>
@@ -132,7 +151,18 @@ function Agent({ onSave, onCancel }: AgentProps): JSX.Element {
           lastResult={lastAttachmentDelete}
           open={attachmentDialogOpen}
           disabled={wsState !== 'OPEN'}
-          onOpenChange={setAttachmentDialogOpen}
+          onOpenChange={(open) => {
+            setAttachmentDialogOpen(open);
+            // Opening the dialog is an explicit user action: refetch only if
+            // the active history has not been fetched yet (history switch,
+            // reconnect, or the panel was opened before any resume).
+            if (open && currentHistoryUid) {
+              if (lastFetchedHistoryUidRef.current !== currentHistoryUid) {
+                lastFetchedHistoryUidRef.current = currentHistoryUid;
+                sendMessage({ type: 'fetch-attachment-memories' });
+              }
+            }
+          }}
           onDelete={(record) => sendMessage({
             type: 'delete-attachment-memory',
             record_id: record.id,

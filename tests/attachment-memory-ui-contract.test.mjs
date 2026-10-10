@@ -26,6 +26,19 @@ test('agent settings refresh the list after delete and clear actions', () => {
   assert.match(agent, /resolveAttachmentDeleteOutcome/);
 });
 
+test('memory fetching is gated on the resumed history uid (race fix)', () => {
+  assert.match(agent, /planMemoryFetch/);
+  assert.match(agent, /lastFetchedHistoryUidRef/);
+  assert.match(agent, /lastFetchedHistoryUidRef\.current = null/);
+  assert.doesNotMatch(agent, /if \(wsState === 'OPEN'\) \{\s*\n\s*sendMessage\(\{ type: 'fetch-character-memory' \}\)/);
+});
+
+test('opening the attachment dialog refetches only for an unfetched history', () => {
+  assert.match(agent, /onOpenChange=\{\(open\) => \{/);
+  assert.match(agent, /if \(open && currentHistoryUid\)/);
+  assert.match(agent, /fetch-attachment-memories/);
+});
+
 test('attachment dialog renders records, confirms, and shows purge outcome', () => {
   assert.match(dialog, /records\.map/);
   assert.match(dialog, /deleteAttachmentConfirm/);
