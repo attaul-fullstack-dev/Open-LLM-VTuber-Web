@@ -21,6 +21,7 @@ import {
   describeInboundFrame,
   installLifecycleLogging,
 } from '@/utils/ws-lifecycle-log';
+import type { AttachmentPurgeStatus } from '@/utils/attachment-memory-status';
 
 export interface DisplayText {
   text: string;
@@ -108,6 +109,10 @@ export interface MessageEvent {
   event?: string;
   request_id?: string;
   metrics?: Record<string, unknown>;
+  // Attachment Memory deletion result (backend `attachment-memory-deleted`).
+  purge?: AttachmentPurgeStatus;
+  record_id?: string;
+  removed?: number;
   members?: string[];
   is_owner?: boolean;
   client_uid?: string;

@@ -35,6 +35,12 @@ import { loadVoiceOutputEnabled } from '@/utils/voice-output-preference';
 import { useLifeState } from '@/context/life-state-context';
 import { toLifeSnapshot } from '@/utils/life-state-sync';
 import { getUserTimezone } from '@/utils/user-timezone';
+import {
+  resolveAttachmentDeleteOutcome,
+} from '@/utils/attachment-memory-status';
+import type {
+  AttachmentRemainingSource,
+} from '@/utils/attachment-memory-status';
 
 function WebSocketHandler({ children }: { children: React.ReactNode }) {
   const { t } = useTranslation();
@@ -164,6 +170,25 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
 
   const handleWebSocketMessage = useCallback((message: MessageEvent) => {
     console.debug('WebSocket event received:', message.type);
+    const remainingSourceLabel = (item: AttachmentRemainingSource): string => {
+      switch (item.kind) {
+        case 'episodic':
+          return t('notification.attachmentRemainingEpisodic', { count: item.count });
+        case 'transcripts':
+          return t('notification.attachmentRemainingTranscripts', { count: item.count });
+        case 'summaries':
+          return t('notification.attachmentRemainingSummaries', { count: item.count });
+        case 'character':
+          return t('notification.attachmentRemainingCharacter', { count: item.count });
+        case 'world':
+          return t('notification.attachmentRemainingWorld', { count: item.count });
+        default:
+          return '';
+      }
+    };
+    const describeRemainingSources = (remaining: AttachmentRemainingSource[]): string => (
+      remaining.map(remainingSourceLabel).filter((label) => label !== '').join(', ')
+    );
     switch (message.type) {
       case 'control':
         if (message.text) {
@@ -415,6 +440,48 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
             ? t('notification.characterStateResetSuccess')
             : t('notification.characterStateResetFail'),
           type: message.success ? 'success' : 'error',
+          duration: 2000,
+        });
+        break;
+      case 'attachment-memories':
+        // The attachment list is consumed by the Agent settings panel.
+        break;
+      case 'attachment-memory-deleted': {
+        // The purge object is authoritative: a bare success flag must never
+        // be upgraded into a "fully forgotten" claim.
+        const outcome = resolveAttachmentDeleteOutcome(message);
+        if (outcome.outcome === 'complete') {
+          toaster.create({
+            title: t('notification.attachmentDeleteComplete'),
+            type: 'success',
+            duration: 2000,
+          });
+        } else if (outcome.outcome === 'partial') {
+          toaster.create({
+            title: t('notification.attachmentDeletePartial'),
+            description: describeRemainingSources(outcome.remaining),
+            type: 'warning',
+            duration: 4000,
+          });
+        } else if (outcome.outcome === 'legacy-success') {
+          toaster.create({
+            title: t('notification.attachmentDeleteSuccess'),
+            type: 'success',
+            duration: 2000,
+          });
+        } else {
+          toaster.create({
+            title: t('notification.attachmentDeleteFail'),
+            type: 'error',
+            duration: 2000,
+          });
+        }
+        break;
+      }
+      case 'attachment-memories-cleared':
+        toaster.create({
+          title: t('notification.attachmentsCleared', { count: message.removed ?? 0 }),
+          type: 'success',
           duration: 2000,
         });
         break;
