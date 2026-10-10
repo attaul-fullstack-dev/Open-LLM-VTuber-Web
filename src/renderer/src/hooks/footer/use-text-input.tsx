@@ -1,4 +1,5 @@
 import { useRef, useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useWebSocket } from '@/context/websocket-context';
 import { useAiState } from '@/context/ai-state-context';
 import { useInterrupt } from '@/components/canvas/live2d';
@@ -9,6 +10,15 @@ import { startChatLatency } from '@/utils/chat-latency';
 import { getUserTimezone } from '@/utils/user-timezone';
 import { useAvatarActivityState } from '@/context/avatar-activity-context';
 import { saveDraft, loadDraft, clearDraft, draftKey, resolvePostSendDraft } from '@/utils/composer-draft';
+import { toaster } from '@/components/ui/toaster';
+import {
+  AttachmentEntry,
+  MAX_ATTACHMENTS_TOTAL_BYTES,
+  loadAttachmentEntries,
+  mergeAttachments,
+  removeAttachment as removeAttachmentEntry,
+  validateAttachmentFile,
+} from '@/utils/attachments';
 
 function sessionDraftStorage(): Storage | null {
   try {
@@ -19,10 +29,25 @@ function sessionDraftStorage(): Storage | null {
 }
 
 export function useTextInput() {
+  const { t } = useTranslation();
   const [inputText, setInputText] = useState('');
-  const [uploadedImages, setUploadedImages] = useState<Array<{
-    source: 'upload'; data: string; mime_type: string;
-  }>>([]);
+  // Multi-file attachments. uploadedRef is the synchronous mirror of the
+  // state below: async FileReader completions and the send snapshot read
+  // the ref so rapid overlapping selections can never overwrite each other.
+  const [uploadedImages, setUploadedImages] = useState<AttachmentEntry[]>([]);
+  const uploadedRef = useRef<AttachmentEntry[]>([]);
+  // Serializes attachment appends so two selections finishing out of order
+  // compose instead of racing (no lost entries, one toast per refusal).
+  const appendChainRef = useRef<Promise<void>>(Promise.resolve());
+
+  const syncAttachments = (next: AttachmentEntry[]) => {
+    uploadedRef.current = next;
+    setUploadedImages(next);
+  };
+
+  const removeAttachment = (id: string) => {
+    syncAttachments(removeAttachmentEntry(uploadedRef.current, id));
+  };
   const [isComposing, setIsComposing] = useState(false);
   const isSendingRef = useRef(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -57,8 +82,11 @@ export function useTextInput() {
     // render behind React state at the instant the send button is tapped.
     // Read the native element as a fallback so a visible draft is never lost.
     const text = inputText.trim() || inputRef.current?.value.trim() || '';
+    // Snapshot attachments synchronously: files picked during the media
+    // capture await below belong to the NEXT message, never this one.
+    const outgoingAttachments = uploadedRef.current;
     if (
-      (!text && uploadedImages.length === 0)
+      (!text && outgoingAttachments.length === 0)
       || !wsContext
       || isSendingRef.current
     ) return;
@@ -73,6 +101,18 @@ export function useTextInput() {
     try {
       const timing = startChatLatency();
       const messageText = text || 'Describe this image.';
+
+      // Final aggregate guard (selection-time enforcement should already
+      // guarantee this; never silently drop here, refuse loudly instead).
+      const totalBytes = outgoingAttachments.reduce((sum, e) => sum + e.dataBytes, 0);
+      if (totalBytes > MAX_ATTACHMENTS_TOTAL_BYTES) {
+        toaster.create({
+          title: t('error.attachmentSendBlocked'),
+          type: 'error',
+          duration: 3000,
+        });
+        return;
+      }
 
       // A camera or screen track can stall on some mobile browsers. The text
       // message must remain sendable even when an optional frame cannot be read.
@@ -98,7 +138,18 @@ export function useTextInput() {
         // the active history instead of minting a new session when this
         // send lands before fetch-and-set-history completes.
         history_uid: currentHistoryUid,
-        images: [...capturedImages, ...uploadedImages],
+        images: [
+          ...capturedImages,
+          // name/size travel for backend error messages and future
+          // metadata; the model pipeline only consumes source/data/mime_type.
+          ...outgoingAttachments.map((entry) => ({
+            source: entry.source,
+            data: entry.data,
+            mime_type: entry.mimeType,
+            name: entry.name,
+            size: entry.size,
+          })),
+        ],
         request_id: timing.requestId,
         client_user_send_ms: timing.clientUserSendMs,
         timezone: getUserTimezone(),
@@ -123,7 +174,7 @@ export function useTextInput() {
       } else {
         setInputText('');
         if (inputRef.current) inputRef.current.value = '';
-        setUploadedImages([]);
+        syncAttachments([]);
         // The message left the building: the persisted draft is stale now.
         // This is the ONLY place the draft is cleared — never on reconnect,
         // history reload, remount, or streaming events.
@@ -136,20 +187,60 @@ export function useTextInput() {
 
   const handleFileSelect = async (files: FileList | null) => {
     if (!files?.length) return;
-    const imageFiles = Array.from(files).filter((file) => file.type.startsWith('image/'));
-    const loaded = await Promise.all(imageFiles.map((file) => new Promise<{
-      source: 'upload'; data: string; mime_type: string;
-    }>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve({
-        source: 'upload',
-        data: String(reader.result),
-        mime_type: file.type || 'image/jpeg',
+    // Pre-read gate per file: invalid files are reported and skipped
+    // individually, never silently dropped, never blocking their siblings.
+    const candidates: File[] = [];
+    for (const file of Array.from(files)) {
+      const verdict = validateAttachmentFile(file);
+      if (!verdict.ok) {
+        toaster.create({
+          title: t(
+            verdict.code === 'too-large'
+              ? 'error.attachmentTooLarge'
+              : 'error.attachmentNotImage',
+            { name: file.name || 'image' },
+          ),
+          type: 'error',
+          duration: 3000,
+        });
+        continue;
+      }
+      candidates.push(file);
+    }
+    if (candidates.length === 0) return;
+    // Per-file isolation: one unreadable file must not discard the rest.
+    const { loaded, failed } = await loadAttachmentEntries(candidates);
+    for (const failure of failed) {
+      toaster.create({
+        title: t('error.attachmentReadFailed', { name: failure.name }),
+        type: 'error',
+        duration: 3000,
       });
-      reader.onerror = () => reject(reader.error);
-      reader.readAsDataURL(file);
-    })));
-    setUploadedImages(loaded);
+    }
+    if (loaded.length === 0) return;
+    // Serialized append: overlapping selections compose via the ref mirror.
+    // A prior rejection must never wedge the chain, so recover first.
+    appendChainRef.current = appendChainRef.current
+      .catch(() => {})
+      .then(() => {
+        const result = mergeAttachments(uploadedRef.current, loaded);
+        syncAttachments(result.merged);
+        for (const dropped of result.droppedByCount) {
+          toaster.create({
+            title: t('error.attachmentLimitReached', { name: dropped.name }),
+            type: 'error',
+            duration: 3000,
+          });
+        }
+        for (const dropped of result.droppedByTotal) {
+          toaster.create({
+            title: t('error.attachmentTotalTooLarge', { name: dropped.name }),
+            type: 'error',
+            duration: 3000,
+          });
+        }
+      });
+    await appendChainRef.current;
   };
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -169,6 +260,8 @@ export function useTextInput() {
     setInputText: handleInputChange,
     handleSend,
     handleFileSelect,
+    removeAttachment,
+    attachments: uploadedImages,
     attachmentCount: uploadedImages.length,
     inputRef,
     handleKeyPress,

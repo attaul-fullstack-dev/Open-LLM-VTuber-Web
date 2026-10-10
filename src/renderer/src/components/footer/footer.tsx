@@ -1,9 +1,9 @@
 /* eslint-disable react/require-default-props */
 import {
-  Box, Textarea, IconButton,
+  Box, Textarea, IconButton, Text,
 } from '@chakra-ui/react';
 import {
-  FiPlus, FiMic, FiMicOff, FiVolume2, FiVolumeX, FiArrowUp,
+  FiPlus, FiMic, FiMicOff, FiVolume2, FiVolumeX, FiArrowUp, FiX,
 } from 'react-icons/fi';
 import {
   memo, RefObject, useEffect, useRef, useState,
@@ -15,6 +15,7 @@ import { getComposerMode } from '@/utils/composer-visibility';
 import { useFooter } from '@/hooks/footer/use-footer';
 import { audioManager } from '@/utils/audio-manager';
 import { useAvatarActivityState } from '@/context/avatar-activity-context';
+import { AttachmentEntry, formatFileSize } from '@/utils/attachments';
 
 // Type definitions
 interface FooterProps {
@@ -34,6 +35,8 @@ interface ComposerBarProps {
   onSoundToggle: () => void
   onSend: () => void
   onFileSelect?: (files: FileList | null) => void
+  onRemoveAttachment?: (id: string) => void
+  attachments?: AttachmentEntry[]
   attachmentCount?: number
   inputRef: RefObject<HTMLTextAreaElement>
 }
@@ -57,6 +60,8 @@ const ComposerBar = memo(({
   onSoundToggle,
   onSend,
   onFileSelect,
+  onRemoveAttachment,
+  attachments = [],
   attachmentCount = 0,
   inputRef,
 }: ComposerBarProps) => {
@@ -132,6 +137,53 @@ const ComposerBar = memo(({
     />
   );
 
+  // Attachment preview strip: only mounted while files are selected, so
+  // the composer layout is byte-identical when there is nothing to show.
+  // Wraps on narrow screens; names truncate instead of pushing controls.
+  const attachmentPreview = attachments.length === 0 ? null : (
+    <Box display="flex" flexWrap="wrap" gap={1.5} pb={2} maxW="100%">
+      {attachments.map((att) => (
+        <Box
+          key={att.id}
+          display="flex"
+          alignItems="center"
+          gap={1.5}
+          px={1.5}
+          py={1}
+          borderRadius="md"
+          borderWidth="1px"
+          maxW="100%"
+          minW="0"
+        >
+          <img
+            src={att.data}
+            alt={att.name}
+            width={32}
+            height={32}
+            style={{ objectFit: 'cover', borderRadius: 6, flexShrink: 0 }}
+          />
+          <Box minW="0">
+            <Text fontSize="xs" fontWeight="medium" truncate maxW="120px">
+              {att.name}
+            </Text>
+            <Text fontSize="xs" color="gray.500" whiteSpace="nowrap">
+              {formatFileSize(att.size)} · {att.mimeType}
+            </Text>
+          </Box>
+          <IconButton
+            aria-label={t('footer.removeAttachment')}
+            variant="ghost"
+            size="xs"
+            flexShrink={0}
+            onClick={() => onRemoveAttachment?.(att.id)}
+          >
+            <FiX size="14" />
+          </IconButton>
+        </Box>
+      ))}
+    </Box>
+  );
+
   // SINGLE render tree: the SAME <textarea> DOM node stays mounted in
   // both modes, so focus/selection survive compact <-> expanded and the
   // Android keyboard never dismisses. Mode only flips CSS on one stable
@@ -142,6 +194,7 @@ const ComposerBar = memo(({
   return (
     <Box position="relative" width="100%" minW="0">
       {measurer}
+      {attachmentPreview}
       <Box
         {...footerStyles.footer.composerBar}
         display={expanded ? 'grid' : 'flex'}
@@ -163,6 +216,7 @@ const ComposerBar = memo(({
           ref={fileInputRef}
           type="file"
           accept="image/*"
+          multiple
           hidden
           onChange={(event) => {
             onFileSelect?.(event.target.files);
@@ -232,6 +286,8 @@ function Footer({ isCollapsed = false }: FooterProps): JSX.Element {
     micOn,
     handleSend,
     handleFileSelect,
+    removeAttachment,
+    attachments,
     attachmentCount,
     inputRef,
   } = useFooter();
@@ -258,6 +314,8 @@ function Footer({ isCollapsed = false }: FooterProps): JSX.Element {
           onSoundToggle={handleSoundToggle}
           onSend={handleSend}
           onFileSelect={handleFileSelect}
+          onRemoveAttachment={removeAttachment}
+          attachments={attachments}
           attachmentCount={attachmentCount}
           inputRef={inputRef}
         />

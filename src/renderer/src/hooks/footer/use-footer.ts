@@ -16,6 +16,8 @@ export const useFooter = () => {
     handleCompositionEnd,
     handleSend,
     handleFileSelect,
+    removeAttachment,
+    attachments,
     attachmentCount,
     inputRef,
   } = useTextInput();
@@ -55,6 +57,8 @@ export const useFooter = () => {
     handleCompositionEnd,
     handleSend,
     handleFileSelect,
+    removeAttachment,
+    attachments,
     attachmentCount,
     inputRef,
     handleInterrupt,

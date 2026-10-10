@@ -109,7 +109,8 @@
     "cameraControl": "点击启动摄像头",
     "cameraStopping": "点击停止摄像头",
     "screenControl": "点击开始屏幕共享",
-    "screenStopping": "点击停止屏幕共享"
+    "screenStopping": "点击停止屏幕共享",
+    "removeAttachment": "删除附件"
   },
   "sidebar": {
     "camera": "摄像头",
@@ -182,7 +183,13 @@
     "failedCapture": "捕获{{source}}帧失败",
     "failedParseWebSocket": "解析WebSocket消息失败",
     "websocketNotOpen": "WebSocket未连接",
-    "vadMisfire": "检测到语音但过于简短，请尝试提高音量或说得更久一些，或调整识别设置（降低语音识别阈值、降低负面语音阈值、减少验证帧数）"
+    "vadMisfire": "检测到语音但过于简短，请尝试提高音量或说得更久一些，或调整识别设置（降低语音识别阈值、降低负面语音阈值、减少验证帧数）",
+    "attachmentNotImage": "{{name}}不是图片，已跳过",
+    "attachmentTooLarge": "{{name}}超过单文件5 MB限制，已跳过",
+    "attachmentLimitReached": "{{name}}已跳过：每条消息最多5个附件",
+    "attachmentReadFailed": "无法读取{{name}}，已跳过",
+    "attachmentTotalTooLarge": "{{name}}已跳过：附件总大小超过10 MB",
+    "attachmentSendBlocked": "附件总大小超过10 MB；请删除部分文件后重新发送"
   },
   "aiState": {
     "idle": "空闲",
