@@ -186,7 +186,7 @@
     "vadMisfire": "检测到语音但过于简短，请尝试提高音量或说得更久一些，或调整识别设置（降低语音识别阈值、降低负面语音阈值、减少验证帧数）",
     "attachmentNotImage": "{{name}}不是图片，已跳过",
     "attachmentTooLarge": "{{name}}超过单文件5 MB限制，已跳过",
-    "attachmentLimitReached": "{{name}}已跳过：每条消息最多5个附件",
+    "attachmentLimitReached": "{{name}}已跳过：每条消息最多10个附件",
     "attachmentReadFailed": "无法读取{{name}}，已跳过",
     "attachmentTotalTooLarge": "{{name}}已跳过：附件总大小超过10 MB",
     "attachmentSendBlocked": "附件总大小超过10 MB；请删除部分文件后重新发送"

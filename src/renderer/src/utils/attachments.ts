@@ -12,7 +12,7 @@
  */
 
 /** Hard cap: attachments carried by a single chat message. */
-export const MAX_ATTACHMENTS_PER_MESSAGE = 5;
+export const MAX_ATTACHMENTS_PER_MESSAGE = 10;
 /** Hard cap: decoded bytes of one attachment. */
 export const MAX_ATTACHMENT_FILE_BYTES = 5 * 1024 * 1024;
 /** Hard cap: decoded bytes of all attachments in one message combined. */

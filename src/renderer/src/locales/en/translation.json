@@ -186,7 +186,7 @@
     "vadMisfire": "Voice detected but too brief. Try speaking louder/longer, or adjust settings (lower speech threshold, lower negative threshold, reduce redemption frames).",
     "attachmentNotImage": "{{name}} is not an image and was skipped",
     "attachmentTooLarge": "{{name}} exceeds the 5 MB per-file limit and was skipped",
-    "attachmentLimitReached": "{{name}} was skipped: at most 5 attachments per message",
+    "attachmentLimitReached": "{{name}} was skipped: at most 10 attachments per message",
     "attachmentReadFailed": "Could not read {{name}}; it was skipped",
     "attachmentTotalTooLarge": "{{name}} was skipped: attachments exceed 10 MB in total",
     "attachmentSendBlocked": "Attachments exceed 10 MB in total; remove some files and resend"

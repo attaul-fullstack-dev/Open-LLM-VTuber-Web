@@ -203,7 +203,7 @@
     "vadMisfire": "Suara terlalu singkat. Coba bicara lebih keras atau lebih lama.",
     "attachmentNotImage": "{{name}} bukan gambar dan dilewati",
     "attachmentTooLarge": "{{name}} melebihi batas 5 MB per file dan dilewati",
-    "attachmentLimitReached": "{{name}} dilewati: maksimal 5 lampiran per pesan",
+    "attachmentLimitReached": "{{name}} dilewati: maksimal 10 lampiran per pesan",
     "attachmentReadFailed": "Tidak bisa membaca {{name}}; file dilewati",
     "attachmentTotalTooLarge": "{{name}} dilewati: total lampiran melebihi 10 MB",
     "attachmentSendBlocked": "Total lampiran melebihi 10 MB; hapus sebagian file lalu kirim ulang"

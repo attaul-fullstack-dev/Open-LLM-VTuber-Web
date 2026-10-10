@@ -1,9 +1,9 @@
 /* eslint-disable react/require-default-props */
 import {
-  Box, Textarea, IconButton, Text,
+  Box, Textarea, IconButton,
 } from '@chakra-ui/react';
 import {
-  FiPlus, FiMic, FiMicOff, FiVolume2, FiVolumeX, FiArrowUp, FiX,
+  FiPlus, FiMic, FiMicOff, FiVolume2, FiVolumeX, FiArrowUp, FiX, FiImage,
 } from 'react-icons/fi';
 import {
   memo, RefObject, useEffect, useRef, useState,
@@ -15,7 +15,7 @@ import { getComposerMode } from '@/utils/composer-visibility';
 import { useFooter } from '@/hooks/footer/use-footer';
 import { audioManager } from '@/utils/audio-manager';
 import { useAvatarActivityState } from '@/context/avatar-activity-context';
-import { AttachmentEntry, formatFileSize } from '@/utils/attachments';
+import { AttachmentEntry } from '@/utils/attachments';
 
 // Type definitions
 interface FooterProps {
@@ -44,6 +44,74 @@ interface ComposerBarProps {
 // Visual-only cap for auto-expand; beyond this the textarea scrolls.
 const INPUT_MAX_HEIGHT = 132;
 
+// One thumbnail: image only (ChatGPT-style), no filename/size/type text.
+// The × button overlays the image's own top-right corner. Removal is by
+// stable attachment id, so same-name twins are never confused.
+const AttachmentThumb = memo(({
+  entry,
+  removeLabel,
+  onRemove,
+}: {
+  entry: AttachmentEntry;
+  removeLabel: string;
+  onRemove?: (id: string) => void;
+}) => {
+  const [failed, setFailed] = useState(false);
+  return (
+    <Box
+      position="relative"
+      boxSize="72px"
+      borderRadius="md"
+      overflow="hidden"
+      borderWidth="1px"
+      flexShrink={0}
+    >
+      {failed ? (
+        <Box
+          width="100%"
+          height="100%"
+          display="flex"
+          alignItems="center"
+          justifyContent="center"
+          bg="gray.100"
+          color="gray.500"
+        >
+          <FiImage size="24" />
+        </Box>
+      ) : (
+        <img
+          src={entry.data}
+          alt=""
+          width={72}
+          height={72}
+          style={{ objectFit: 'cover', display: 'block', width: '100%', height: '100%' }}
+          onError={() => setFailed(true)}
+        />
+      )}
+      <IconButton
+        aria-label={removeLabel}
+        position="absolute"
+        top="4px"
+        right="4px"
+        size="xs"
+        minW="24px"
+        h="24px"
+        borderRadius="full"
+        bg="blackAlpha.700"
+        color="white"
+        _hover={{ bg: 'blackAlpha.800' }}
+        onClick={(e) => {
+          e.stopPropagation();
+          onRemove?.(entry.id);
+        }}
+      >
+        <FiX size="14" />
+      </IconButton>
+    </Box>
+  );
+});
+
+AttachmentThumb.displayName = 'AttachmentThumb';
 // Reusable components
 // Single unified composer bar: + | input | speaker | mic | SEND.
 // All icons come from one Feather set for consistent stroke. Behavior
@@ -137,49 +205,31 @@ const ComposerBar = memo(({
     />
   );
 
-  // Attachment preview strip: only mounted while files are selected, so
+
+  // Attachment preview grid: only mounted while files are selected, so
   // the composer layout is byte-identical when there is nothing to show.
-  // Wraps on narrow screens; names truncate instead of pushing controls.
+  // Fixed 72px tracks wrap without stretching (one image stays a small
+  // thumbnail) and never overflow horizontally; taller sets scroll inside
+  // the strip instead of pushing the input or send button away.
   const attachmentPreview = attachments.length === 0 ? null : (
-    <Box display="flex" flexWrap="wrap" gap={1.5} pb={2} maxW="100%">
+    <Box
+      display="grid"
+      gridTemplateColumns="repeat(auto-fill, 72px)"
+      justifyContent="start"
+      gap={2}
+      pb={2}
+      maxW="100%"
+      maxH="168px"
+      overflowY="auto"
+      overflowX="hidden"
+    >
       {attachments.map((att) => (
-        <Box
+        <AttachmentThumb
           key={att.id}
-          display="flex"
-          alignItems="center"
-          gap={1.5}
-          px={1.5}
-          py={1}
-          borderRadius="md"
-          borderWidth="1px"
-          maxW="100%"
-          minW="0"
-        >
-          <img
-            src={att.data}
-            alt={att.name}
-            width={32}
-            height={32}
-            style={{ objectFit: 'cover', borderRadius: 6, flexShrink: 0 }}
-          />
-          <Box minW="0">
-            <Text fontSize="xs" fontWeight="medium" truncate maxW="120px">
-              {att.name}
-            </Text>
-            <Text fontSize="xs" color="gray.500" whiteSpace="nowrap">
-              {formatFileSize(att.size)} · {att.mimeType}
-            </Text>
-          </Box>
-          <IconButton
-            aria-label={t('footer.removeAttachment')}
-            variant="ghost"
-            size="xs"
-            flexShrink={0}
-            onClick={() => onRemoveAttachment?.(att.id)}
-          >
-            <FiX size="14" />
-          </IconButton>
-        </Box>
+          entry={att}
+          removeLabel={t('footer.removeAttachment')}
+          onRemove={onRemoveAttachment}
+        />
       ))}
     </Box>
   );

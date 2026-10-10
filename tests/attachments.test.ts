@@ -170,6 +170,33 @@ test('loadAttachmentEntries keeps siblings when one file fails', async () => {
   assert.notEqual(outcome.loaded[0].id, outcome.loaded[1].id);
 });
 
+test('boundary: 1, 2, 5 and 10 images pass; the 11th is refused', () => {
+  __resetAttachmentSeqForTests();
+  for (const n of [1, 2, 5, 10]) {
+    const batch = Array.from({ length: n }, (_, i) => entry({ name: `f${i}.png` }));
+    const result = mergeAttachments([], batch);
+    assert.equal(result.merged.length, n, `n=${n}`);
+    assert.equal(result.droppedByCount.length, 0, `n=${n}`);
+  }
+  const eleven = Array.from({ length: 11 }, (_, i) => entry({ name: `f${i}.png` }));
+  const over = mergeAttachments([], eleven);
+  assert.equal(over.merged.length, 10);
+  assert.deepEqual(over.droppedByCount.map((e) => e.name), ['f10.png']);
+});
+
+test('boundary: gradual selection up to 10 keeps everything; past it keeps prior', () => {
+  __resetAttachmentSeqForTests();
+  let state: AttachmentEntry[] = [];
+  for (let i = 0; i < 10; i += 1) {
+    state = mergeAttachments(state, [entry({ name: `g${i}.png` })]).merged;
+  }
+  assert.equal(state.length, 10);
+  const before = state.map((e) => e.id);
+  const past = mergeAttachments(state, [entry({ name: 'extra.png' })]);
+  assert.deepEqual(past.merged.map((e) => e.id), before);
+  assert.deepEqual(past.droppedByCount.map((e) => e.name), ['extra.png']);
+});
+
 test('serial composition of overlapping selections loses nothing', () => {
   __resetAttachmentSeqForTests();
   // Two selections finishing back-to-back must compose, not overwrite.
