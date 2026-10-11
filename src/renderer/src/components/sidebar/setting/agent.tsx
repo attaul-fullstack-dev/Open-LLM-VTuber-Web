@@ -135,7 +135,18 @@ function Agent({ onSave, onCancel }: AgentProps): JSX.Element {
           memories={memories}
           open={memoryDialogOpen}
           disabled={wsState !== 'OPEN'}
-          onOpenChange={setMemoryDialogOpen}
+          onOpenChange={(open) => {
+            setMemoryDialogOpen(open);
+            // Opening the dialog is an explicit user action: the list shown
+            // would otherwise be frozen at history-resume time (or the last
+            // mutation), so facts stored since -- which Mili already recalls
+            // -- never appeared until the history changed. Refetch on every
+            // open; the backend serves the authoritative file, so this can
+            // only make the list fresher, never staler.
+            if (open && wsState === 'OPEN') {
+              sendMessage({ type: 'fetch-character-memory' });
+            }
+          }}
           onDelete={(memory) => sendMessage({
             type: 'delete-character-memory',
             text: memory.text,
