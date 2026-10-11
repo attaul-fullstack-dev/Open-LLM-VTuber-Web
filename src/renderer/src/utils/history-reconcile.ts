@@ -28,6 +28,16 @@ export interface ChatRow {
   role: 'ai' | 'human';
   content: string;
   type?: string;
+  /**
+   * Backend turn request_id (AI rows). Turn identity is what lets a late
+   * canonical final find its bubble after a resync; it must survive the
+   * server -> UI round trip unchanged.
+   */
+  requestId?: string;
+  /** Display metadata persisted by the backend (speaker + sent time). */
+  name?: string;
+  avatar?: string;
+  timestamp?: string;
 }
 
 export interface PendingEntry {
@@ -174,16 +184,23 @@ export function reconcileHistoryData(
   queue.forEach((entry, pi) => {
     if (position.has(pi) || clearedAi.has(pi)) return; // confirmed
     remaining.push(entry);
+    // Carry the full entry, not just id/role/content. Re-inserting a
+    // human row used to drop `requestId`, which meant the AI answer that
+    // this human turn just triggered could no longer be matched to its
+    // turn identity: `applyCanonicalFinalToBubble` turned into a no-op and
+    // the stale partial bubble stayed on screen.
+    const restored = {
+      id: entry.id,
+      role: entry.role,
+      content: entry.content,
+      requestId: entry.requestId,
+    };
     const anchor = anchorAfter[pi];
     if (entry.role === 'human' && anchor !== null && anchor !== undefined) {
-      out.splice(anchor + inserted, 0, {
-        id: entry.id,
-        role: entry.role,
-        content: entry.content,
-      });
+      out.splice(anchor + inserted, 0, restored);
       inserted += 1;
     } else {
-      out.push({ id: entry.id, role: entry.role, content: entry.content });
+      out.push(restored);
     }
   });
 

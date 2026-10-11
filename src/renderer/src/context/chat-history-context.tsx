@@ -363,6 +363,19 @@ export function ChatHistoryProvider({ children }: { children: React.ReactNode })
         role: row?.role,
         content: typeof row?.content === 'string' ? row.content : '',
         type: row?.type,
+        // Turn identity and display metadata must survive the round trip.
+        //
+        // `requestId` is what `applyCanonicalFinalToBubble` matches on, so
+        // dropping it makes the canonical final a no-op and leaves the stale
+        // partial bubble on screen after a mid-stream resync.
+        //
+        // `name`/`avatar`/`timestamp` are persisted by the backend and
+        // rendered by the panel; dropping them made every loaded AI bubble
+        // fall back to the default avatar/speaker (wrong in group chats).
+        requestId: row?.requestId,
+        name: row?.name,
+        avatar: row?.avatar,
+        timestamp: row?.timestamp,
       })),
       scoped.map(clonePendingEntry),
     );

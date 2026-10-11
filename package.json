@@ -22,6 +22,7 @@
     "build:linux": "electron-vite build && electron-builder --linux",
     "dev:web": "vite serve src/renderer --config vite.config.ts",
     "build:web": "vite build --config vite.config.ts --mode web",
+    "test": "node --import ./tests/register-loader.mjs --test tests/*.test.ts tests/*.test.mjs",
     "extract-translations": "i18next-scanner --config i18next-scanner.config.js"
   },
   "dependencies": {

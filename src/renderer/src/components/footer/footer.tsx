@@ -14,6 +14,7 @@ import { miliTokens } from '@/theme/design-tokens';
 import { getComposerMode } from '@/utils/composer-visibility';
 import { useFooter } from '@/hooks/footer/use-footer';
 import { audioManager } from '@/utils/audio-manager';
+import { audioTaskQueue } from '@/utils/task-queue';
 import { useAvatarActivityState } from '@/context/avatar-activity-context';
 import { AttachmentEntry } from '@/utils/attachments';
 
@@ -345,7 +346,16 @@ function Footer({ isCollapsed = false }: FooterProps): JSX.Element {
   const handleSoundToggle = () => {
     const nextSoundOn = !soundOn;
     audioManager.setMuted(!nextSoundOn);
-    if (!nextSoundOn) endAllSpeaking();
+    if (!nextSoundOn) {
+      endAllSpeaking();
+      // The quick mute stops the current element but, unlike the Voice
+      // Output OFF path, did not clear the pending queue. The queued tasks
+      // stay in `activeTasks`, so their playback promises never settle and
+      // `waitForCompletion()` never resolves -- the turn lifecycle wedges
+      // and no `frontend-playback-complete` is ever emitted. Use the same
+      // primitive the interruption path uses.
+      audioTaskQueue.clearQueue();
+    }
     setSoundOn(nextSoundOn);
   };
 
