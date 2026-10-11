@@ -14,7 +14,7 @@ import {
   DialogRoot,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { attachmentDisplayName } from '@/utils/attachment-memory-status';
+import { attachmentDisplayName, attachmentSourceKey } from '@/utils/attachment-memory-status';
 import type {
   AttachmentDeleteResult,
   AttachmentMemoryRecord,
@@ -51,8 +51,18 @@ function remainingLabel(
   }
 }
 
-function OutcomeBanner({ lastResult }: { lastResult: AttachmentDeleteResult }): JSX.Element | null {
-  const { t } = useTranslation();
+function sourceLabel(
+  t: (key: string, options?: Record<string, unknown>) => string,
+  source: string | undefined,
+): string {
+  const key = attachmentSourceKey(source);
+  if (key !== null) {
+    return t(key);
+  }
+  return source || '';
+}
+
+function OutcomeBanner({ lastResult }: { lastResult: AttachmentDeleteResult }): JSX.Element | null {  const { t } = useTranslation();
   const { outcome, remaining } = lastResult;
   if (outcome === 'legacy-success') {
     return (
@@ -270,7 +280,7 @@ export function AttachmentMemoryDialog({
                       </Text>
                       <Text color={miliTokens.color.textMuted} fontSize="xs" pt={1}>
                         {[
-                          record.source,
+                          sourceLabel(t, record.source),
                           (record.received_at || '').slice(0, 10),
                           record.status === 'failed'
                             ? t('settings.agent.attachmentStatusFailed')

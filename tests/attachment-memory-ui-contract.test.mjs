@@ -79,6 +79,17 @@ test('resolver never upgrades a bare success flag into a complete claim', () => 
   assert.match(status, /unknown/);
 });
 
+test('attachment dialog localizes origin instead of raw source value', () => {
+  assert.match(dialog, /attachmentSourceKey/);
+  assert.match(dialog, /sourceLabel/);
+  assert.doesNotMatch(dialog, /\{\s*record\.source\s*[,}\]]/);
+});
+
+test('Indonesian locale has no English remnants in attachment strings', () => {
+  assert.notEqual(id.notification.attachmentRemainingWorld, 'world state');
+  assert.equal(id.settings.agent.attachmentSourceUpload, 'Diunggah');
+});
+
 for (const [name, locale] of [['en', en], ['id', id], ['zh', zh]]) {
   test(`locale ${name} has attachment memory strings`, () => {
     const agentKeys = locale.settings.agent;
@@ -87,9 +98,12 @@ for (const [name, locale] of [['en', en], ['id', id], ['zh', zh]]) {
       'attachmentCount', 'noAttachmentMemory', 'forgetAttachment',
       'deleteAttachmentConfirm', 'clearAttachments', 'clearAttachmentsConfirm',
       'untitledAttachment', 'attachmentNeverRead', 'attachmentStatusFailed',
+      'attachmentSourceUpload', 'attachmentSourceCamera', 'attachmentSourceScreen',
+      'attachmentSourceClipboard',
       'purgeComplete', 'purgePartial', 'purgeFailed', 'purgeUnknown', 'purgeLegacy',
     ]) {
       assert.equal(typeof agentKeys[key], 'string', `${name}: settings.agent.${key}`);
+      assert.ok(agentKeys[key].length > 0, `${name}: settings.agent.${key} non-empty`);
     }
     const notificationKeys = locale.notification;
     for (const key of [

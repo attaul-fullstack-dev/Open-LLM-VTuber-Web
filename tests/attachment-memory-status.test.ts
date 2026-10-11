@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   attachmentDisplayName,
+  attachmentSourceKey,
   collectRemainingSources,
   normalizeAttachmentRecords,
   resolveAttachmentDeleteOutcome,
@@ -167,4 +168,18 @@ test('display name prefers filename and falls back safely', () => {
   assert.equal(attachmentDisplayName({ filename: '  ' }, 'fallback'), 'fallback');
   assert.equal(attachmentDisplayName({}, 'fallback'), 'fallback');
   assert.equal(attachmentDisplayName(null, 'fallback'), 'fallback');
+});
+
+test('source key maps known origins to i18n keys, unknown stays raw', () => {
+  assert.equal(attachmentSourceKey('upload'), 'settings.agent.attachmentSourceUpload');
+  assert.equal(attachmentSourceKey('camera'), 'settings.agent.attachmentSourceCamera');
+  assert.equal(attachmentSourceKey('screen'), 'settings.agent.attachmentSourceScreen');
+  assert.equal(attachmentSourceKey('clipboard'), 'settings.agent.attachmentSourceClipboard');
+  assert.equal(attachmentSourceKey(' Upload '), 'settings.agent.attachmentSourceUpload');
+  assert.equal(attachmentSourceKey('CAMERA'), 'settings.agent.attachmentSourceCamera');
+  assert.equal(attachmentSourceKey('carrier-pigeon'), null);
+  assert.equal(attachmentSourceKey(''), null);
+  assert.equal(attachmentSourceKey(null), null);
+  assert.equal(attachmentSourceKey(undefined), null);
+  assert.equal(attachmentSourceKey(42), null);
 });

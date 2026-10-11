@@ -212,3 +212,23 @@ export function attachmentDisplayName(
   const filename = cleanString(record?.filename);
   return filename ?? fallback;
 }
+
+const ATTACHMENT_SOURCE_KEYS: Record<string, string> = {
+  upload: 'settings.agent.attachmentSourceUpload',
+  camera: 'settings.agent.attachmentSourceCamera',
+  screen: 'settings.agent.attachmentSourceScreen',
+  clipboard: 'settings.agent.attachmentSourceClipboard',
+};
+
+/**
+ * i18n key for an attachment origin (`upload`, `camera`, `screen`,
+ * `clipboard`). Returns null for missing/unknown values so callers can
+ * fall back to the raw value instead of rendering nothing.
+ */
+export function attachmentSourceKey(source: unknown): string | null {
+  if (typeof source !== 'string') {
+    return null;
+  }
+  const key = ATTACHMENT_SOURCE_KEYS[source.trim().toLowerCase()];
+  return key ?? null;
+}

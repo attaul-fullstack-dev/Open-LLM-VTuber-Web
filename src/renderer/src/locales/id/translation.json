@@ -45,7 +45,7 @@
     "attachmentRemainingTranscripts": "{{count}} transkrip chat",
     "attachmentRemainingSummaries": "{{count}} ringkasan percakapan",
     "attachmentRemainingCharacter": "{{count}} fakta jangka panjang",
-    "attachmentRemainingWorld": "world state"
+    "attachmentRemainingWorld": "status dunia"
   },
   "history": {
     "chatHistoryList": "Riwayat Chat",
@@ -184,6 +184,10 @@
       "untitledAttachment": "Lampiran tanpa nama",
       "attachmentNeverRead": "Tidak pernah berhasil dibaca.",
       "attachmentStatusFailed": "tak terbaca",
+      "attachmentSourceUpload": "Diunggah",
+      "attachmentSourceCamera": "Kamera",
+      "attachmentSourceScreen": "Layar",
+      "attachmentSourceClipboard": "Papan klip",
       "purgeComplete": "Terlupakan sepenuhnya — tidak ada salinan tersisa.",
       "purgePartial": "Terlupakan sebagian — salinan masih ada di:",
       "purgeFailed": "Lampiran ini gagal dilupakan.",
