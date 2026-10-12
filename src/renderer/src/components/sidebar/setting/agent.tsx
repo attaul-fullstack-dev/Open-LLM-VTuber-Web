@@ -12,6 +12,7 @@ import {
   CharacterMemoryDialog,
   CharacterMemoryItem,
   CharacterMemoryLauncher,
+  MemoryOverview,
 } from './character-memory-dialog';
 import {
   AttachmentMemoryDialog,
@@ -38,6 +39,7 @@ function Agent({ onSave, onCancel }: AgentProps): JSX.Element {
   const { currentHistoryUid } = useChatHistory();
   const [memories, setMemories] = useState<CharacterMemoryItem[]>([]);
   const [memoryDialogOpen, setMemoryDialogOpen] = useState(false);
+  const [memoryOverview, setMemoryOverview] = useState<MemoryOverview | null>(null);
   const [attachmentMemories, setAttachmentMemories] = useState<AttachmentMemoryRecord[]>([]);
   const [attachmentDialogOpen, setAttachmentDialogOpen] = useState(false);
   const [lastAttachmentDelete, setLastAttachmentDelete] = useState<AttachmentDeleteResult | null>(null);
@@ -52,13 +54,22 @@ function Agent({ onSave, onCancel }: AgentProps): JSX.Element {
     const subscription = wsService.onMessage((message: MessageEvent) => {
       if (message.type === 'character-memory') {
         setMemories(message.memories || []);
+      } else if (message.type === 'memory-overview') {
+        // The unified Memory Manager snapshot: facts feed the launcher
+        // count, everything feeds the dialog sections.
+        const overview = (message.overview || null) as MemoryOverview | null;
+        setMemoryOverview(overview);
+        setMemories((overview && overview.facts) || []);
       } else if (
         message.type === 'character-memory-deleted'
         || message.type === 'character-memory-reset'
         || message.type === 'character-state-reset'
+        || message.type === 'episodic-event-deleted'
+        || message.type === 'interaction-preference-deleted'
+        || message.type === 'future-intention-cancelled'
       ) {
-        // Refresh the list after any memory mutation.
-        sendMessage({ type: 'fetch-character-memory' });
+        // Refresh the unified list after any memory mutation.
+        sendMessage({ type: 'fetch-memory-overview' });
       } else if (message.type === 'attachment-memories') {
         setAttachmentMemories(normalizeAttachmentRecords(message.memories));
       } else if (message.type === 'attachment-memory-deleted') {
@@ -92,7 +103,7 @@ function Agent({ onSave, onCancel }: AgentProps): JSX.Element {
       return;
     }
     lastFetchedHistoryUidRef.current = currentHistoryUid ?? null;
-    sendMessage({ type: 'fetch-character-memory' });
+    sendMessage({ type: 'fetch-memory-overview' });
     sendMessage({ type: 'fetch-attachment-memories' });
   }, [wsState, currentHistoryUid, sendMessage]);
 
@@ -133,6 +144,7 @@ function Agent({ onSave, onCancel }: AgentProps): JSX.Element {
         />
         <CharacterMemoryDialog
           memories={memories}
+          overview={memoryOverview}
           open={memoryDialogOpen}
           disabled={wsState !== 'OPEN'}
           onOpenChange={(open) => {
@@ -144,7 +156,7 @@ function Agent({ onSave, onCancel }: AgentProps): JSX.Element {
             // open; the backend serves the authoritative file, so this can
             // only make the list fresher, never staler.
             if (open && wsState === 'OPEN') {
-              sendMessage({ type: 'fetch-character-memory' });
+              sendMessage({ type: 'fetch-memory-overview' });
             }
           }}
           onDelete={(memory) => sendMessage({
@@ -152,6 +164,18 @@ function Agent({ onSave, onCancel }: AgentProps): JSX.Element {
             text: memory.text,
           })}
           onDeleteAll={() => sendMessage({ type: 'reset-character-memory' })}
+          onDeleteEpisodic={(eventId) => sendMessage({
+            type: 'delete-episodic-event',
+            event_id: eventId,
+          })}
+          onDeletePreference={(preferenceId) => sendMessage({
+            type: 'delete-interaction-preference',
+            preference_id: preferenceId,
+          })}
+          onCancelIntention={(intentionId) => sendMessage({
+            type: 'cancel-future-intention',
+            intention_id: intentionId,
+          })}
         />
         <AttachmentMemoryLauncher
           count={attachmentMemories.length}

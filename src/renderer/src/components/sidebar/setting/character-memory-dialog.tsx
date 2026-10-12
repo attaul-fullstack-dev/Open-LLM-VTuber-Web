@@ -39,13 +39,54 @@ function memoryDateLabel(addedAt: string | undefined): string {
   return match ? match[1] : '';
 }
 
+export interface MemoryPreferenceItem {
+  id: string
+  category: string
+  polarity: string
+  text: string
+  updated_at?: string
+}
+
+export interface MemoryIntentionItem {
+  id: string
+  text: string
+  due_at?: string
+}
+
+export interface MemoryEpisodicItem {
+  id: string
+  event_text: string
+  occurred_at?: string | null
+}
+
+export interface MemoryWorldSnapshot {
+  location?: string
+  activity?: string
+  energy?: number | null
+  mood?: string
+  time_context?: string
+  last_update_at?: string
+}
+
+export interface MemoryOverview {
+  facts: CharacterMemoryItem[]
+  preferences: MemoryPreferenceItem[]
+  intentions: MemoryIntentionItem[]
+  episodic: { total: number, events: MemoryEpisodicItem[] }
+  world: MemoryWorldSnapshot | null
+}
+
 interface CharacterMemoryDialogProps {
   memories: CharacterMemoryItem[]
+  overview: MemoryOverview | null
   open: boolean
   disabled?: boolean
   onOpenChange: (open: boolean) => void
   onDelete: (memory: CharacterMemoryItem) => void
   onDeleteAll: () => void
+  onDeleteEpisodic: (eventId: string) => void
+  onDeletePreference: (preferenceId: string) => void
+  onCancelIntention: (intentionId: string) => void
 }
 
 export function CharacterMemoryLauncher({
@@ -104,13 +145,21 @@ export function CharacterMemoryLauncher({
 
 export function CharacterMemoryDialog({
   memories,
+  overview,
   open,
   disabled = false,
   onOpenChange,
   onDelete,
   onDeleteAll,
+  onDeleteEpisodic,
+  onDeletePreference,
+  onCancelIntention,
 }: CharacterMemoryDialogProps): JSX.Element {
   const { t } = useTranslation();
+  const preferences = (overview && overview.preferences) || [];
+  const intentions = (overview && overview.intentions) || [];
+  const episodic = (overview && overview.episodic) || { total: 0, events: [] };
+  const world = (overview && overview.world) || null;
 
   return (
     <DialogRoot open={open} onOpenChange={(details) => onOpenChange(details.open)}>
@@ -233,6 +282,212 @@ export function CharacterMemoryDialog({
                   </IconButton>
                 </Flex>
               ))}
+            </Stack>
+          )}
+
+          {preferences.length > 0 && (
+            <Stack gap={2} mt={6}>
+              <Text color={miliTokens.color.textPrimary} fontSize="sm" fontWeight="semibold">
+                {t('settings.agent.memorySectionPreferences', { count: preferences.length })}
+              </Text>
+              {preferences.map((preference) => (
+                <Flex
+                  key={preference.id}
+                  align="flex-start"
+                  gap={3}
+                  p={{ base: 3, sm: 4 }}
+                  borderRadius="xl"
+                  borderWidth="1px"
+                  borderColor={miliTokens.color.border}
+                  bg={miliTokens.color.surface}
+                >
+                  <Stack flex="1" minWidth={0} gap={1}>
+                    <Text
+                      color={miliTokens.color.textPrimary}
+                      fontSize="sm"
+                      lineHeight="1.5"
+                      whiteSpace="pre-wrap"
+                      overflowWrap="anywhere"
+                    >
+                      {preference.text}
+                    </Text>
+                    <Text color={miliTokens.color.textMuted} fontSize="xs">
+                      {[
+                        preference.category,
+                        preference.polarity,
+                        memoryDateLabel(preference.updated_at),
+                      ].filter(Boolean).join(' · ')}
+                    </Text>
+                  </Stack>
+                  <IconButton
+                    aria-label={t('settings.agent.forgetPreference')}
+                    title={t('settings.agent.forgetPreference')}
+                    variant="ghost"
+                    colorPalette="red"
+                    color="red.300"
+                    width="44px"
+                    height="44px"
+                    minWidth="44px"
+                    flexShrink={0}
+                    onClick={() => {
+                      if (window.confirm(t('settings.agent.deletePreferenceConfirm'))) {
+                        onDeletePreference(preference.id);
+                      }
+                    }}
+                  >
+                    <FiTrash2 />
+                  </IconButton>
+                </Flex>
+              ))}
+            </Stack>
+          )}
+
+          {intentions.length > 0 && (
+            <Stack gap={2} mt={6}>
+              <Text color={miliTokens.color.textPrimary} fontSize="sm" fontWeight="semibold">
+                {t('settings.agent.memorySectionIntentions', { count: intentions.length })}
+              </Text>
+              {intentions.map((intention) => (
+                <Flex
+                  key={intention.id}
+                  align="flex-start"
+                  gap={3}
+                  p={{ base: 3, sm: 4 }}
+                  borderRadius="xl"
+                  borderWidth="1px"
+                  borderColor={miliTokens.color.border}
+                  bg={miliTokens.color.surface}
+                >
+                  <Stack flex="1" minWidth={0} gap={1}>
+                    <Text
+                      color={miliTokens.color.textPrimary}
+                      fontSize="sm"
+                      lineHeight="1.5"
+                      whiteSpace="pre-wrap"
+                      overflowWrap="anywhere"
+                    >
+                      {intention.text}
+                    </Text>
+                    {memoryDateLabel(intention.due_at) && (
+                      <Text color={miliTokens.color.textMuted} fontSize="xs">
+                        {memoryDateLabel(intention.due_at)}
+                      </Text>
+                    )}
+                  </Stack>
+                  <IconButton
+                    aria-label={t('settings.agent.cancelIntention')}
+                    title={t('settings.agent.cancelIntention')}
+                    variant="ghost"
+                    colorPalette="red"
+                    color="red.300"
+                    width="44px"
+                    height="44px"
+                    minWidth="44px"
+                    flexShrink={0}
+                    onClick={() => {
+                      if (window.confirm(t('settings.agent.cancelIntentionConfirm'))) {
+                        onCancelIntention(intention.id);
+                      }
+                    }}
+                  >
+                    <FiTrash2 />
+                  </IconButton>
+                </Flex>
+              ))}
+            </Stack>
+          )}
+
+          {episodic.events.length > 0 && (
+            <Stack gap={2} mt={6}>
+              <Text color={miliTokens.color.textPrimary} fontSize="sm" fontWeight="semibold">
+                {t('settings.agent.memorySectionEpisodic', {
+                  shown: episodic.events.length,
+                  total: episodic.total,
+                })}
+              </Text>
+              {episodic.events.map((event) => (
+                <Flex
+                  key={event.id}
+                  align="flex-start"
+                  gap={3}
+                  p={{ base: 3, sm: 4 }}
+                  borderRadius="xl"
+                  borderWidth="1px"
+                  borderColor={miliTokens.color.border}
+                  bg={miliTokens.color.surface}
+                >
+                  <Stack flex="1" minWidth={0} gap={1}>
+                    <Text
+                      color={miliTokens.color.textPrimary}
+                      fontSize="sm"
+                      lineHeight="1.5"
+                      whiteSpace="pre-wrap"
+                      overflowWrap="anywhere"
+                    >
+                      {event.event_text}
+                    </Text>
+                    {memoryDateLabel(event.occurred_at || undefined) && (
+                      <Text color={miliTokens.color.textMuted} fontSize="xs">
+                        {memoryDateLabel(event.occurred_at || undefined)}
+                      </Text>
+                    )}
+                  </Stack>
+                  <IconButton
+                    aria-label={t('settings.agent.forgetEvent')}
+                    title={t('settings.agent.forgetEvent')}
+                    variant="ghost"
+                    colorPalette="red"
+                    color="red.300"
+                    width="44px"
+                    height="44px"
+                    minWidth="44px"
+                    flexShrink={0}
+                    onClick={() => {
+                      if (window.confirm(t('settings.agent.deleteEventConfirm'))) {
+                        onDeleteEpisodic(event.id);
+                      }
+                    }}
+                  >
+                    <FiTrash2 />
+                  </IconButton>
+                </Flex>
+              ))}
+            </Stack>
+          )}
+
+          {world && (
+            <Stack gap={2} mt={6}>
+              <Text color={miliTokens.color.textPrimary} fontSize="sm" fontWeight="semibold">
+                {t('settings.agent.memorySectionWorld')}
+              </Text>
+              <Flex
+                align="flex-start"
+                gap={3}
+                p={{ base: 3, sm: 4 }}
+                borderRadius="xl"
+                borderWidth="1px"
+                borderColor={miliTokens.color.border}
+                bg={miliTokens.color.surface}
+              >
+                <Stack flex="1" minWidth={0} gap={1}>
+                  <Text
+                    color={miliTokens.color.textPrimary}
+                    fontSize="sm"
+                    lineHeight="1.5"
+                    whiteSpace="pre-wrap"
+                    overflowWrap="anywhere"
+                  >
+                    {[
+                      world.activity,
+                      world.location,
+                      world.mood,
+                    ].filter(Boolean).join(' · ')}
+                  </Text>
+                  <Text color={miliTokens.color.textMuted} fontSize="xs">
+                    {t('settings.agent.memoryWorldReadOnly')}
+                  </Text>
+                </Stack>
+              </Flex>
             </Stack>
           )}
         </DialogBody>

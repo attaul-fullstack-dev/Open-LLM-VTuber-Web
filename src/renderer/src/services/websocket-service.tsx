@@ -104,6 +104,44 @@ export interface MessageEvent {
     added_at: string;
     explicit?: boolean;
   }[];
+  // Unified Memory Manager snapshot (backend `memory-overview` message).
+  // Each category mirrors its authoritative store; episodic is bounded with
+  // a total, world is a read-only snapshot.
+  overview?: {
+    facts: {
+      text: string;
+      added_at: string;
+      explicit?: boolean;
+    }[];
+    preferences: {
+      id: string;
+      category: string;
+      polarity: string;
+      text: string;
+      updated_at?: string;
+    }[];
+    intentions: {
+      id: string;
+      text: string;
+      due_at?: string;
+    }[];
+    episodic: {
+      total: number;
+      events: {
+        id: string;
+        event_text: string;
+        occurred_at?: string | null;
+      }[];
+    };
+    world: {
+      location?: string;
+      activity?: string;
+      energy?: number | null;
+      mood?: string;
+      time_context?: string;
+      last_update_at?: string;
+    } | null;
+  };
   error?: string;
   message?: string;
   event?: string;

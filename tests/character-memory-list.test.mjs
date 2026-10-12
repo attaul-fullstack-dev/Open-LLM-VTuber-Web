@@ -23,14 +23,14 @@ const dialog = read(
   '../src/renderer/src/components/sidebar/setting/character-memory-dialog.tsx',
 );
 
-test('opening the character memory dialog refetches the list', () => {
+test('opening the character memory dialog refetches the unified list', () => {
   const block = agent.slice(
     agent.indexOf('<CharacterMemoryDialog'),
     agent.indexOf('<AttachmentMemoryLauncher'),
   );
   assert.match(block, /onOpenChange=\{\(open\) => \{/);
   assert.match(block, /setMemoryDialogOpen\(open\)/);
-  assert.match(block, /fetch-character-memory/);
+  assert.match(block, /fetch-memory-overview/);
   assert.match(
     block,
     /if \(open && wsState === 'OPEN'\)/,
@@ -61,5 +61,60 @@ test('each row shows its stored source and date, never invented metadata', () =>
     );
     assert.equal(typeof strings.settings.agent.memorySourceManual, 'string');
     assert.equal(typeof strings.settings.agent.memorySourceAuto, 'string');
+  }
+});
+
+test('the panel consumes the unified overview, not the facts-only fetch', () => {
+  assert.match(agent, /memory-overview/);
+  assert.match(agent, /fetch-memory-overview/);
+  assert.match(agent, /setMemoryOverview/);
+});
+
+test('each category has its own delete message type', () => {
+  assert.match(agent, /delete-character-memory/);
+  assert.match(agent, /delete-episodic-event/);
+  assert.match(agent, /delete-interaction-preference/);
+  assert.match(agent, /cancel-future-intention/);
+});
+
+test('the dialog renders one section per store plus a read-only world card', () => {
+  assert.match(dialog, /memorySectionPreferences/);
+  assert.match(dialog, /memorySectionIntentions/);
+  assert.match(dialog, /memorySectionEpisodic/);
+  assert.match(dialog, /memorySectionWorld/);
+  assert.match(dialog, /memoryWorldReadOnly/);
+  // the world card must not offer any delete operation (the facts
+  // delete-all footer lives outside the dialog body and is out of scope)
+  const worldBlock = dialog.slice(
+    dialog.indexOf('{world && ('),
+    dialog.indexOf('</DialogBody>'),
+  );
+  assert.doesNotMatch(worldBlock, /onDelete|onCancel|FiTrash2/);
+});
+
+test('section rows carry only stored metadata in three locales', () => {
+  for (const key of [
+    'memorySectionPreferences',
+    'memorySectionIntentions',
+    'memorySectionEpisodic',
+    'memorySectionWorld',
+    'memoryWorldReadOnly',
+    'forgetPreference',
+    'deletePreferenceConfirm',
+    'cancelIntention',
+    'cancelIntentionConfirm',
+    'forgetEvent',
+    'deleteEventConfirm',
+  ]) {
+    for (const locale of ['en', 'id', 'zh']) {
+      const strings = JSON.parse(
+        read(`../src/renderer/src/locales/${locale}/translation.json`),
+      );
+      assert.equal(
+        typeof strings.settings.agent[key],
+        'string',
+        `${locale} must define settings.agent.${key}`,
+      );
+    }
   }
 });
