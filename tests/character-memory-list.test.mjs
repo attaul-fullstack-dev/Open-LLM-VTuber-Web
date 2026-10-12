@@ -40,11 +40,26 @@ test('opening the character memory dialog refetches the list', () => {
 
 test('the dialog renders the served list verbatim (no filter)', () => {
   assert.match(dialog, /memories\.map\(\(memory, index\)/);
-  assert.doesNotMatch(dialog, /\.filter\(/);
+  // the only .filter in the dialog joins label parts, never memories
+  assert.doesNotMatch(dialog, /memories\.filter/);
 });
 
 test('the list refreshes after delete, reset, and state-reset events', () => {
   assert.match(agent, /character-memory-deleted/);
   assert.match(agent, /character-memory-reset/);
   assert.match(agent, /character-state-reset/);
+});
+
+test('each row shows its stored source and date, never invented metadata', () => {
+  assert.match(dialog, /memorySourceLabel/);
+  assert.match(dialog, /memoryDateLabel/);
+  assert.match(dialog, /memorySourceManual/);
+  assert.match(dialog, /memorySourceAuto/);
+  for (const locale of ['en', 'id', 'zh']) {
+    const strings = JSON.parse(
+      read(`../src/renderer/src/locales/${locale}/translation.json`),
+    );
+    assert.equal(typeof strings.settings.agent.memorySourceManual, 'string');
+    assert.equal(typeof strings.settings.agent.memorySourceAuto, 'string');
+  }
 });

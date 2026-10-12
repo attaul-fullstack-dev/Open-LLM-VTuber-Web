@@ -21,6 +21,24 @@ export interface CharacterMemoryItem {
   explicit?: boolean
 }
 
+/**
+ * Render only metadata the backend actually stores. `explicit` tells
+ * whether the fact came from a user command (manual) or from automatic
+ * extraction; `added_at` is the persisted timestamp. Nothing is invented:
+ * fields that are absent or unparseable simply hide their part.
+ */
+function memorySourceLabel(explicit: boolean | undefined, t: (key: string) => string): string {
+  return t(explicit
+    ? 'settings.agent.memorySourceManual'
+    : 'settings.agent.memorySourceAuto');
+}
+
+function memoryDateLabel(addedAt: string | undefined): string {
+  if (typeof addedAt !== 'string') return '';
+  const match = addedAt.match(/^(\d{4}-\d{2}-\d{2})/);
+  return match ? match[1] : '';
+}
+
 interface CharacterMemoryDialogProps {
   memories: CharacterMemoryItem[]
   open: boolean
@@ -175,17 +193,26 @@ export function CharacterMemoryDialog({
                   borderColor={miliTokens.color.border}
                   bg={miliTokens.color.surface}
                 >
-                  <Text
-                    flex="1"
-                    minWidth={0}
-                    color={miliTokens.color.textPrimary}
-                    fontSize="sm"
-                    lineHeight="1.5"
-                    whiteSpace="pre-wrap"
-                    overflowWrap="anywhere"
-                  >
-                    {memory.text}
-                  </Text>
+                  <Stack flex="1" minWidth={0} gap={1}>
+                    <Text
+                      color={miliTokens.color.textPrimary}
+                      fontSize="sm"
+                      lineHeight="1.5"
+                      whiteSpace="pre-wrap"
+                      overflowWrap="anywhere"
+                    >
+                      {memory.text}
+                    </Text>
+                    <Text
+                      color={miliTokens.color.textMuted}
+                      fontSize="xs"
+                    >
+                      {[
+                        memorySourceLabel(memory.explicit, t),
+                        memoryDateLabel(memory.added_at),
+                      ].filter(Boolean).join(' · ')}
+                    </Text>
+                  </Stack>
                   <IconButton
                     aria-label={t('settings.agent.forgetMemory')}
                     title={t('settings.agent.forgetMemory')}

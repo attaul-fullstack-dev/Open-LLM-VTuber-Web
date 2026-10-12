@@ -85,6 +85,8 @@
       "memoryCount": "{{count}} memories stored",
       "noCharacterMemory": "No long-term memory yet.",
       "forgetMemory": "Forget this fact",
+      "memorySourceManual": "Added by you",
+      "memorySourceAuto": "Noted automatically",
       "deleteMemoryConfirm": "Remove this fact from Mili's long-term memory?",
       "deleteAllMemory": "Delete all of Mili's memories",
       "resetMemory": "Reset Mili's memory",

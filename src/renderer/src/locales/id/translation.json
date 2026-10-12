@@ -165,6 +165,8 @@
       "memoryCount": "{{count}} ingatan tersimpan",
       "noCharacterMemory": "Belum ada ingatan jangka panjang.",
       "forgetMemory": "Lupakan fakta ini",
+      "memorySourceManual": "Ditambahkan manual",
+      "memorySourceAuto": "Dicatat otomatis",
       "deleteMemoryConfirm": "Hapus fakta ini dari ingatan jangka panjang Mili?",
       "deleteAllMemory": "Hapus seluruh ingatan Mili",
       "resetMemory": "Hapus ingatan Mili",

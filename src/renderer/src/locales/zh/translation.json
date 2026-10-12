@@ -85,6 +85,8 @@
       "memoryCount": "已保存 {{count}} 条记忆",
       "noCharacterMemory": "还没有长期记忆。",
       "forgetMemory": "忘记这条事实",
+      "memorySourceManual": "手动添加",
+      "memorySourceAuto": "自动记录",
       "deleteMemoryConfirm": "从 Mili 的长期记忆中删除这条事实吗？",
       "deleteAllMemory": "删除 Mili 的全部记忆",
       "resetMemory": "重置 Mili 的记忆",
