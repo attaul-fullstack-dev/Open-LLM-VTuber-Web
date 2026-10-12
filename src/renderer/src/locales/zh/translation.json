@@ -80,7 +80,7 @@
       "resetRelationshipConfirm": "要重置 Mili 在所有对话中的关系吗？聊天记录不会被删除。",
       "characterMemory": "Mili 的长期记忆",
       "characterMemoryHelp": "Mili 在所有对话中记住的事实（长期上下文，不是聊天记录）。",
-      "memoryDescription": "Mili 在所有对话中记住的关于您的事实。",
+      "memoryDescription": "Mili 在所有对话中记住的关于您的事实。此处仅列出长期事实；Mili 从其他上下文中回忆的事件和偏好不属于此列表。",
       "openMemory": "查看 Mili 的记忆",
       "memoryCount": "已保存 {{count}} 条记忆",
       "noCharacterMemory": "还没有长期记忆。",

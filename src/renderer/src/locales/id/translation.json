@@ -160,7 +160,7 @@
       "resetRelationshipConfirm": "Reset hubungan Mili di semua percakapan? Riwayat chat tidak akan dihapus.",
       "characterMemory": "Ingatan Jangka Panjang Mili",
       "characterMemoryHelp": "Fakta yang Mili ingat di semua chat (konteks jangka panjang, bukan transkrip).",
-      "memoryDescription": "Fakta yang Mili ingat tentang kamu di semua percakapan.",
+      "memoryDescription": "Fakta yang Mili ingat tentang kamu di semua percakapan. Hanya fakta jangka panjang yang tercantum di sini; peristiwa dan preferensi yang Mili ingat dari konteks lain bukan bagian dari daftar ini.",
       "openMemory": "Lihat ingatan Mili",
       "memoryCount": "{{count}} ingatan tersimpan",
       "noCharacterMemory": "Belum ada ingatan jangka panjang.",

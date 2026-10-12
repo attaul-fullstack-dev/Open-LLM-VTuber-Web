@@ -80,7 +80,7 @@
       "resetRelationshipConfirm": "Reset Mili's relationship across all conversations? Chat history will not be deleted.",
       "characterMemory": "Mili's Long-Term Memory",
       "characterMemoryHelp": "Facts Mili remembers across all chats (long-term context, not a transcript).",
-      "memoryDescription": "Facts Mili remembers about you across all conversations.",
+      "memoryDescription": "Facts Mili remembers about you across all conversations. Only long-term facts are listed here; events and preferences Mili recalls from other context are not part of this list.",
       "openMemory": "View Mili's memories",
       "memoryCount": "{{count}} memories stored",
       "noCharacterMemory": "No long-term memory yet.",
