@@ -2,7 +2,7 @@
 import {
   Box, Button, Flex, Icon, IconButton, Stack, Text,
 } from '@chakra-ui/react';
-import { FiBookOpen, FiChevronRight, FiTrash2 } from 'react-icons/fi';
+import { FiAlertTriangle, FiBookOpen, FiChevronRight, FiTrash2 } from 'react-icons/fi';
 import { useTranslation } from 'react-i18next';
 import { miliTokens } from '@/theme/design-tokens';
 import {
@@ -39,6 +39,29 @@ function memoryDateLabel(addedAt: string | undefined): string {
   return match ? match[1] : '';
 }
 
+/**
+ * Shown when a category could not be read. Plainly says load failed, so the
+ * user never mistakes a read error for "you have no data here".
+ */
+function MemoryCategoryError({ label }: { label: string }): JSX.Element {
+  return (
+    <Flex
+      align="center"
+      gap={2}
+      p={{ base: 3, sm: 4 }}
+      borderRadius="xl"
+      borderWidth="1px"
+      borderColor="red.500"
+      bg="red.900"
+    >
+      <Icon as={FiAlertTriangle} color="red.300" boxSize="16px" flexShrink={0} />
+      <Text color="red.200" fontSize="sm" lineHeight="1.45">
+        {label}
+      </Text>
+    </Flex>
+  );
+}
+
 export interface MemoryPreferenceItem {
   id: string
   category: string
@@ -68,12 +91,26 @@ export interface MemoryWorldSnapshot {
   last_update_at?: string
 }
 
+/**
+ * Per-category read status from the backend. `ok`/`empty` mean the store was
+ * read (the latter genuinely empty); `error` means the store could not be
+ * read, so the UI must say so instead of implying the category is empty.
+ */
+export type MemoryCategoryStatus = 'ok' | 'empty' | 'error'
+
 export interface MemoryOverview {
   facts: CharacterMemoryItem[]
   preferences: MemoryPreferenceItem[]
   intentions: MemoryIntentionItem[]
   episodic: { total: number, events: MemoryEpisodicItem[] }
   world: MemoryWorldSnapshot | null
+  status?: {
+    facts: MemoryCategoryStatus
+    preferences: MemoryCategoryStatus
+    intentions: MemoryCategoryStatus
+    episodic: MemoryCategoryStatus
+    world: MemoryCategoryStatus
+  }
 }
 
 interface CharacterMemoryDialogProps {
@@ -160,6 +197,10 @@ export function CharacterMemoryDialog({
   const intentions = (overview && overview.intentions) || [];
   const episodic = (overview && overview.episodic) || { total: 0, events: [] };
   const world = (overview && overview.world) || null;
+  const status = overview?.status;
+  const failed = (category: keyof NonNullable<MemoryOverview['status']>): boolean =>
+    status?.[category] === 'error';
+  const loadFailedLabel = t('settings.agent.memoryCategoryLoadFailed');
 
   return (
     <DialogRoot open={open} onOpenChange={(details) => onOpenChange(details.open)}>
@@ -219,7 +260,9 @@ export function CharacterMemoryDialog({
             scrollbarColor: 'rgba(255,255,255,.24) transparent',
           }}
         >
-          {memories.length === 0 ? (
+          {failed('facts') ? (
+            <MemoryCategoryError label={loadFailedLabel} />
+          ) : memories.length === 0 ? (
             <Flex
               minHeight="180px"
               align="center"
@@ -285,7 +328,9 @@ export function CharacterMemoryDialog({
             </Stack>
           )}
 
-          {preferences.length > 0 && (
+          {failed('preferences') ? (
+            <MemoryCategoryError label={loadFailedLabel} />
+          ) : preferences.length > 0 && (
             <Stack gap={2} mt={6}>
               <Text color={miliTokens.color.textPrimary} fontSize="sm" fontWeight="semibold">
                 {t('settings.agent.memorySectionPreferences', { count: preferences.length })}
@@ -342,7 +387,9 @@ export function CharacterMemoryDialog({
             </Stack>
           )}
 
-          {intentions.length > 0 && (
+          {failed('intentions') ? (
+            <MemoryCategoryError label={loadFailedLabel} />
+          ) : intentions.length > 0 && (
             <Stack gap={2} mt={6}>
               <Text color={miliTokens.color.textPrimary} fontSize="sm" fontWeight="semibold">
                 {t('settings.agent.memorySectionIntentions', { count: intentions.length })}
@@ -397,7 +444,9 @@ export function CharacterMemoryDialog({
             </Stack>
           )}
 
-          {episodic.events.length > 0 && (
+          {failed('episodic') ? (
+            <MemoryCategoryError label={loadFailedLabel} />
+          ) : episodic.events.length > 0 && (
             <Stack gap={2} mt={6}>
               <Text color={miliTokens.color.textPrimary} fontSize="sm" fontWeight="semibold">
                 {t('settings.agent.memorySectionEpisodic', {
@@ -455,7 +504,9 @@ export function CharacterMemoryDialog({
             </Stack>
           )}
 
-          {world && (
+          {failed('world') ? (
+            <MemoryCategoryError label={loadFailedLabel} />
+          ) : world && (
             <Stack gap={2} mt={6}>
               <Text color={miliTokens.color.textPrimary} fontSize="sm" fontWeight="semibold">
                 {t('settings.agent.memorySectionWorld')}

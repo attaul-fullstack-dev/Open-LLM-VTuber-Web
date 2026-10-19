@@ -172,6 +172,7 @@
       "memorySectionEpisodic": "Peristiwa ({{shown}} terbaru dari {{total}})",
       "memorySectionWorld": "Status dunia saat ini",
       "memoryWorldReadOnly": "Status live, hanya-baca — bukan memori yang bisa dihapus.",
+      "memoryCategoryLoadFailed": "Gagal memuat kategori ini. Datanya mungkin ada tetapi tidak dapat dibaca — buka ulang atau muat ulang untuk mencoba lagi.",
       "forgetPreference": "Tarik kembali preferensi ini",
       "deletePreferenceConfirm": "Tarik kembali preferensi ini? Preferensi tidak akan lagi memandu Mili.",
       "cancelIntention": "Batalkan pengingat ini",

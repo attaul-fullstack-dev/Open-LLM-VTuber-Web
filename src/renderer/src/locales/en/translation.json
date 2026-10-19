@@ -92,6 +92,7 @@
       "memorySectionEpisodic": "Events (latest {{shown}} of {{total}})",
       "memorySectionWorld": "Current world state",
       "memoryWorldReadOnly": "Live status, read-only — not a deletable memory.",
+      "memoryCategoryLoadFailed": "Couldn't load this category. It may exist but the store couldn't be read — reopen or refresh to retry.",
       "forgetPreference": "Retract this preference",
       "deletePreferenceConfirm": "Retract this preference? It will no longer guide Mili.",
       "cancelIntention": "Cancel this reminder",

@@ -92,6 +92,7 @@
       "memorySectionEpisodic": "事件（共 {{total}} 条，显示最新 {{shown}} 条）",
       "memorySectionWorld": "当前世界状态",
       "memoryWorldReadOnly": "实时状态，只读——不是可删除的记忆。",
+      "memoryCategoryLoadFailed": "无法加载此分类。数据可能仍在，但存储读取失败——请重新打开或刷新重试。",
       "forgetPreference": "收回此偏好",
       "deletePreferenceConfirm": "收回此偏好吗？它将不再指导 Mili。",
       "cancelIntention": "取消此提醒",

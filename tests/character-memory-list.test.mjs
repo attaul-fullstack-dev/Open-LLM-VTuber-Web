@@ -79,8 +79,8 @@ test('each category has its own delete message type', () => {
 
 test('episodic delete sends the row id, never an array index', () => {
   const block = dialog.slice(
-    dialog.indexOf('{episodic.events.length > 0 && ('),
-    dialog.indexOf('{world && ('),
+    dialog.indexOf('episodic.events.length > 0 && ('),
+    dialog.indexOf(': world && ('),
   );
   assert.match(block, /onDeleteEpisodic\(event\.id\)/);
   assert.doesNotMatch(block, /onDeleteEpisodic\((index|i)\)/);
@@ -95,10 +95,24 @@ test('the dialog renders one section per store plus a read-only world card', () 
   // the world card must not offer any delete operation (the facts
   // delete-all footer lives outside the dialog body and is out of scope)
   const worldBlock = dialog.slice(
-    dialog.indexOf('{world && ('),
+    dialog.indexOf(': world && ('),
     dialog.indexOf('</DialogBody>'),
   );
   assert.doesNotMatch(worldBlock, /onDelete|onCancel|FiTrash2/);
+});
+
+test('a failed category renders a load error, not an empty state', () => {
+  // status signal drives the UI: an unreadable store must say "couldn't
+  // load" instead of "no data", for and only for the failed category
+  assert.match(dialog, /status\?\.\[category\] === 'error'/);
+  assert.match(dialog, /MemoryCategoryError/);
+  for (const category of ['facts', 'preferences', 'intentions', 'episodic', 'world']) {
+    assert.match(
+      dialog,
+      new RegExp(`failed\\('${category}'\\)`),
+      `the ${category} section must gate on its read status`,
+    );
+  }
 });
 
 test('section rows carry only stored metadata in three locales', () => {
@@ -108,6 +122,7 @@ test('section rows carry only stored metadata in three locales', () => {
     'memorySectionEpisodic',
     'memorySectionWorld',
     'memoryWorldReadOnly',
+    'memoryCategoryLoadFailed',
     'forgetPreference',
     'deletePreferenceConfirm',
     'cancelIntention',

@@ -141,6 +141,15 @@ export interface MessageEvent {
       time_context?: string;
       last_update_at?: string;
     } | null;
+    // Per-category read status: ok | empty | error. A category marked
+    // "error" could not be read; the UI must not present it as empty.
+    status?: {
+      facts: 'ok' | 'empty' | 'error';
+      preferences: 'ok' | 'empty' | 'error';
+      intentions: 'ok' | 'empty' | 'error';
+      episodic: 'ok' | 'empty' | 'error';
+      world: 'ok' | 'empty' | 'error';
+    };
   };
   error?: string;
   message?: string;
