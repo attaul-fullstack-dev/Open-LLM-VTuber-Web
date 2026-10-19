@@ -77,6 +77,15 @@ test('each category has its own delete message type', () => {
   assert.match(agent, /cancel-future-intention/);
 });
 
+test('episodic delete sends the row id, never an array index', () => {
+  const block = dialog.slice(
+    dialog.indexOf('{episodic.events.length > 0 && ('),
+    dialog.indexOf('{world && ('),
+  );
+  assert.match(block, /onDeleteEpisodic\(event\.id\)/);
+  assert.doesNotMatch(block, /onDeleteEpisodic\((index|i)\)/);
+});
+
 test('the dialog renders one section per store plus a read-only world card', () => {
   assert.match(dialog, /memorySectionPreferences/);
   assert.match(dialog, /memorySectionIntentions/);
