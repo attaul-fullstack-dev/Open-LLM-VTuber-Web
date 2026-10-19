@@ -79,7 +79,7 @@ test('each category has its own delete message type', () => {
 
 test('episodic delete sends the row id, never an array index', () => {
   const block = dialog.slice(
-    dialog.indexOf('episodic.events.length > 0 && ('),
+    dialog.indexOf('episodicView.events.map((event)'),
     dialog.indexOf(': world && ('),
   );
   assert.match(block, /onDeleteEpisodic\(event\.id\)/);
@@ -106,13 +106,19 @@ test('a failed category renders a load error, not an empty state', () => {
   // load" instead of "no data", for and only for the failed category
   assert.match(dialog, /status\?\.\[category\] === 'error'/);
   assert.match(dialog, /MemoryCategoryError/);
-  for (const category of ['facts', 'preferences', 'intentions', 'episodic', 'world']) {
+  for (const category of ['facts', 'preferences', 'intentions', 'world']) {
     assert.match(
       dialog,
       new RegExp(`failed\\('${category}'\\)`),
       `the ${category} section must gate on its read status`,
     );
   }
+  // episodic has its own search view, gated on the same error status
+  assert.match(
+    dialog,
+    /episodicView\.status === 'error'/,
+    'the episodic section must gate on its read status',
+  );
 });
 
 test('section rows carry only stored metadata in three locales', () => {
@@ -121,6 +127,12 @@ test('section rows carry only stored metadata in three locales', () => {
     'memorySectionIntentions',
     'memorySectionEpisodic',
     'memorySectionWorld',
+    'memorySectionEpisodicTitle',
+    'memorySearchEpisodicPlaceholder',
+    'memorySearchLoading',
+    'memorySearchNoResults',
+    'noEpisodicMemory',
+    'memoryLoadMore',
     'memoryWorldReadOnly',
     'memoryCategoryLoadFailed',
     'forgetPreference',

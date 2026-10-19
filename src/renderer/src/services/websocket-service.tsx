@@ -151,6 +151,20 @@ export interface MessageEvent {
       world: 'ok' | 'empty' | 'error';
     };
   };
+  // Episodic search results (backend `episodic-search-results`). Newest-first
+  // with an opaque keyset cursor so old events are reachable past the bounded
+  // overview without loading the whole store at once.
+  query?: string;
+  append?: boolean;
+  events?: {
+    id: string;
+    event_text: string;
+    occurred_at?: string | null;
+    created_at?: string;
+  }[];
+  total?: number;
+  has_more?: boolean;
+  next_cursor?: string | null;
   error?: string;
   message?: string;
   event?: string;

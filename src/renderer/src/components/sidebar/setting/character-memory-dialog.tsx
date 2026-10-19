@@ -1,7 +1,8 @@
 /* eslint-disable import/no-extraneous-dependencies */
 import {
-  Box, Button, Flex, Icon, IconButton, Stack, Text,
+  Box, Button, Flex, Icon, IconButton, Input, Spinner, Stack, Text,
 } from '@chakra-ui/react';
+import { useEffect, useRef, useState } from 'react';
 import { FiAlertTriangle, FiBookOpen, FiChevronRight, FiTrash2 } from 'react-icons/fi';
 import { useTranslation } from 'react-i18next';
 import { miliTokens } from '@/theme/design-tokens';
@@ -113,9 +114,24 @@ export interface MemoryOverview {
   }
 }
 
+/**
+ * Live episodic search state. The default view comes from the bounded
+ * overview (latest N); once the user searches or pages, this replaces it so
+ * an old event outside the latest window is still reachable.
+ */
+export interface EpisodicSearchView {
+  query: string
+  events: MemoryEpisodicItem[]
+  total: number
+  hasMore: boolean
+  loading: boolean
+  status: MemoryCategoryStatus
+}
+
 interface CharacterMemoryDialogProps {
   memories: CharacterMemoryItem[]
   overview: MemoryOverview | null
+  episodicSearch: EpisodicSearchView | null
   open: boolean
   disabled?: boolean
   onOpenChange: (open: boolean) => void
@@ -124,6 +140,8 @@ interface CharacterMemoryDialogProps {
   onDeleteEpisodic: (eventId: string) => void
   onDeletePreference: (preferenceId: string) => void
   onCancelIntention: (intentionId: string) => void
+  onEpisodicSearch: (query: string) => void
+  onEpisodicLoadMore: () => void
 }
 
 export function CharacterMemoryLauncher({
@@ -183,6 +201,7 @@ export function CharacterMemoryLauncher({
 export function CharacterMemoryDialog({
   memories,
   overview,
+  episodicSearch,
   open,
   disabled = false,
   onOpenChange,
@@ -191,6 +210,8 @@ export function CharacterMemoryDialog({
   onDeleteEpisodic,
   onDeletePreference,
   onCancelIntention,
+  onEpisodicSearch,
+  onEpisodicLoadMore,
 }: CharacterMemoryDialogProps): JSX.Element {
   const { t } = useTranslation();
   const preferences = (overview && overview.preferences) || [];
@@ -201,6 +222,40 @@ export function CharacterMemoryDialog({
   const failed = (category: keyof NonNullable<MemoryOverview['status']>): boolean =>
     status?.[category] === 'error';
   const loadFailedLabel = t('settings.agent.memoryCategoryLoadFailed');
+
+  // The default view is the bounded overview; a search/page view supersedes
+  // it once the user looks for something older than the latest window.
+  const episodicView: EpisodicSearchView = episodicSearch || {
+    query: '',
+    events: episodic.events,
+    total: episodic.total,
+    hasMore: episodic.total > episodic.events.length,
+    loading: false,
+    status: status?.episodic || 'empty',
+  };
+  const [searchText, setSearchText] = useState('');
+  const searchCallbackRef = useRef(onEpisodicSearch);
+  const lastRequestedRef = useRef('');
+  useEffect(() => {
+    searchCallbackRef.current = onEpisodicSearch;
+  });
+  // Debounced live search. `lastRequestedRef` prevents the effect from
+  // re-firing for a query that was already sent (and keeps clearing cheap).
+  useEffect(() => {
+    const query = searchText.trim();
+    if (query === lastRequestedRef.current) return undefined;
+    const timer = setTimeout(() => {
+      lastRequestedRef.current = query;
+      searchCallbackRef.current(query);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchText]);
+  useEffect(() => {
+    if (!open) {
+      setSearchText('');
+      lastRequestedRef.current = '';
+    }
+  }, [open]);
 
   return (
     <DialogRoot open={open} onOpenChange={(details) => onOpenChange(details.open)}>
@@ -444,65 +499,107 @@ export function CharacterMemoryDialog({
             </Stack>
           )}
 
-          {failed('episodic') ? (
-            <MemoryCategoryError label={loadFailedLabel} />
-          ) : episodic.events.length > 0 && (
-            <Stack gap={2} mt={6}>
-              <Text color={miliTokens.color.textPrimary} fontSize="sm" fontWeight="semibold">
-                {t('settings.agent.memorySectionEpisodic', {
-                  shown: episodic.events.length,
-                  total: episodic.total,
-                })}
+          <Stack gap={2} mt={6}>
+            <Text color={miliTokens.color.textPrimary} fontSize="sm" fontWeight="semibold">
+              {t('settings.agent.memorySectionEpisodicTitle')}
+            </Text>
+            <Input
+              value={searchText}
+              onChange={(event) => setSearchText(event.target.value)}
+              placeholder={t('settings.agent.memorySearchEpisodicPlaceholder')}
+              disabled={disabled}
+              size="sm"
+              bg={miliTokens.color.surface}
+              borderColor={miliTokens.color.border}
+              color={miliTokens.color.textPrimary}
+            />
+            {episodicView.loading ? (
+              <Flex
+                align="center"
+                gap={2}
+                p={3}
+                color={miliTokens.color.textSecondary}
+              >
+                <Spinner size="sm" />
+                <Text fontSize="sm">{t('settings.agent.memorySearchLoading')}</Text>
+              </Flex>
+            ) : episodicView.status === 'error' ? (
+              <MemoryCategoryError label={loadFailedLabel} />
+            ) : episodicView.events.length === 0 ? (
+              <Text color={miliTokens.color.textMuted} fontSize="sm">
+                {episodicView.query
+                  ? t('settings.agent.memorySearchNoResults')
+                  : t('settings.agent.noEpisodicMemory')}
               </Text>
-              {episodic.events.map((event) => (
-                <Flex
-                  key={event.id}
-                  align="flex-start"
-                  gap={3}
-                  p={{ base: 3, sm: 4 }}
-                  borderRadius="xl"
-                  borderWidth="1px"
-                  borderColor={miliTokens.color.border}
-                  bg={miliTokens.color.surface}
-                >
-                  <Stack flex="1" minWidth={0} gap={1}>
-                    <Text
-                      color={miliTokens.color.textPrimary}
-                      fontSize="sm"
-                      lineHeight="1.5"
-                      whiteSpace="pre-wrap"
-                      overflowWrap="anywhere"
-                    >
-                      {event.event_text}
-                    </Text>
-                    {memoryDateLabel(event.occurred_at || undefined) && (
-                      <Text color={miliTokens.color.textMuted} fontSize="xs">
-                        {memoryDateLabel(event.occurred_at || undefined)}
-                      </Text>
-                    )}
-                  </Stack>
-                  <IconButton
-                    aria-label={t('settings.agent.forgetEvent')}
-                    title={t('settings.agent.forgetEvent')}
-                    variant="ghost"
-                    colorPalette="red"
-                    color="red.300"
-                    width="44px"
-                    height="44px"
-                    minWidth="44px"
-                    flexShrink={0}
-                    onClick={() => {
-                      if (window.confirm(t('settings.agent.deleteEventConfirm'))) {
-                        onDeleteEpisodic(event.id);
-                      }
-                    }}
+            ) : (
+              <>
+                <Text color={miliTokens.color.textMuted} fontSize="xs">
+                  {t('settings.agent.memorySectionEpisodic', {
+                    shown: episodicView.events.length,
+                    total: episodicView.total,
+                  })}
+                </Text>
+                {episodicView.events.map((event) => (
+                  <Flex
+                    key={event.id}
+                    align="flex-start"
+                    gap={3}
+                    p={{ base: 3, sm: 4 }}
+                    borderRadius="xl"
+                    borderWidth="1px"
+                    borderColor={miliTokens.color.border}
+                    bg={miliTokens.color.surface}
                   >
-                    <FiTrash2 />
-                  </IconButton>
-                </Flex>
-              ))}
-            </Stack>
-          )}
+                    <Stack flex="1" minWidth={0} gap={1}>
+                      <Text
+                        color={miliTokens.color.textPrimary}
+                        fontSize="sm"
+                        lineHeight="1.5"
+                        whiteSpace="pre-wrap"
+                        overflowWrap="anywhere"
+                      >
+                        {event.event_text}
+                      </Text>
+                      {memoryDateLabel(event.occurred_at || undefined) && (
+                        <Text color={miliTokens.color.textMuted} fontSize="xs">
+                          {memoryDateLabel(event.occurred_at || undefined)}
+                        </Text>
+                      )}
+                    </Stack>
+                    <IconButton
+                      aria-label={t('settings.agent.forgetEvent')}
+                      title={t('settings.agent.forgetEvent')}
+                      variant="ghost"
+                      colorPalette="red"
+                      color="red.300"
+                      width="44px"
+                      height="44px"
+                      minWidth="44px"
+                      flexShrink={0}
+                      onClick={() => {
+                        if (window.confirm(t('settings.agent.deleteEventConfirm'))) {
+                          onDeleteEpisodic(event.id);
+                        }
+                      }}
+                    >
+                      <FiTrash2 />
+                    </IconButton>
+                  </Flex>
+                ))}
+                {episodicView.hasMore && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    alignSelf="flex-start"
+                    disabled={disabled}
+                    onClick={onEpisodicLoadMore}
+                  >
+                    {t('settings.agent.memoryLoadMore')}
+                  </Button>
+                )}
+              </>
+            )}
+          </Stack>
 
           {failed('world') ? (
             <MemoryCategoryError label={loadFailedLabel} />

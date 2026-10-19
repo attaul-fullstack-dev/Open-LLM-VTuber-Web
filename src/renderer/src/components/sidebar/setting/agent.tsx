@@ -12,6 +12,8 @@ import {
   CharacterMemoryDialog,
   CharacterMemoryItem,
   CharacterMemoryLauncher,
+  EpisodicSearchView,
+  MemoryEpisodicItem,
   MemoryOverview,
 } from './character-memory-dialog';
 import {
@@ -33,6 +35,9 @@ interface AgentProps {
   onCancel?: (callback: () => void) => () => void
 }
 
+// One page of episodic search results; "load more" appends the next page.
+const EPISODIC_PAGE_SIZE = 50;
+
 function Agent({ onSave, onCancel }: AgentProps): JSX.Element {
   const { t } = useTranslation();
   const { sendMessage, wsState } = useWebSocket();
@@ -40,9 +45,18 @@ function Agent({ onSave, onCancel }: AgentProps): JSX.Element {
   const [memories, setMemories] = useState<CharacterMemoryItem[]>([]);
   const [memoryDialogOpen, setMemoryDialogOpen] = useState(false);
   const [memoryOverview, setMemoryOverview] = useState<MemoryOverview | null>(null);
+  const [episodicSearch, setEpisodicSearch] = useState<EpisodicSearchView | null>(null);
   const [attachmentMemories, setAttachmentMemories] = useState<AttachmentMemoryRecord[]>([]);
   const [attachmentDialogOpen, setAttachmentDialogOpen] = useState(false);
   const [lastAttachmentDelete, setLastAttachmentDelete] = useState<AttachmentDeleteResult | null>(null);
+  // The query and opaque keyset cursor of the in-flight episodic search.
+  // Kept in refs so the message subscription (registered once) can both
+  // ignore stale responses and re-run the active search after a mutation.
+  const episodicQueryRef = useRef('');
+  const episodicCursorRef = useRef<string | null>(null);
+  const episodicActiveRef = useRef(false);
+  const wsStateRef = useRef(wsState);
+  wsStateRef.current = wsState;
   const {
     settings,
     handleAllowProactiveSpeakChange,
@@ -60,6 +74,35 @@ function Agent({ onSave, onCancel }: AgentProps): JSX.Element {
         const overview = (message.overview || null) as MemoryOverview | null;
         setMemoryOverview(overview);
         setMemories((overview && overview.facts) || []);
+      } else if (message.type === 'episodic-search-results') {
+        // Ignore a response for a query the user has already replaced.
+        const query = String(message.query ?? '');
+        if (query !== episodicQueryRef.current) return;
+        const incoming = (message.events || []) as MemoryEpisodicItem[];
+        const base = {
+          query,
+          total: Number(message.total || 0),
+          hasMore: Boolean(message.has_more),
+          loading: false,
+          status: (message.status || 'ok') as EpisodicSearchView['status'],
+        };
+        setEpisodicSearch((prev) => {
+          if (!message.append || !prev || prev.query !== query) {
+            return { ...base, events: incoming };
+          }
+          // Keyset pagination cannot repeat a row; dedupe defensively so a
+          // re-delivered page can never duplicate an entry.
+          const seen = new Set(prev.events.map((event) => event.id));
+          const events = [...prev.events];
+          for (const event of incoming) {
+            if (!seen.has(event.id)) {
+              seen.add(event.id);
+              events.push(event);
+            }
+          }
+          return { ...base, events };
+        });
+        episodicCursorRef.current = message.next_cursor ?? null;
       } else if (
         message.type === 'character-memory-deleted'
         || message.type === 'character-memory-reset'
@@ -70,6 +113,15 @@ function Agent({ onSave, onCancel }: AgentProps): JSX.Element {
       ) {
         // Refresh the unified list after any memory mutation.
         sendMessage({ type: 'fetch-memory-overview' });
+        // Keep an active episodic search honest: repeat it so a deleted or
+        // newly added event is reflected instead of showing a stale page.
+        if (episodicActiveRef.current && wsStateRef.current === 'OPEN') {
+          sendMessage({
+            type: 'search-episodic-events',
+            query: episodicQueryRef.current,
+            limit: EPISODIC_PAGE_SIZE,
+          });
+        }
       } else if (message.type === 'attachment-memories') {
         setAttachmentMemories(normalizeAttachmentRecords(message.memories));
       } else if (message.type === 'attachment-memory-deleted') {
@@ -97,15 +149,64 @@ function Agent({ onSave, onCancel }: AgentProps): JSX.Element {
     if (wsState !== 'OPEN') {
       // Reconnect resets the guard so the resumed history refetches.
       lastFetchedHistoryUidRef.current = null;
+      episodicQueryRef.current = '';
+      episodicCursorRef.current = null;
+      episodicActiveRef.current = false;
+      setEpisodicSearch(null);
       return;
     }
     if (planMemoryFetch(wsState, currentHistoryUid, lastFetchedHistoryUidRef.current) !== 'fetch') {
       return;
     }
     lastFetchedHistoryUidRef.current = currentHistoryUid ?? null;
+    // A different character/history owns a different episodic store.
+    episodicQueryRef.current = '';
+    episodicCursorRef.current = null;
+    episodicActiveRef.current = false;
+    setEpisodicSearch(null);
     sendMessage({ type: 'fetch-memory-overview' });
     sendMessage({ type: 'fetch-attachment-memories' });
   }, [wsState, currentHistoryUid, sendMessage]);
+
+  const requestEpisodicSearch = (query: string): void => {
+    if (wsState !== 'OPEN') return;
+    episodicQueryRef.current = query;
+    episodicCursorRef.current = null;
+    episodicActiveRef.current = true;
+    setEpisodicSearch({
+      query,
+      events: [],
+      total: 0,
+      hasMore: false,
+      loading: true,
+      status: 'empty',
+    });
+    sendMessage({
+      type: 'search-episodic-events',
+      query,
+      limit: EPISODIC_PAGE_SIZE,
+    });
+  };
+
+  const loadMoreEpisodic = (): void => {
+    if (wsState !== 'OPEN') return;
+    // The default (bounded overview) view has no cursor yet: the first
+    // "load more" starts a keyset search; later ones append.
+    if (!episodicSearch) {
+      requestEpisodicSearch('');
+      return;
+    }
+    const cursor = episodicCursorRef.current;
+    if (!cursor) return;
+    episodicQueryRef.current = episodicSearch.query;
+    setEpisodicSearch((prev) => (prev ? { ...prev, loading: true } : prev));
+    sendMessage({
+      type: 'search-episodic-events',
+      query: episodicSearch.query,
+      limit: EPISODIC_PAGE_SIZE,
+      cursor,
+    });
+  };
 
   return (
     <Stack {...settingStyles.common.container}>
@@ -145,6 +246,7 @@ function Agent({ onSave, onCancel }: AgentProps): JSX.Element {
         <CharacterMemoryDialog
           memories={memories}
           overview={memoryOverview}
+          episodicSearch={episodicSearch}
           open={memoryDialogOpen}
           disabled={wsState !== 'OPEN'}
           onOpenChange={(open) => {
@@ -157,8 +259,17 @@ function Agent({ onSave, onCancel }: AgentProps): JSX.Element {
             // only make the list fresher, never staler.
             if (open && wsState === 'OPEN') {
               sendMessage({ type: 'fetch-memory-overview' });
+            } else if (!open) {
+              // Drop the search view on close so reopening starts from the
+              // bounded overview again.
+              episodicQueryRef.current = '';
+              episodicCursorRef.current = null;
+              episodicActiveRef.current = false;
+              setEpisodicSearch(null);
             }
           }}
+          onEpisodicSearch={requestEpisodicSearch}
+          onEpisodicLoadMore={loadMoreEpisodic}
           onDelete={(memory) => sendMessage({
             type: 'delete-character-memory',
             text: memory.text,
