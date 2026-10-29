@@ -10,9 +10,13 @@ import {
   clonePendingEntry,
   reconcileHistoryData,
   retireSupersededPending,
+  toChatRow,
+  type ServerHistoryRow,
 } from '@/utils/history-reconcile';
 import {
   applyCanonicalFinal,
+  bubbleIdForMessage,
+  newLocalMessageId,
   resolveAiTarget,
   selectFlushSegments,
   type SegmentText,
@@ -27,7 +31,13 @@ interface ChatHistoryState {
   historyList: HistoryInfo[];
   currentHistoryUid: string | null;
   appendHumanMessage: (content: string, requestId?: string) => void;
-  appendAIMessage: (content: string, name?: string, avatar?: string, requestId?: string) => void;
+  appendAIMessage: (
+    content: string,
+    name?: string,
+    avatar?: string,
+    requestId?: string,
+    msgId?: string,
+  ) => void;
   appendOrUpdateToolCallMessage: (toolMessageData: Partial<Message>) => void; // Accept partial data
   setMessages: (messages: Message[]) => void; // Use the unified Message type
   /**
@@ -51,6 +61,7 @@ interface ChatHistoryState {
     requestId: string,
     text: string,
     historyUid?: string | null,
+    msgId?: string | null,
   ) => boolean;
   /**
    * Gated flush entry point for unplayed queued segment texts (chain-start).
@@ -107,7 +118,6 @@ export function ChatHistoryProvider({ children }: { children: React.ReactNode })
   );
   const [fullResponse, setFullResponse] = useState(DEFAULT_HISTORY.fullResponse);
   const [forceNewMessage, setForceNewMessage] = useState<boolean>(false);
-
   // Accepted-but-unconfirmed local messages. An entry leaves this list only
   // when a server snapshot contains it (multiset match) or when a newer turn
   // on the same history starts (superseded). Bounded; never timers.
@@ -158,9 +168,15 @@ export function ChatHistoryProvider({ children }: { children: React.ReactNode })
   // Bounded like finalizedRef.
   const finalizedTurnsRef = useRef<Set<string>>(new Set());
 
+  /**
+   * Provisional id for a bubble the UI creates before the backend answered.
+   * It is never a canonical identity (see newLocalMessageId): a bubble that
+   * knows its backend msg_id is named `msg:<msg_id>` instead, so a retry and
+   * a reload both land on the same row.
+   */
   const nextMessageId = useCallback((): string => {
     idSeqRef.current += 1;
-    return `${Date.now().toString()}-${idSeqRef.current.toString()}`;
+    return newLocalMessageId();
   }, []);
 
   const trackPending = useCallback((entry: PendingEntry): void => {
@@ -172,15 +188,20 @@ export function ChatHistoryProvider({ children }: { children: React.ReactNode })
     }
   }, []);
 
-  const refreshPendingContent = useCallback((id: string, content: string): void => {
+  const refreshPendingContent = useCallback((
+    id: string,
+    content: string,
+    msgId?: string,
+  ): void => {
     const entry = pendingRef.current.find((item) => item.id === id);
     if (entry) {
       entry.content = content;
+      if (msgId && !entry.msgId) entry.msgId = msgId;
     } else {
       // Merging into a snapshot bubble (e.g. stream continuing right after
       // a resync): track it from here so later resyncs stay consistent.
       trackPending({
-        uid: historyUidRef.current, id, role: 'ai', content,
+        uid: historyUidRef.current, id, role: 'ai', content, msgId,
       });
     }
   }, [trackPending]);
@@ -215,16 +236,23 @@ export function ChatHistoryProvider({ children }: { children: React.ReactNode })
    * when a newer turn already forced a new message (fixes stray bubbles
    * from trailing payloads without any timing hacks).
    */
-  const appendAIMessage = useCallback((content: string, name?: string, avatar?: string, requestId?: string) => {
+  const appendAIMessage = useCallback((
+    content: string,
+    name?: string,
+    avatar?: string,
+    requestId?: string,
+    msgId?: string,
+  ) => {
     const prevMessages = messagesRef.current;
     const target = resolveAiTarget(prevMessages, {
       requestId: requestId ?? null,
+      msgId: msgId ?? null,
       forceNew: forceNewMessage,
     });
     if (target.mode === 'merge') {
       const lastMessage = prevMessages[target.index];
       // Canonically finalized bubbles already hold the persisted full
-      // text; a later chunk of the same turn is a duplicate by identity.
+      // text; a later chunk of the same message is a duplicate by identity.
       if (finalizedRef.current.has(lastMessage.id)) return;
       // Otherwise, merge with the owning AI text message
       const merged = {
@@ -235,18 +263,23 @@ export function ChatHistoryProvider({ children }: { children: React.ReactNode })
       if (requestId && !merged.requestId) {
         merged.requestId = requestId;
       }
-      refreshPendingContent(lastMessage.id, merged.content);
+      if (msgId && !merged.msgId) {
+        merged.msgId = msgId;
+      }
+      refreshPendingContent(lastMessage.id, merged.content, msgId);
       const next = [...prevMessages];
       next[target.index] = merged;
       commitMessages(next);
       return;
     }
 
-    // Otherwise, create a new AI text message
+    // Otherwise, create a new AI text message. A bubble that knows its
+    // logical message is keyed on it (`msg:<msg_id>`), exactly like the row
+    // a reload renders; without one it gets a provisional local id.
     setForceNewMessage(false); // Reset the flag
-    const id = nextMessageId();
+    const id = msgId ? bubbleIdForMessage(msgId, '') : nextMessageId();
     trackPending({
-      uid: historyUidRef.current, id, role: 'ai', content, requestId,
+      uid: historyUidRef.current, id, role: 'ai', content, requestId, msgId,
     });
     commitMessages([...prevMessages, {
       id,
@@ -257,6 +290,7 @@ export function ChatHistoryProvider({ children }: { children: React.ReactNode })
       name,
       avatar,
       requestId,
+      msgId,
     }]);
   }, [forceNewMessage, setForceNewMessage, nextMessageId, trackPending, refreshPendingContent, commitMessages]);
 
@@ -349,7 +383,10 @@ export function ChatHistoryProvider({ children }: { children: React.ReactNode })
    * Only pending entries scoped to the target history participate; entries
    * for other histories are retained untouched for their own resync.
    */
-  const applyHistoryData = useCallback((serverMessages: Message[], historyUid?: string | null) => {
+  const applyHistoryData = useCallback((
+    serverMessages: Message[],
+    historyUid?: string | null,
+  ) => {
     const target = historyUid ?? historyUidRef.current;
     const scoped = pendingRef.current.filter(
       (entry) => entry.uid === target || entry.uid == null,
@@ -358,25 +395,13 @@ export function ChatHistoryProvider({ children }: { children: React.ReactNode })
       (entry) => !(entry.uid === target || entry.uid == null),
     );
     const { messages: merged, remaining } = reconcileHistoryData(
-      (Array.isArray(serverMessages) ? serverMessages : []).map((row) => ({
-        id: String(row?.id ?? ''),
-        role: row?.role,
-        content: typeof row?.content === 'string' ? row.content : '',
-        type: row?.type,
-        // Turn identity and display metadata must survive the round trip.
-        //
-        // `requestId` is what `applyCanonicalFinalToBubble` matches on, so
-        // dropping it makes the canonical final a no-op and leaves the stale
-        // partial bubble on screen after a mid-stream resync.
-        //
-        // `name`/`avatar`/`timestamp` are persisted by the backend and
-        // rendered by the panel; dropping them made every loaded AI bubble
-        // fall back to the default avatar/speaker (wrong in group chats).
-        requestId: row?.requestId,
-        name: row?.name,
-        avatar: row?.avatar,
-        timestamp: row?.timestamp,
-      })),
+      (Array.isArray(serverMessages) ? serverMessages : []).map((row, index) =>
+        // `toChatRow` maps the backend row (snake_case `msg_id`) to the UI
+        // row, deriving the canonical id from the logical-message identity.
+        // It is the single place allowed to do that mapping: an inline
+        // literal here is what previously dropped `requestId`/`name`/
+        // `avatar`/`timestamp` on every resync.
+        toChatRow(row as unknown as ServerHistoryRow, index)),
       scoped.map(clonePendingEntry),
     );
     pendingRef.current = capPending([...others, ...remaining]);
@@ -415,6 +440,7 @@ export function ChatHistoryProvider({ children }: { children: React.ReactNode })
     requestId: string,
     text: string,
     historyUid?: string | null,
+    msgId?: string | null,
   ): boolean => {
     const target = historyUid ?? historyUidRef.current;
     // Scope to the open history when known. When the current history is
@@ -423,14 +449,16 @@ export function ChatHistoryProvider({ children }: { children: React.ReactNode })
     // requestId match cannot touch another history.
     const current = historyUidRef.current;
     if (target != null && current != null && target !== current) return false;
-    if (!requestId || typeof text !== 'string' || text.length === 0) return false;
-    const result = applyCanonicalFinal(messagesRef.current, requestId, text);
+    if ((!requestId && !msgId) || typeof text !== 'string' || text.length === 0) {
+      return false;
+    }
+    const result = applyCanonicalFinal(messagesRef.current, requestId, text, msgId);
     if (!result.matched) return false;
     result.finalizedIds.forEach((id) => {
       finalizedRef.current.add(id);
-      refreshPendingContent(id, text);
+      refreshPendingContent(id, text, msgId ?? undefined);
     });
-    finalizedTurnsRef.current.add(requestId);
+    if (requestId) finalizedTurnsRef.current.add(requestId);
     if (finalizedRef.current.size > 200) {
       const ids = Array.from(finalizedRef.current);
       finalizedRef.current = new Set(ids.slice(ids.length - 200));
@@ -456,7 +484,13 @@ export function ChatHistoryProvider({ children }: { children: React.ReactNode })
     );
     heal.forEach((seg) => {
       if (seg.text) {
-        appendAIMessage(seg.text, seg.name, seg.avatar, seg.requestId ?? undefined);
+        appendAIMessage(
+          seg.text,
+          seg.name,
+          seg.avatar,
+          seg.requestId ?? undefined,
+          seg.msgId ?? undefined,
+        );
       }
     });
     return { healed: heal.length, dropped: segments.length - heal.length };

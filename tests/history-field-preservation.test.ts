@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import {
   clonePendingEntry,
   reconcileHistoryData,
+  toChatRow,
 } from '@/utils/history-reconcile';
 import { applyCanonicalFinal } from '@/utils/turn-identity';
 
@@ -109,9 +110,29 @@ test('a canonical final still matches after a mid-stream resync', () => {
 });
 
 test('applyHistoryData maps the identity and display fields through', () => {
-  // Source contract: the row literal inside applyHistoryData must carry
-  // these fields. A UI component harness is not available in this suite, and
-  // the mapping is exactly where the fields used to be dropped.
+  // The mapping that used to be an inline literal (and dropped these fields)
+  // now lives in `toChatRow`. Exercising it is strictly stronger than the old
+  // source grep: a field can be named in the source and still be undefined at
+  // runtime.
+  const mapped = toChatRow(
+    {
+      role: 'ai',
+      content: 'hai juga',
+      msg_id: 'm-1',
+      request_id: 'turn-R',
+      name: 'Mili',
+      avatar: 'mili.png',
+      timestamp: '2026-10-25T10:00:00+00:00',
+    },
+    0,
+  );
+  assert.equal(mapped.msgId, 'm-1');
+  assert.equal(mapped.requestId, 'turn-R');
+  assert.equal(mapped.name, 'Mili');
+  assert.equal(mapped.avatar, 'mili.png');
+  assert.equal(mapped.timestamp, '2026-10-25T10:00:00+00:00');
+
+  // ... and the provider must still route every snapshot row through it.
   const source = readFileSync(
     new URL('../src/renderer/src/context/chat-history-context.tsx', import.meta.url),
     'utf8',
@@ -120,11 +141,9 @@ test('applyHistoryData maps the identity and display fields through', () => {
     source.indexOf('reconcileHistoryData('),
     source.indexOf('scoped.map(clonePendingEntry)'),
   );
-  for (const field of ['requestId', 'name', 'avatar', 'timestamp']) {
-    assert.match(
-      mapping,
-      new RegExp(`${field}:`),
-      `applyHistoryData must preserve '${field}' from the server transcript`,
-    );
-  }
+  assert.match(
+    mapping,
+    /toChatRow\(/,
+    'applyHistoryData must map every server row through toChatRow',
+  );
 });

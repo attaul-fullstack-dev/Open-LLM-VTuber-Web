@@ -17,6 +17,13 @@ import { useConfig } from '@/context/character-config-context';
 import { useChatHistory } from '@/context/chat-history-context';
 import { toaster } from '@/components/ui/toaster';
 import { logWsDiag } from '@/utils/ws-diagnostics';
+import { audioFrameAck, buildMessageAck, type AckStatus } from '@/utils/message-ack';
+import {
+  createAckOutbox,
+  queueAndSendAck,
+  requeueFailedAck,
+} from '@/utils/ack-outbox';
+import { stableClientRef } from '@/utils/client-identity';
 import { useVAD } from '@/context/vad-context';
 import { AiState, useAiState } from "@/context/ai-state-context";
 import { useLocalStorage } from '@/hooks/utils/use-local-storage';
@@ -41,6 +48,61 @@ import {
 import type {
   AttachmentRemainingSource,
 } from '@/utils/attachment-memory-status';
+
+/**
+ * Send the receipt for one server frame (Stage 2 delivery protocol).
+ *
+ * Module-scoped on purpose: an ACK is protocol plumbing, not React state, and
+ * it must never re-render anything. Nothing is sent for a frame that carries
+ * no msg_id/attempt (a server that predates the protocol keeps its legacy
+ * behaviour) or on a closed socket (there is nobody to tell, and the socket's
+ * own not-open toast would fire on every frame).
+ */
+/**
+ * Receipts that could not be handed to a live socket. Durable across a
+ * disconnect (and a reload), drained once per reconnection.
+ *
+ * Storage is injected at module scope and guarded: a renderer without
+ * localStorage still works, it just cannot promise durability.
+ */
+const ackOutbox = createAckOutbox(
+  (() => {
+    try {
+      return typeof window === 'undefined' ? null : window.localStorage;
+    } catch {
+      return null;
+    }
+  })(),
+);
+
+function sendFrameAck(
+  frame: MessageEvent | null | undefined,
+  status: AckStatus,
+  reason?: string,
+): void {
+  if (!frame || frame.forwarded) return;
+  const ack = buildMessageAck(frame, status, reason);
+  if (!ack) return;
+  // Write-ahead: persist the receipt BEFORE the socket gets it. A send that
+  // the transport accepts can still be lost before the backend records it;
+  // only the durable copy survives that window and can be replayed after a
+  // reconnect. Never a receipt we did not earn: the status still comes from
+  // what actually happened to this frame.
+  const delivery = queueAndSendAck(
+    ack,
+    ackOutbox,
+    () => wsService.getCurrentState() === 'OPEN' && wsService.sendMessage(ack),
+  );
+  if (!delivery.persisted) {
+    console.warn('Message receipt queued in memory only; storage refused it');
+  }
+  logWsDiag(
+    delivery.sent ? 'MESSAGE_ACK' : 'MESSAGE_ACK_QUEUED',
+    wsService.getConnectionId(),
+    `status=${ack.status} seq=${ack.seq ?? '-'} final=${ack.final === true} `
+      + `persisted=${delivery.persisted}`,
+  );
+}
 
 function WebSocketHandler({ children }: { children: React.ReactNode }) {
   const { t } = useTranslation();
@@ -87,6 +149,51 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
   const {
     setCurrentHistoryUid, setHistoryList,
   } = useChatHistory();
+
+  // Last announced (connection, history) pair, so `client-hello` is sent once
+  // per connection and again when the visible history changes.
+  const helloSignatureRef = useRef('');
+
+  /**
+   * Announce the delivery protocol for the connection + history the user is
+   * actually looking at, then replay receipts that never reached the previous
+   * connection (Stage 3).
+   *
+   * Sent only after the client's bubble list is authoritative, so a recovery
+   * resend can be matched to an existing bubble by msg_id instead of being
+   * discarded as "no bubble". A receipt is never invented here: the outbox
+   * only contains receipts that were really produced for frames this client
+   * actually took (or really dropped).
+   */
+  const announceDeliveryProtocol = useCallback((historyUid?: string | null) => {
+    const signature = `${wsService.getConnectionId()}|${historyUid ?? ''}`;
+    if (helloSignatureRef.current === signature) return;
+    const clientRef = stableClientRef();
+    const hello: Record<string, unknown> = {
+      type: 'client-hello',
+      protocol: 1,
+      ack: true,
+    };
+    if (clientRef) hello.client_ref = clientRef;
+    if (historyUid) hello.history_uid = historyUid;
+    if (!wsService.sendMessage(hello)) {
+      // The socket died before the handshake finished; the next connection must
+      // announce itself again.
+      helloSignatureRef.current = '';
+      return;
+    }
+    helloSignatureRef.current = signature;
+    // Ordered after the hello: the backend must know this client's instance id
+    // before it judges the receipts' ownership.
+    const flushed = ackOutbox.flush((ack) => wsService.sendMessage(ack));
+    if (flushed.sent || flushed.remaining || !flushed.persisted) {
+      logWsDiag(
+        'MESSAGE_ACK_OUTBOX_FLUSH',
+        wsService.getConnectionId(),
+        `sent=${flushed.sent} remaining=${flushed.remaining} persisted=${flushed.persisted}`,
+      );
+    }
+  }, []);
 
   const handleControlMessage = useCallback((controlText: string, message?: MessageEvent) => {
     switch (controlText) {
@@ -166,7 +273,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
       default:
         console.warn('Unknown control command:', controlText);
     }
-  }, [setAiState, setSubtitleText, clearResponse, setForceNewMessage, noteChainStart, startMic, stopMic, startSubtitleResponse, t, appendFlushedSegments, applyCanonicalFinalToBubble]);
+  }, [setAiState, setSubtitleText, clearResponse, setForceNewMessage, noteChainStart, startMic, stopMic, startSubtitleResponse, t, appendFlushedSegments, applyCanonicalFinalToBubble, announceDeliveryProtocol]);
 
   const handleWebSocketMessage = useCallback((message: MessageEvent) => {
     console.debug('WebSocket event received:', message.type);
@@ -236,10 +343,23 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
         // creates bubbles, never replays audio). Routed by message type so
         // the canonical text itself can travel in `text`.
         const canonicalId = message.request_id ?? null;
+        const canonicalMsgId = message.msg_id ?? null;
         const canonicalText = typeof message.text === 'string' ? message.text : '';
-        if (canonicalId && canonicalText) {
+        if ((canonicalId || canonicalMsgId) && canonicalText) {
           logWsDiag('CANONICAL_FINAL', wsService.getConnectionId(), `chars=${canonicalText.length}`);
-          applyCanonicalFinalToBubble(canonicalId, canonicalText, message.history_uid ?? null);
+          const applied = applyCanonicalFinalToBubble(
+            canonicalId ?? '',
+            canonicalText,
+            message.history_uid ?? null,
+            canonicalMsgId,
+          );
+          // Receipt only when the canonical text actually landed in a bubble.
+          // Otherwise the frame was discarded (no bubble of this message is
+          // open — e.g. another history is showing) and saying "received"
+          // would hide that from the backend.
+          sendFrameAck(message, applied ? 'received' : 'dropped', applied ? undefined : 'no-bubble');
+        } else {
+          sendFrameAck(message, 'dropped', 'malformed');
         }
         break;
       }
@@ -286,16 +406,21 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
           'audio',
           Boolean(message.display_text?.text),
         );
+        let buffered = false;
+        let discardReason: string | undefined;
         if (aiState === 'interrupted' || aiState === 'listening') {
           console.debug('Audio playback intercepted', {
             display_characters: message.display_text?.text?.length || 0,
           });
+          // Deliberately discarded: say so, so the backend can retry this
+          // message with the SAME msg_id instead of treating it as delivered.
+          discardReason = aiState;
         } else {
           console.debug('Audio payload received', {
             has_actions: Boolean(message.actions),
             display_characters: message.display_text?.text?.length || 0,
           });
-          addAudioTask({
+          buffered = addAudioTask({
             audioBase64: message.audio || '',
             volumes: message.volumes || [],
             sliceLength: message.slice_length || 0,
@@ -304,8 +429,13 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
             emotions: message.actions?.emotions || null,
             forwarded: message.forwarded || false,
             requestId: message.request_id ?? null,
+            msgId: message.msg_id ?? null,
           });
+          if (!buffered) discardReason = 'interrupted';
         }
+        const decision = audioFrameAck(buffered, discardReason);
+        // "received" here means buffered, never rendered or heard.
+        sendFrameAck(message, decision.status, decision.reason);
         break;
       case 'history-data':
         if (message.messages) {
@@ -319,6 +449,9 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
           // below still fires so the resync stays visible.
           applyHistoryData(message.messages, message.history_uid);
         }
+        // Bubbles are authoritative now: announce the protocol (and drain held
+        // receipts) so a recovery resend lands in an existing bubble.
+        announceDeliveryProtocol(message.history_uid ?? null);
         toaster.create({
           title: t('notification.historyLoaded'),
           type: 'success',
@@ -336,11 +469,12 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
             `uid=${message.history_uid}`,
           );
           setLastHistoryUid(activeConfUidRef.current, message.history_uid);
-          setCurrentHistoryUid(message.history_uid);
           // Fresh session starts empty, but an optimistic message accepted
           // just before creation (uid == null at send time) is adopted, not
           // dropped: same invariant as any other resync.
           applyHistoryData([], message.history_uid);
+          setCurrentHistoryUid(message.history_uid);
+          announceDeliveryProtocol(message.history_uid);
           const newHistory: HistoryInfo = {
             uid: message.history_uid,
             latest_message: null,
@@ -525,6 +659,49 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
         console.debug('User transcription received', { length: message.text?.length || 0 });
         if (message.text) {
           appendHumanMessage(message.text);
+        }
+        break;
+      case 'delivery-summary':
+        // Recovery state of this client's unsettled messages (Stage 3). The
+        // server redelivers on its own; the client only reports what it was
+        // told, and never presents an unreadable store as "all settled".
+        logWsDiag(
+          'DELIVERY_SUMMARY',
+          wsService.getConnectionId(),
+          `ok=${message.ok !== false} pending=${message.unsettled?.length ?? 0}`,
+        );
+        if (message.unsettled?.length) {
+          console.debug('Recovery summary received', {
+            pending: message.unsettled.map((item) => `${item.msg_id}#${item.attempt}`),
+            redelivery: message.redelivery === true,
+          });
+        }
+        if (message.ok === false) {
+          console.warn('Delivery state unreadable on the backend; recovery is unknown');
+        }
+        break;
+      case 'message-ack-result':
+        // The backend could not record our receipt (state store failure).
+        // Nothing here may pretend it was accepted; the delivery stays
+        // unsettled on the server, which is the truthful outcome.
+        if (!message.success) {
+          // The backend echoed the validated receipt so it can be replayed.
+          // This matters after a reconnect flush, which removes an entry as
+          // soon as the socket accepts it: a state-write failure must not
+          // silently discard that receipt.
+          const requeued = requeueFailedAck(ackOutbox, message.ack);
+          console.warn(
+            'Message receipt not recorded by backend:',
+            message.reason,
+            requeued.queued
+              ? `requeued (persisted=${requeued.persisted})`
+              : 'no valid receipt to requeue',
+          );
+          logWsDiag(
+            'MESSAGE_ACK_NOT_RECORDED',
+            wsService.getConnectionId(),
+            `reason=${message.reason ?? 'unknown'} requeued=${requeued.queued} persisted=${requeued.persisted}`,
+          );
         }
         break;
       case 'error':

@@ -52,6 +52,12 @@ export interface Message {
   avatar?: string;
   /** Backend turn request_id for AI bubbles built from audio payloads. */
   requestId?: string;
+  /**
+   * Stable backend identity of this logical message. Persisted on the history
+   * row, so the same value names the bubble before and after a reload, and a
+   * retried delivery reuses it instead of opening a second bubble.
+   */
+  msgId?: string;
 
   // Fields for different message types (make optional)
   type?: 'text' | 'tool_call_status'; // Add possible types, default to 'text' if omitted
@@ -87,7 +93,31 @@ export interface MessageEvent {
   uids?: string[];
   messages?: Message[];
   history_uid?: string;
+  /** Backend logical-message id (audio/ai-final/chain-start frames). */
+  msg_id?: string;
+  /** Delivery-protocol identity (Stage 2): turn, attempt, frame seq, final. */
+  turn?: string;
+  attempt?: number;
+  seq?: number;
+  final?: boolean;
+  reason?: string;
+  /** `delivery-summary` (Stage 3): false when the backend store is unreadable. */
+  ok?: boolean;
+  /** `delivery-summary`: whether the backend will resend unsettled messages. */
+  redelivery?: boolean;
+  protocol?: number;
+  /** `delivery-summary`: messages this client still owes a receipt for. */
+  unsettled?: {
+    msg_id: string;
+    turn_id: string;
+    attempt: number;
+    status: string;
+    history_uid: string;
+    retry_count: number;
+  }[];
   success?: boolean;
+  /** `message-ack-result`: validated receipt echoed when persistence failed. */
+  ack?: unknown;
   histories?: HistoryInfo[];
   configs?: ConfigFile[];
   title?: string;

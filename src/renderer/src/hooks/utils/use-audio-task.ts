@@ -36,6 +36,8 @@ interface AudioTaskOptions {
   forwarded?: boolean
   /** Backend turn request_id carried on the audio payload (may be absent). */
   requestId?: string | null
+  /** Stable backend logical-message id (may be absent on old servers). */
+  msgId?: string | null
 }
 
 // Display texts queued for playback but not yet executed (see
@@ -145,7 +147,7 @@ export const useAudioTask = () => {
     }
 
     const {
-      audioBase64, displayText, expressions, emotions, forwarded, requestId,
+      audioBase64, displayText, expressions, emotions, forwarded, requestId, msgId,
     } = options;
     const face = resolveResponseFaceId({ emotions, expressions });
     // Shift this task's text entry (strict FIFO with queue execution).
@@ -175,7 +177,13 @@ export const useAudioTask = () => {
     if (displayText?.text) {
       addResponseChars(turnState, displayText.text.length);
       appendText(displayText.text);
-      appendAI(displayText.text, displayText.name, displayText.avatar, requestId ?? undefined);
+      appendAI(
+        displayText.text,
+        displayText.name,
+        displayText.avatar,
+        requestId ?? undefined,
+        msgId ?? undefined,
+      );
       if (!forwarded) {
         sendMessage({
           type: "audio-play-start",
@@ -370,14 +378,20 @@ export const useAudioTask = () => {
   }, [backendSynthComplete, sendMessage, setBackendSynthComplete, stopCurrentAudioAndLipSync]);
 
   /**
-   * Add a new audio task to the queue
+   * Add a new audio task to the queue.
+   *
+   * Returns whether the frame was actually ACCEPTED into the client message
+   * buffer (queue + segment text buffer). The delivery protocol (Stage 2)
+   * reports this verbatim: `true` -> received, `false` (interrupted, so the
+   * frame is deliberately discarded) -> dropped. It deliberately says nothing
+   * about playback, which happens later and may be skipped by a mute.
    */
-  const addAudioTask = async (options: AudioTaskOptions) => {
+  const addAudioTask = (options: AudioTaskOptions): boolean => {
     const { aiState: currentState } = stateRef.current;
 
     if (currentState === 'interrupted') {
       console.log('Skipping audio task due to interrupted state');
-      return;
+      return false;
     }
 
     console.log(`Adding audio task ${options.displayText?.text} to queue`);
@@ -387,9 +401,11 @@ export const useAudioTask = () => {
         name: options.displayText.name,
         avatar: options.displayText.avatar,
         requestId: options.requestId ?? null,
+        msgId: options.msgId ?? null,
       });
     }
     audioTaskQueue.addTask(() => handleAudioPlayback(options));
+    return true;
   };
 
   return {
