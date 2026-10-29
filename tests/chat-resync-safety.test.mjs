@@ -10,12 +10,21 @@ const reconcile = read('../src/renderer/src/utils/history-reconcile.ts');
 
 test('history-data never blindly replaces local messages', () => {
   assert.doesNotMatch(handler, /setMessages\(message\.messages\)/);
-  assert.match(handler, /applyHistoryData\(message\.messages, message\.history_uid\)/);
+  // Same call, plus the continuation event the snapshot may carry (a
+  // continued session must render its previous conversation as context).
+  assert.match(
+    handler,
+    /applyHistoryData\(\s*message\.messages,\s*message\.history_uid,\s*parseContinuationEvent\(/,
+  );
+  assert.match(handler, /parseContinuationEvent\(/);
 });
 
 test('new sessions adopt (not drop) an accepted optimistic message', () => {
   assert.doesNotMatch(handler, /setMessages\(\[\]\)/);
-  assert.match(handler, /applyHistoryData\(\[\], message\.history_uid\)/);
+  assert.match(
+    handler,
+    /applyHistoryData\(\[\], message\.history_uid, continuationEvent\)/,
+  );
 });
 
 test('chain-start retires superseded turns and forces a fresh AI bubble', () => {

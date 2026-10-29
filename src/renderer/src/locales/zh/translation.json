@@ -181,6 +181,10 @@
     "rename": "重命名对话",
     "renamePrompt": "为此对话输入新标题：",
     "loadOlder": "加载较早消息",
+    "continuedFrom": "延续自之前的对话",
+    "continuedHint": "较早的对话完整保留在原来的聊天中（{{total}} 条消息）。这里只新增新的消息。",
+    "openPrevious": "打开之前的对话",
+    "continuedDivider": "新对话从这里开始",
     "compact": "压缩对话",
     "compactConfirm": "立即将此对话的较早消息压缩为摘要吗？聊天记录仍会显示；只有 AI 的上下文会被压缩。",
     "delete": "删除对话"

@@ -54,6 +54,10 @@
     "rename": "Ubah nama chat",
     "renamePrompt": "Masukkan nama baru untuk chat ini:",
     "loadOlder": "Muat pesan lama",
+    "continuedFrom": "Dilanjutkan dari percakapan sebelumnya",
+    "continuedHint": "Percakapan lama tetap utuh di chatnya sendiri ({{total}} pesan). Di sini hanya pesan baru yang ditambahkan.",
+    "openPrevious": "Buka percakapan sebelumnya",
+    "continuedDivider": "Percakapan baru dimulai di sini",
     "compact": "Ringkas percakapan",
     "compactConfirm": "Ringkas pesan lama untuk konteks AI? Transkrip tetap terlihat dan tidak akan dihapus.",
     "delete": "Hapus chat"

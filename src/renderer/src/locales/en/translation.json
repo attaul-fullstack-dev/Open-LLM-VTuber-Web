@@ -181,6 +181,10 @@
     "rename": "Rename chat",
     "renamePrompt": "Enter a new title for this chat:",
     "loadOlder": "Load older messages",
+    "continuedFrom": "Continued from the previous conversation",
+    "continuedHint": "The earlier conversation is kept intact in its own chat ({{total}} messages). Only new messages are added here.",
+    "openPrevious": "Open previous conversation",
+    "continuedDivider": "New conversation starts here",
     "compact": "Compact conversation",
     "compactConfirm": "Compress the older messages of this conversation into a summary now? The transcript stays visible; only the AI's context is compacted.",
     "delete": "Delete chat"

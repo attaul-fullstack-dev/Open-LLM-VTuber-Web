@@ -21,6 +21,11 @@ import {
   selectFlushSegments,
   type SegmentText,
 } from '@/utils/turn-identity';
+import {
+  continuationForSnapshot,
+  type ContinuationEvent,
+  type ContinuationView,
+} from '@/utils/history-continuation';
 
 /**
  * Chat history context state interface
@@ -30,6 +35,12 @@ interface ChatHistoryState {
   messages: Message[]; // Use the unified Message type
   historyList: HistoryInfo[];
   currentHistoryUid: string | null;
+  /**
+   * Read-only view of the conversation this session continues, when it was
+   * handed off from a long one. Its rows belong to the PREVIOUS transcript:
+   * they are displayed as context and never written into this session.
+   */
+  continuation: ContinuationView | null;
   appendHumanMessage: (content: string, requestId?: string) => void;
   appendAIMessage: (
     content: string,
@@ -44,7 +55,11 @@ interface ChatHistoryState {
    * History-resync entry point. Merges (never blindly replaces) so an
    * accepted-but-unpersisted local message survives a racing resync.
    */
-  applyHistoryData: (messages: Message[], historyUid?: string | null) => void;
+  applyHistoryData: (
+    messages: Message[],
+    historyUid?: string | null,
+    continuationEvent?: ContinuationEvent | null,
+  ) => void;
   /**
    * Turn-lifecycle entry point. Drops superseded pending entries for one
    * history when its next turn actually starts (previous turns there are
@@ -118,6 +133,12 @@ export function ChatHistoryProvider({ children }: { children: React.ReactNode })
   );
   const [fullResponse, setFullResponse] = useState(DEFAULT_HISTORY.fullResponse);
   const [forceNewMessage, setForceNewMessage] = useState<boolean>(false);
+  const [continuation, setContinuation] = useState<ContinuationView | null>(null);
+  // Mirror for the same reason as messagesRef: `applyHistoryData` may run
+  // twice in one tick and must build on the previous view, not on a stale
+  // render.
+  const continuationRef = useRef<ContinuationView | null>(null);
+
   // Accepted-but-unconfirmed local messages. An entry leaves this list only
   // when a server snapshot contains it (multiset match) or when a newer turn
   // on the same history starts (superseded). Bounded; never timers.
@@ -386,8 +407,19 @@ export function ChatHistoryProvider({ children }: { children: React.ReactNode })
   const applyHistoryData = useCallback((
     serverMessages: Message[],
     historyUid?: string | null,
+    continuationEvent?: ContinuationEvent | null,
   ) => {
     const target = historyUid ?? historyUidRef.current;
+    // The continuation is resolved against the history this tab is actually
+    // SHOWING, which is what makes a hand-off adopt the bubbles already on
+    // screen instead of re-fetching the same conversation.
+    const displayedUid = historyUidRef.current;
+    const view = continuationForSnapshot({
+      event: continuationEvent ?? null,
+      displayedHistoryUid: displayedUid,
+      displayedMessages: messagesRef.current,
+      previous: continuationRef.current,
+    });
     const scoped = pendingRef.current.filter(
       (entry) => entry.uid === target || entry.uid == null,
     );
@@ -405,6 +437,8 @@ export function ChatHistoryProvider({ children }: { children: React.ReactNode })
       scoped.map(clonePendingEntry),
     );
     pendingRef.current = capPending([...others, ...remaining]);
+    continuationRef.current = view;
+    setContinuation(view);
     commitMessages(merged as Message[]);
   }, [commitMessages]);
 
@@ -502,6 +536,7 @@ export function ChatHistoryProvider({ children }: { children: React.ReactNode })
       messages,
       historyList,
       currentHistoryUid,
+      continuation,
       appendHumanMessage,
       appendAIMessage,
       appendOrUpdateToolCallMessage, // Add to context value
@@ -525,6 +560,7 @@ export function ChatHistoryProvider({ children }: { children: React.ReactNode })
       messages,
       historyList,
       currentHistoryUid,
+      continuation,
       appendHumanMessage,
       appendAIMessage,
       appendOrUpdateToolCallMessage, // Add dependency

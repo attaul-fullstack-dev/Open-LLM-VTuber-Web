@@ -22,6 +22,7 @@ import {
   installLifecycleLogging,
 } from '@/utils/ws-lifecycle-log';
 import type { AttachmentPurgeStatus } from '@/utils/attachment-memory-status';
+import type { ResumableSession } from '@/utils/history-storage';
 
 export interface DisplayText {
   text: string;
@@ -93,6 +94,16 @@ export interface MessageEvent {
   uids?: string[];
   messages?: Message[];
   history_uid?: string;
+  /**
+   * Continued-conversation contract (backend hand-off). `continued_from` names
+   * the previous transcript this session carries on; the client shows it as a
+   * read-only context, never as rows of this session. `context_messages` is a
+   * bounded tail of that transcript (`context_total` = its real row count).
+   */
+  continued_from?: string;
+  continued_at?: string;
+  context_messages?: unknown[];
+  context_total?: number;
   /** Backend logical-message id (audio/ai-final/chain-start frames). */
   msg_id?: string;
   /** Delivery-protocol identity (Stage 2): turn, attempt, frame seq, final. */
@@ -119,6 +130,12 @@ export interface MessageEvent {
   /** `message-ack-result`: validated receipt echoed when persistence failed. */
   ack?: unknown;
   histories?: HistoryInfo[];
+  /**
+   * `history-list`: empty but VALID continuation sessions (a hand-off target
+   * with no rows of its own yet). Reported apart from `histories` so they are
+   * never rendered as conversations; a tab may only adopt one it remembers.
+   */
+  resumable_sessions?: ResumableSession[];
   configs?: ConfigFile[];
   title?: string;
   // World/Life State snapshot fields (backend `world-state` message).

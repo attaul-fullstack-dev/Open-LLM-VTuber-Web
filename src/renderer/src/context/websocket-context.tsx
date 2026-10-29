@@ -17,6 +17,11 @@ export interface HistoryInfo {
   } | null;
   timestamp: string | null;
   title?: string | null;
+  /**
+   * Set when this session continues a previous transcript (backend hand-off).
+   * The previous conversation stays its own session; this only points at it.
+   */
+  continued_from?: string;
 }
 
 interface WebSocketContextProps {

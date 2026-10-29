@@ -10,6 +10,7 @@ import { sidebarStyles, chatPanelStyles } from './sidebar-styles';
 import { MainContainer, ChatContainer, MessageList as ChatMessageList, Message as ChatMessage, Avatar as ChatAvatar } from '@chatscope/chat-ui-kit-react';
 import '@chatscope/chat-ui-kit-styles/dist/default/styles.min.css';
 import { useChatHistory } from '@/context/chat-history-context';
+import { useHistoryDrawer } from '@/hooks/sidebar/use-history-drawer';
 import { Global } from '@emotion/react';
 import { useConfig } from '@/context/character-config-context';
 import { useWebSocket } from '@/context/websocket-context';
@@ -27,19 +28,62 @@ import {
 
 const MESSAGE_RENDER_BATCH = 48;
 
+// How much of a continued conversation is shown as context above the new
+// session. Bounded on purpose: the full previous transcript stays its own
+// session (openable from the banner), so the chat does not re-render 900 rows.
+const CONTINUATION_VISIBLE_MESSAGES = 8;
+
+/** Rows worth rendering: text, or a tool call that is visible.
+ *
+ * Kept as one predicate so the context block and the live list can never
+ * disagree about what a message is (and so an empty continuation cannot
+ * render a banner over nothing).
+ */
+const isRenderableMessage = (msg: { content?: string; type?: string; status?: string }): boolean => Boolean(msg.content)
+  || (msg.type === 'tool_call_status' && msg.status === 'running')
+  || (msg.type === 'tool_call_status' && msg.status === 'completed')
+  || (msg.type === 'tool_call_status' && msg.status === 'error');
+
+/**
+ * Shape both the live bubble list (`Message`) and a continued conversation's
+ * context rows (`ChatRow`) satisfy. Context rows come from a transcript and
+ * may lack a timestamp; that is display metadata, never identity.
+ */
+type RenderableMessage = {
+  id: string;
+  content: string;
+  role: 'ai' | 'human';
+  timestamp?: string;
+  name?: string;
+  avatar?: string;
+  type?: string;
+  status?: string;
+  tool_id?: string;
+  tool_name?: string;
+};
+
 // Main component
 function ChatHistoryPanel(): JSX.Element {
   const { t } = useTranslation();
-  const { messages, currentHistoryUid } = useChatHistory(); // Get messages directly from context
+  const { messages, currentHistoryUid, continuation } = useChatHistory(); // Get messages directly from context
   const { confName } = useConfig();
   const { baseUrl } = useWebSocket();
+  const { fetchAndSetHistory } = useHistoryDrawer();
   const userName = "Me";
 
-  const validMessages = useMemo(() => messages.filter((msg) => msg.content || // Keep messages with content
-     (msg.type === 'tool_call_status' && msg.status === 'running') || // Keep running tools
-     (msg.type === 'tool_call_status' && msg.status === 'completed') || // Keep completed tools
-     (msg.type === 'tool_call_status' && msg.status === 'error'), // Keep error tools
-  ), [messages]);
+  const validMessages = useMemo(
+    () => messages.filter((msg) => isRenderableMessage(msg)),
+    [messages],
+  );
+
+  // Read-only context of the conversation this session continues. These rows
+  // belong to the PREVIOUS transcript: same order, same ids, same timestamps
+  // and same text as on disk. Nothing here is written into the new session.
+  const continuationMessages = useMemo(
+    () => (continuation?.messages ?? []).filter((msg) => isRenderableMessage(msg)),
+    [continuation],
+  );
+  const visibleContinuation = continuationMessages.slice(-CONTINUATION_VISIBLE_MESSAGES);
   const [visibleMessageCount, setVisibleMessageCount] = useState(MESSAGE_RENDER_BATCH);
 
   // Auto-follow ownership: the system follows the bottom while streaming
@@ -288,6 +332,91 @@ function ChatHistoryPanel(): JSX.Element {
     setVisibleMessageCount((current) => Math.min(current + MESSAGE_RENDER_BATCH, validMessages.length));
   };
 
+  const renderMessage = (msg: RenderableMessage) => {
+    // Check if it's a tool call message
+    if (msg.type === 'tool_call_status') {
+      return (
+        // Render Tool Call Indicator using msg properties
+        <Flex
+          key={msg.id} // Use tool_id as key
+          {...sidebarStyles.toolCallIndicator.container}
+          alignItems="center"
+        >
+          <Icon
+            as={FaTools}
+            {...sidebarStyles.toolCallIndicator.icon}
+          />
+          <Text {...sidebarStyles.toolCallIndicator.text}>
+            {msg.status === "running"
+              ? t('toolCall.using', { name: msg.name, tool: msg.tool_name })
+              : t('toolCall.used', { name: msg.name, tool: msg.tool_name })}
+          </Text>
+          {/* Show spinner if running, checkmark if completed, maybe error icon? */}
+          {msg.status === "running" && (
+            <Spinner
+              size="xs"
+              color={sidebarStyles.toolCallIndicator.spinner.color}
+              ml={sidebarStyles.toolCallIndicator.spinner.ml}
+            />
+          )}
+          {msg.status === "completed" && (
+            <Icon
+              as={FaCheck}
+              {...sidebarStyles.toolCallIndicator.completedIcon}
+            />
+          )}
+          {/* Optional: Add an error icon */}
+          {msg.status === "error" && (
+            <Icon
+              as={FaTimes}
+              {...sidebarStyles.toolCallIndicator.errorIcon}
+            />
+          )}
+        </Flex>
+      );
+    }
+    // Render Standard Chat Message (human or ai text)
+    return (
+      <ChatMessage
+        key={msg.id}
+        model={{
+          message: cleanChatDisplayText(msg.content),
+          sentTime: msg.timestamp,
+          sender: msg.role === 'ai'
+            ? (msg.name || confName || 'AI')
+            : userName,
+          direction: msg.role === 'ai' ? 'incoming' : 'outgoing',
+          position: 'single',
+        }}
+        avatarPosition={msg.role === 'ai' ? 'tl' : 'tr'}
+        avatarSpacer={false}
+      >
+        <ChatAvatar>
+          {msg.role === 'ai' ? (
+            msg.avatar ? (
+              <img
+                src={`${baseUrl}/avatars/${msg.avatar}`}
+                alt="avatar"
+                style={{ width: '100%', height: '100%', borderRadius: '50%' }}
+                onError={(e) => {
+                  const target = e.target as HTMLImageElement;
+                  const fallbackName = msg.name || confName || 'A';
+                  target.outerHTML = `<div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; border-radius: 50%; background-color: var(--chakra-colors-blue-500); color: white; font-size: 14px;">${fallbackName[0].toUpperCase()}</div>`;
+                }}
+              />
+            ) : (
+              (msg.name && msg.name[0].toUpperCase()) ||
+                (confName && confName[0].toUpperCase()) ||
+                'A'
+            )
+          ) : (
+            userName[0].toUpperCase()
+          )}
+        </ChatAvatar>
+      </ChatMessage>
+    );
+  };
+
   return (
     <Box
       h="full"
@@ -299,6 +428,48 @@ function ChatHistoryPanel(): JSX.Element {
       <MainContainer>
         <ChatContainer>
           <ChatMessageList>
+            {/* A continued conversation: say so, and keep the previous
+                transcript one click away. The banner never claims the old
+                rows are part of this session -- they are context. */}
+            {continuation && (
+              <Box
+                data-testid="continuation-banner"
+                borderWidth="1px"
+                borderColor="whiteAlpha.200"
+                borderRadius="md"
+                bg="whiteAlpha.50"
+                px="3"
+                py="2"
+                mx="2"
+                mb="2"
+              >
+                <Text fontSize="xs" color="whiteAlpha.800" fontWeight="semibold">
+                  {t('history.continuedFrom')}
+                </Text>
+                <Text fontSize="xs" color="whiteAlpha.600" mt="1">
+                  {t('history.continuedHint', { total: continuation.total })}
+                </Text>
+                <Button
+                  size="xs"
+                  variant="ghost"
+                  color="blue.300"
+                  mt="1"
+                  onClick={() => fetchAndSetHistory(continuation.from)}
+                >
+                  {t('history.openPrevious')}
+                </Button>
+              </Box>
+            )}
+            {visibleContinuation.length > 0 && (
+              <>
+                {visibleContinuation.map(renderMessage)}
+                <Box display="flex" justifyContent="center" py="2">
+                  <Text fontSize="xs" color="whiteAlpha.500">
+                    {t('history.continuedDivider')}
+                  </Text>
+                </Box>
+              </>
+            )}
             {hasOlderMessages && (
               <Box display="flex" justifyContent="center" py="2">
                 <Button
@@ -312,7 +483,7 @@ function ChatHistoryPanel(): JSX.Element {
                 </Button>
               </Box>
             )}
-            {validMessages.length === 0 ? (
+            {validMessages.length === 0 && !continuation ? (
               <Box
                 display="flex"
                 alignItems="center"
@@ -324,90 +495,7 @@ function ChatHistoryPanel(): JSX.Element {
                 {t('sidebar.noMessages')}
               </Box>
             ) : (
-              renderedMessages.map((msg) => {
-                // Check if it's a tool call message
-                if (msg.type === 'tool_call_status') {
-                  return (
-                    // Render Tool Call Indicator using msg properties
-                    <Flex
-                      key={msg.id} // Use tool_id as key
-                      {...sidebarStyles.toolCallIndicator.container}
-                      alignItems="center"
-                    >
-                      <Icon
-                        as={FaTools}
-                        {...sidebarStyles.toolCallIndicator.icon}
-                      />
-                      <Text {...sidebarStyles.toolCallIndicator.text}>
-                        {msg.status === "running"
-                          ? t('toolCall.using', { name: msg.name, tool: msg.tool_name })
-                          : t('toolCall.used', { name: msg.name, tool: msg.tool_name })}
-                      </Text>
-                      {/* Show spinner if running, checkmark if completed, maybe error icon? */}
-                      {msg.status === "running" && (
-                        <Spinner
-                          size="xs"
-                          color={sidebarStyles.toolCallIndicator.spinner.color}
-                          ml={sidebarStyles.toolCallIndicator.spinner.ml}
-                        />
-                      )}
-                      {msg.status === "completed" && (
-                        <Icon
-                          as={FaCheck}
-                          {...sidebarStyles.toolCallIndicator.completedIcon}
-                        />
-                      )}
-                      {/* Optional: Add an error icon */}
-                      {msg.status === "error" && (
-                        <Icon
-                          as={FaTimes}
-                          {...sidebarStyles.toolCallIndicator.errorIcon}
-                        />
-                      )}
-                    </Flex>
-                  );
-                } 
-                // Render Standard Chat Message (human or ai text)
-                return (
-                  <ChatMessage
-                    key={msg.id}
-                    model={{
-                      message: cleanChatDisplayText(msg.content),
-                      sentTime: msg.timestamp,
-                      sender: msg.role === 'ai'
-                        ? (msg.name || confName || 'AI')
-                        : userName,
-                      direction: msg.role === 'ai' ? 'incoming' : 'outgoing',
-                      position: 'single',
-                    }}
-                    avatarPosition={msg.role === 'ai' ? 'tl' : 'tr'}
-                    avatarSpacer={false}
-                  >
-                    <ChatAvatar>
-                      {msg.role === 'ai' ? (
-                        msg.avatar ? (
-                          <img
-                            src={`${baseUrl}/avatars/${msg.avatar}`}
-                            alt="avatar"
-                            style={{ width: '100%', height: '100%', borderRadius: '50%' }}
-                            onError={(e) => {
-                              const target = e.target as HTMLImageElement;
-                              const fallbackName = msg.name || confName || 'A';
-                              target.outerHTML = `<div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; border-radius: 50%; background-color: var(--chakra-colors-blue-500); color: white; font-size: 14px;">${fallbackName[0].toUpperCase()}</div>`;
-                            }}
-                          />
-                        ) : (
-                          (msg.name && msg.name[0].toUpperCase()) ||
-                            (confName && confName[0].toUpperCase()) ||
-                            'A'
-                        )
-                      ) : (
-                        userName[0].toUpperCase()
-                      )}
-                    </ChatAvatar>
-                  </ChatMessage>
-                );
-              })
+              renderedMessages.map(renderMessage)
             )}
           </ChatMessageList>
         </ChatContainer>

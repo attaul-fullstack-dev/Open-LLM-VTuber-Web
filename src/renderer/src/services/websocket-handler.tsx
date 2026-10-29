@@ -36,7 +36,9 @@ import {
   decideHistoryResume,
   getLastHistoryUid,
   setLastHistoryUid,
+  type ResumableSession,
 } from '@/utils/history-storage';
+import { parseContinuationEvent } from '@/utils/history-continuation';
 import { subtitlePlaybackCoordinator } from '@/utils/subtitle-playback';
 import { loadVoiceOutputEnabled } from '@/utils/voice-output-preference';
 import { useLifeState } from '@/context/life-state-context';
@@ -447,7 +449,16 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
           // Reconcile, never blindly replace: an accepted-but-unpersisted
           // local message survives a resync that raced the turn. The toast
           // below still fires so the resync stays visible.
-          applyHistoryData(message.messages, message.history_uid);
+          //
+          // A continuation session also carries the read-only context of the
+          // transcript it continues, so a reload/reconnect renders the
+          // conversation as continued instead of empty. Ordinary sessions
+          // parse to null, which clears any stale banner.
+          applyHistoryData(
+            message.messages,
+            message.history_uid,
+            parseContinuationEvent(message as unknown as Record<string, unknown>),
+          );
         }
         // Bubbles are authoritative now: announce the protocol (and drain held
         // receipts) so a recovery resend lands in an existing bubble.
@@ -464,21 +475,30 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
         window.setTimeout(() => setSubtitleText(''), 1800);
         // No need to open mic here
         if (message.history_uid) {
+          // A hand-off (`continued_from`) starts a NEW transcript that carries
+          // the previous conversation on. It must not present itself as an
+          // empty chat: the bubbles this tab already shows for the source
+          // conversation become the read-only context, and only this session's
+          // own rows go into `messages`.
+          const continuationEvent = parseContinuationEvent(
+            message as unknown as Record<string, unknown>,
+          );
           logWsDiag(
             'ACTIVE_HISTORY_ID', wsService.getConnectionId(),
-            `uid=${message.history_uid}`,
+            `uid=${message.history_uid} continued=${continuationEvent ? 'yes' : 'no'}`,
           );
           setLastHistoryUid(activeConfUidRef.current, message.history_uid);
-          // Fresh session starts empty, but an optimistic message accepted
-          // just before creation (uid == null at send time) is adopted, not
-          // dropped: same invariant as any other resync.
-          applyHistoryData([], message.history_uid);
+          // Applied while the source history is still the displayed one, which
+          // is what lets the context be adopted from the screen instead of
+          // re-fetched.
+          applyHistoryData([], message.history_uid, continuationEvent);
           setCurrentHistoryUid(message.history_uid);
           announceDeliveryProtocol(message.history_uid);
           const newHistory: HistoryInfo = {
             uid: message.history_uid,
             latest_message: null,
             timestamp: new Date().toISOString(),
+            ...(continuationEvent ? { continued_from: continuationEvent.from } : {}),
           };
           setHistoryList((prev: HistoryInfo[]) => [newHistory, ...prev]);
           toaster.create({
@@ -628,18 +648,50 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
           setHistoryList(message.histories);
           const confUidForHistory = activeConfUidRef.current;
           const rememberedUid = getLastHistoryUid(confUidForHistory);
+          // Empty hand-off targets the backend vouches for. They are absent
+          // from `histories` (they have no rows, so they are not conversations)
+          // but a tab that remembers one of these uids must continue IT rather
+          // than silently fall back to the source transcript.
+          const resumableSessions: ResumableSession[] = Array.isArray(
+            message.resumable_sessions,
+          ) ? message.resumable_sessions : [];
           const decision = decideHistoryResume(
             message.histories.map((history) => history.uid),
             rememberedUid,
+            resumableSessions.map((session) => session.uid),
           );
 
           if (decision.type === 'resume') {
             logWsDiag(
               'RESYNC_DECISION', wsService.getConnectionId(),
-              `type=resume uid=${decision.uid}`,
+              `type=resume uid=${decision.uid} source=${decision.source}`,
             );
             setLastHistoryUid(confUidForHistory, decision.uid);
             setCurrentHistoryUid(decision.uid);
+            if (decision.source === 'continued') {
+              // The adopted session has no rows, so the list just received does
+              // not contain it. Insert the same shape a live hand-off inserts,
+              // so the sidebar shows the active conversation (with its lineage)
+              // instead of nothing until the next list refresh. Kept idempotent
+              // for a repeated frame.
+              const adopted = resumableSessions.find(
+                (session) => session.uid === decision.uid,
+              );
+              setHistoryList((prev: HistoryInfo[]) => (
+                prev.some((history) => history.uid === decision.uid)
+                  ? prev
+                  : [{
+                    uid: decision.uid,
+                    latest_message: null,
+                    timestamp: adopted?.continued_at
+                      || adopted?.timestamp
+                      || new Date().toISOString(),
+                    ...(adopted?.continued_from
+                      ? { continued_from: adopted.continued_from }
+                      : {}),
+                  }, ...prev]
+              ));
+            }
             wsService.sendMessage({
               type: 'fetch-and-set-history',
               history_uid: decision.uid,
