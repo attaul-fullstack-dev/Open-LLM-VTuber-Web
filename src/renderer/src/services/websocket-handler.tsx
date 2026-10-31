@@ -11,7 +11,11 @@ import { ModelInfo, useLive2DConfig } from '@/context/live2d-config-context';
 import { useSubtitle } from '@/context/subtitle-context';
 import { audioTaskQueue } from '@/utils/task-queue';
 import { useAudioTask } from '@/components/canvas/live2d';
-import { flushPendingSegmentTexts } from '@/hooks/utils/use-audio-task';
+import {
+  flushPendingSegmentTexts,
+  noteDiscardedAudioFrame,
+  noteIncomingAudioFrame,
+} from '@/hooks/utils/use-audio-task';
 import { useBgUrl } from '@/context/bgurl-context';
 import { useConfig } from '@/context/character-config-context';
 import { useChatHistory } from '@/context/chat-history-context';
@@ -40,6 +44,7 @@ import {
 } from '@/utils/history-storage';
 import { parseContinuationEvent } from '@/utils/history-continuation';
 import { subtitlePlaybackCoordinator } from '@/utils/subtitle-playback';
+import { readPlaybackIdentity } from '@/utils/audio-playback-outcome';
 import { loadVoiceOutputEnabled } from '@/utils/voice-output-preference';
 import { useLifeState } from '@/context/life-state-context';
 import { toLifeSnapshot } from '@/utils/life-state-sync';
@@ -112,7 +117,8 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
   const [wsUrl, setWsUrl] = useLocalStorage<string>('wsUrl', defaultWsUrl);
   const [baseUrl, setBaseUrl] = useLocalStorage<string>('baseUrl', defaultBaseUrl);
   const {
-    aiState, setAiState, backendSynthComplete, setBackendSynthComplete, setFirstTokenAt,
+    aiState, setAiState, backendSynthComplete, setBackendSynthComplete,
+    setBackendSynthCompleteIdentity, setFirstTokenAt,
   } = useAiState();
   const { setModelInfo } = useLive2DConfig();
   const { setSubtitleText, startSubtitleResponse } = useSubtitle();
@@ -402,12 +408,17 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
           bgUrlContext?.setBackgroundFiles(message.files);
         }
         break;
-      case 'audio':
+      case 'audio': {
         markFrontendPayload(
           message.request_id,
           'audio',
           Boolean(message.display_text?.text),
         );
+        // Identity is recorded before the discard decision: a turn whose
+        // frames are all refused must still be matchable by its completion,
+        // and a new turn must reset the previous outcome report.
+        const audioPlaybackIdentity = readPlaybackIdentity(message);
+        noteIncomingAudioFrame(audioPlaybackIdentity);
         let buffered = false;
         let discardReason: string | undefined;
         if (aiState === 'interrupted' || aiState === 'listening') {
@@ -417,6 +428,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
           // Deliberately discarded: say so, so the backend can retry this
           // message with the SAME msg_id instead of treating it as delivered.
           discardReason = aiState;
+          noteDiscardedAudioFrame(audioPlaybackIdentity);
         } else {
           console.debug('Audio payload received', {
             has_actions: Boolean(message.actions),
@@ -432,13 +444,18 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
             forwarded: message.forwarded || false,
             requestId: message.request_id ?? null,
             msgId: message.msg_id ?? null,
+            attempt: message.attempt ?? null,
           });
-          if (!buffered) discardReason = 'interrupted';
+          if (!buffered) {
+            discardReason = 'interrupted';
+            noteDiscardedAudioFrame(audioPlaybackIdentity);
+          }
         }
         const decision = audioFrameAck(buffered, discardReason);
         // "received" here means buffered, never rendered or heard.
         sendFrameAck(message, decision.status, decision.reason);
         break;
+      }
       case 'history-data':
         if (message.messages) {
           // Diagnostic-only (BUG B capture): count only, never content.
@@ -780,6 +797,10 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
         });
         break;
       case 'backend-synth-complete':
+        // The identity is what lets the completion name THIS turn. A legacy
+        // backend sends only the type; then the identity stays null and the
+        // completion remains untagged (the legacy handshake).
+        setBackendSynthCompleteIdentity(readPlaybackIdentity(message));
         setBackendSynthComplete(true);
         break;
       case 'force-new-message':
@@ -819,7 +840,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
       default:
         console.warn('Unknown message type:', message.type);
     }
-  }, [aiState, addAudioTask, appendHumanMessage, baseUrl, bgUrlContext, setAiState, setConfName, setConfUid, setConfigFiles, setCurrentHistoryUid, setHistoryList, applyHistoryData, noteChainStart, setModelInfo, setSubtitleText, startMic, stopMic, setSelfUid, setGroupMembers, setIsOwner, backendSynthComplete, setBackendSynthComplete, clearResponse, handleControlMessage, appendOrUpdateToolCallMessage, interrupt, setBrowserViewData, t]);
+  }, [aiState, addAudioTask, appendHumanMessage, baseUrl, bgUrlContext, setAiState, setConfName, setConfUid, setConfigFiles, setCurrentHistoryUid, setHistoryList, applyHistoryData, noteChainStart, setModelInfo, setSubtitleText, startMic, stopMic, setSelfUid, setGroupMembers, setIsOwner, backendSynthComplete, setBackendSynthComplete, setBackendSynthCompleteIdentity, clearResponse, handleControlMessage, appendOrUpdateToolCallMessage, interrupt, setBrowserViewData, t]);
 
   useEffect(() => {
     wsService.connect(wsUrl);

@@ -19,7 +19,24 @@ import {
   markAudioPlayed,
   addResponseChars,
   decideTurnFinalize,
+  decideCompletionSend,
 } from '@/utils/response-turn-lifecycle';
+import {
+  buildPlaybackCompletionFrame,
+  createAudioPlaybackReport,
+  describeMediaError,
+  describePlaybackFailure,
+  playbackIdentityMatches,
+  playbackWatchdogMs,
+  readPlaybackIdentity,
+  recordAudioOutcome,
+  resetAudioPlaybackReport,
+  samePlaybackIdentity,
+  setAudioPlaybackIdentity,
+  startLipSyncSafely,
+  startTalkMotionSafely,
+  type PlaybackIdentity,
+} from '@/utils/audio-playback-outcome';
 import { createSegmentTextBuffer, type SegmentText } from '@/utils/turn-identity';
 import { subtitlePlaybackCoordinator } from '@/utils/subtitle-playback';
 import * as LAppDefine from '../../../WebSDK/src/lappdefine';
@@ -38,6 +55,8 @@ interface AudioTaskOptions {
   requestId?: string | null
   /** Stable backend logical-message id (may be absent on old servers). */
   msgId?: string | null
+  /** Delivery attempt of that logical message (may be absent). */
+  attempt?: number | null
 }
 
 // Display texts queued for playback but not yet executed (see
@@ -57,6 +76,36 @@ export function flushPendingSegmentTexts(): SegmentText[] {
 // release storm and the audio→text-only misclassification (the releasing
 // instance never played the audio, so its local flag was false).
 const turnState = createTurnState();
+// Per-turn playback facts, shared for the same reason as turnState: several
+// components mount this hook, and only real events may describe the outcome.
+const playbackReport = createAudioPlaybackReport();
+
+/**
+ * Record the turn identity of an incoming audio frame, before playback is
+ * queued (or discarded). A new identity starts a new turn: the previous
+ * outcome report and completion guard must not leak into it. The playback
+ * callback calls this again through `beginTurnTask`, which is harmless for
+ * the same turn.
+ */
+export function noteIncomingAudioFrame(identity: PlaybackIdentity | null): boolean {
+  if (!identity) return false;
+  if (samePlaybackIdentity(playbackReport.identity, identity)) return false;
+  beginTurnTask(turnState);
+  resetAudioPlaybackReport(playbackReport);
+  playbackReport.identity = identity;
+  return true;
+}
+
+/** A frame the client refused to play is not a playback success. */
+export function noteDiscardedAudioFrame(identity: PlaybackIdentity | null): void {
+  noteIncomingAudioFrame(identity);
+  recordAudioOutcome(playbackReport, 'interrupted');
+}
+
+// Lets an external stop (mute / interruption) settle the current segment so a
+// stopped element cannot keep the queue — and the completion — pending.
+let abortActiveSegment: (() => void) | null = null;
+const AUDIO_LOAD_WATCHDOG_MS = 45_000;
 let pendingTextOnlyTimer: ReturnType<typeof setTimeout> | null = null;
 // useAudioTask is mounted by several components (canvas, websocket handler,
 // every useInterrupt consumer). Only ONE of them may subscribe to
@@ -71,7 +120,10 @@ let completionEffectClaimed = false;
  */
 export const useAudioTask = () => {
   const { t } = useTranslation();
-  const { aiState, backendSynthComplete, setBackendSynthComplete } = useAiState();
+  const {
+    aiState, backendSynthComplete, backendSynthCompleteIdentity,
+    setBackendSynthComplete, setBackendSynthCompleteIdentity,
+  } = useAiState();
   const { setSubtitleText, subtitleDismissed } = useSubtitle();
   const { appendResponse, appendAIMessage } = useChatHistory();
   const { sendMessage } = useWebSocket();
@@ -111,6 +163,7 @@ export const useAudioTask = () => {
       return false;
     }
     audioManager.stopCurrentAudioAndLipSync();
+    abortActiveSegment?.();
     endAllSpeaking();
     if (decision.kind === 'text_only_hold') {
       // No real audible playback lifecycle existed (muted or text-only), so
@@ -147,9 +200,14 @@ export const useAudioTask = () => {
     }
 
     const {
-      audioBase64, displayText, expressions, emotions, forwarded, requestId, msgId,
+      audioBase64, displayText, expressions, emotions, forwarded, requestId, msgId, attempt,
     } = options;
     const face = resolveResponseFaceId({ emotions, expressions });
+    const identity = readPlaybackIdentity({
+      request_id: requestId,
+      msg_id: msgId,
+      attempt,
+    });
     // Shift this task's text entry (strict FIFO with queue execution).
     if (displayText?.text) {
       segmentTextBuffer.shiftForText(displayText.text);
@@ -158,7 +216,12 @@ export const useAudioTask = () => {
     // beginTurnTask resets the shared per-turn state, and any pending
     // text-only hold from the previous turn is cleared (a stale timer must
     // never release a NEW response's face).
-    beginTurnTask(turnState);
+    if (beginTurnTask(turnState)) {
+      // A genuinely new turn owns a fresh outcome report; nothing may be
+      // carried over from the previous response.
+      resetAudioPlaybackReport(playbackReport);
+    }
+    setAudioPlaybackIdentity(playbackReport, identity);
     if (pendingTextOnlyTimer !== null) {
       clearTimeout(pendingTextOnlyTimer);
       pendingTextOnlyTimer = null;
@@ -193,160 +256,189 @@ export const useAudioTask = () => {
       }
     }
 
-    try {
-      // Process audio if available
-      if (audioBase64) {
-        if (audioManager.shouldSkipPlayback()) {
-          console.log('[AudioManager] Voice playback skipped (muted or Voice Output OFF)');
-          if (subtitleTicket && !isSubtitleDismissed) {
-            const subtitle = subtitlePlaybackCoordinator.activateWithoutPlayback(subtitleTicket);
-            if (subtitle !== null) updateSubtitle(subtitle);
-          }
-          resolve();
-          return;
-        }
-
-        const audioDataUrl = `data:audio/wav;base64,${audioBase64}`;
-
-        // Get Live2D manager and model
-        const live2dManager = (window as any).getLive2DManager?.();
-        if (!live2dManager) {
-          console.error('Live2D manager not found');
-          resolve();
-          return;
-        }
-
-        const model = live2dManager.getModel(0);
-        if (!model) {
-          console.error('Live2D model not found at index 0');
-          resolve();
-          return;
-        }
-        console.log('Found model for audio playback');
-
-        if (!model._wavFileHandler) {
-          console.warn('Model does not have _wavFileHandler for lip sync');
-        } else {
-          console.log('Model has _wavFileHandler available');
-        }
-
-        // Start talk motion
-        if (LAppDefine && LAppDefine.PriorityNormal) {
-          console.log("Starting random 'Talk' motion");
-          model.startRandomMotion(
-            "Talk",
-            LAppDefine.PriorityNormal,
-          );
-        } else {
-          console.warn("LAppDefine.PriorityNormal not found - cannot start talk motion");
-        }
-
-        // Setup audio element
-        const audio = new Audio(audioDataUrl);
-        
-        // Register with global audio manager IMMEDIATELY after creating audio
-        audioManager.setCurrentAudio(audio, model);
-        let isFinished = false;
-
-        const cleanup = () => {
-          audioManager.clearCurrentAudio(audio);
-          if (!isFinished) {
-            isFinished = true;
-            resolve();
-          }
-        };
-
-        // Enhance lip sync sensitivity
-        const lipSyncScale = 2.0;
-
-        audio.addEventListener('canplaythrough', () => {
-          // Check for interruption before playback
-          if (stateRef.current.aiState === 'interrupted' || !audioManager.hasCurrentAudio()) {
-            console.warn('Audio playback cancelled due to interruption or audio was stopped');
-            cleanup();
-            return;
-          }
-
-          // Watchdog heartbeat: audio activity proves the turn is still alive
-          // even when the next sentence task takes a long time to arrive.
-          responseFaceBus.publish({ faceId: face, activity: 'audio_start' });
-          console.log('Starting audio playback with lip sync');
-          audio.play().catch((err) => {
-            console.error("Audio play error:", err);
-            cleanup();
-          });
-
-          // Setup lip sync
-          if (model._wavFileHandler) {
-            if (!model._wavFileHandler._initialized) {
-              console.log('Applying enhanced lip sync');
-              model._wavFileHandler._initialized = true;
-
-              const originalUpdate = model._wavFileHandler.update.bind(model._wavFileHandler);
-              model._wavFileHandler.update = function (deltaTimeSeconds: number) {
-                const result = originalUpdate(deltaTimeSeconds);
-                // @ts-ignore
-                this._lastRms = Math.min(2.0, this._lastRms * lipSyncScale);
-                return result;
-              };
-            }
-
-            if (audioManager.hasCurrentAudio()) {
-              model._wavFileHandler.start(audioDataUrl);
-            } else {
-              console.warn('WavFileHandler start skipped - audio was stopped');
-            }
-          }
-        }, { once: true });
-
-        audio.addEventListener('playing', () => {
-          // Real audible playback evidence: latched true for the WHOLE turn
-          // (never reset by later sentences).
-          markAudioPlayed(turnState);
-          // Tokens intentionally live until frontend-playback-complete. That
-          // keeps a multi-segment response in one continuous speaking state
-          // across tiny queue gaps; interruption/mute clears them immediately.
-          beginSpeaking();
-          // A queued or synthesized future segment must never replace the
-          // subtitle for audio that is currently being spoken.
-          if (subtitleTicket && !stateRef.current.subtitleDismissed) {
-            const subtitle = subtitlePlaybackCoordinator.activateForPlayback(subtitleTicket);
-            if (subtitle !== null) stateRef.current.setSubtitleText(subtitle);
-          }
-        }, { once: true });
-
-        audio.addEventListener('ended', () => {
-          // Watchdog heartbeat: sentence finished; keep the latched face alive
-          // across the TTS gap until the next sentence arrives.
-          responseFaceBus.publish({ faceId: face, activity: 'audio_end' });
-          console.log("Audio playback completed");
-          cleanup();
-        });
-
-        audio.addEventListener('error', (error) => {
-          console.error("Audio playback error:", error);
-          cleanup();
-        });
-
-        audio.load();
-      } else {
-        // Watchdog heartbeat for text-only segments.
-        responseFaceBus.publish({ faceId: face, activity: 'text' });
-        if (subtitleTicket && !isSubtitleDismissed) {
-          const subtitle = subtitlePlaybackCoordinator.activateWithoutPlayback(subtitleTicket);
-          if (subtitle !== null) updateSubtitle(subtitle);
-        }
-        resolve();
-      }
-    } catch (error) {
-      console.error('Audio playback setup error:', error);
+    // Only ONE failure toast per turn: a broken model or audio element would
+    // otherwise produce one toast per segment.
+    const notifyAudioFailure = (reason: string) => {
+      const firstFailure = playbackReport.failed === 0 && playbackReport.timedOut === 0;
+      if (!firstFailure) return;
       toaster.create({
-        title: `${t('error.audioPlayback')}: ${error}`,
-        type: "error",
-        duration: 2000,
+        title: t('error.audioPlayback'),
+        description: reason,
+        type: 'error',
+        duration: 4000,
       });
+    };
+    const reportFailure = (reason: string) => {
+      notifyAudioFailure(reason);
+      recordAudioOutcome(playbackReport, 'failed', reason);
+      console.error('Audio playback failed:', reason);
+    };
+
+    if (!audioBase64) {
+      // Text-only segment: no audio element exists, so the turn must never be
+      // reported as played. The text itself was already appended above.
+      responseFaceBus.publish({ faceId: face, activity: 'text' });
+      if (subtitleTicket && !isSubtitleDismissed) {
+        const subtitle = subtitlePlaybackCoordinator.activateWithoutPlayback(subtitleTicket);
+        if (subtitle !== null) updateSubtitle(subtitle);
+      }
+      recordAudioOutcome(playbackReport, 'text_only');
       resolve();
+      return;
     }
+
+    if (audioManager.shouldSkipPlayback()) {
+      console.log('[AudioManager] Voice playback skipped (muted or Voice Output OFF)');
+      if (subtitleTicket && !isSubtitleDismissed) {
+        const subtitle = subtitlePlaybackCoordinator.activateWithoutPlayback(subtitleTicket);
+        if (subtitle !== null) updateSubtitle(subtitle);
+      }
+      // Explicitly NOT played: text is shown, the completion is not a success.
+      recordAudioOutcome(playbackReport, 'skipped');
+      resolve();
+      return;
+    }
+
+    const audioDataUrl = `data:audio/wav;base64,${audioBase64}`;
+
+    // Live2D is presentation only. A missing manager, a missing model, or a
+    // model whose assets failed to load must NEVER cancel the audio itself.
+    const live2dManager = (window as any).getLive2DManager?.();
+    const model = live2dManager?.getModel?.(0) ?? null;
+    if (!live2dManager) {
+      console.warn('Live2D manager not found; playing audio without motion/lip sync');
+    } else if (!model) {
+      console.warn('Live2D model not found at index 0; playing audio without motion/lip sync');
+    }
+
+    if (LAppDefine && LAppDefine.PriorityNormal) {
+      // Isolated: a broken model used to throw right here and abort the whole
+      // segment before <audio> existed. Audio now continues regardless.
+      startTalkMotionSafely(model, 'Talk', LAppDefine.PriorityNormal);
+    } else {
+      console.warn('LAppDefine.PriorityNormal not found - cannot start talk motion');
+    }
+
+    let audio: HTMLAudioElement;
+    try {
+      audio = new Audio(audioDataUrl);
+    } catch (error) {
+      reportFailure(describePlaybackFailure(error, 'audio-element-failed'));
+      resolve();
+      return;
+    }
+
+    // Register with the global audio manager IMMEDIATELY after creating audio.
+    audioManager.setCurrentAudio(audio, model);
+
+    let isFinished = false;
+    let watchdog: ReturnType<typeof setTimeout> | null = null;
+    let abortSegment: () => void = () => {};
+
+    const finish = (
+      outcome: 'played' | 'failed' | 'skipped' | 'interrupted' | 'timed_out',
+      reason?: string,
+    ) => {
+      if (watchdog !== null) {
+        clearTimeout(watchdog);
+        watchdog = null;
+      }
+      if (abortActiveSegment === abortSegment) abortActiveSegment = null;
+      audioManager.clearCurrentAudio(audio);
+      if (isFinished) return;
+      isFinished = true;
+      if (outcome === 'failed') {
+        reportFailure(reason ?? 'playback-failed');
+      } else if (outcome === 'timed_out') {
+        notifyAudioFailure(reason ?? 'timeout');
+        recordAudioOutcome(playbackReport, 'timed_out', reason ?? 'timeout');
+        console.warn('Audio playback timed out; releasing the queue');
+      } else {
+        recordAudioOutcome(playbackReport, outcome);
+      }
+      resolve();
+    };
+    abortSegment = () => finish('interrupted', 'interrupted');
+    abortActiveSegment = abortSegment;
+
+    const armWatchdog = (ms: number) => {
+      if (watchdog !== null) clearTimeout(watchdog);
+      watchdog = setTimeout(() => {
+        if (isFinished) return;
+        try {
+          audio.pause();
+        } catch {
+          // The element may already be gone; the outcome still has to settle.
+        }
+        finish('timed_out', 'timeout');
+      }, ms);
+    };
+
+    // A segment that never reaches `canplaythrough` must not hang the queue.
+    armWatchdog(AUDIO_LOAD_WATCHDOG_MS);
+
+    audio.addEventListener('canplaythrough', () => {
+      // Check for interruption before playback
+      if (stateRef.current.aiState === 'interrupted' || !audioManager.hasCurrentAudio()) {
+        console.warn('Audio playback cancelled due to interruption or audio was stopped');
+        finish('interrupted', 'cancelled');
+        return;
+      }
+
+      // Watchdog heartbeat: audio activity proves the turn is still alive
+      // even when the next sentence task takes a long time to arrive.
+      responseFaceBus.publish({ faceId: face, activity: 'audio_start' });
+      console.log('Starting audio playback with lip sync');
+      armWatchdog(playbackWatchdogMs(audio.duration));
+      audio.play().catch((err) => {
+        console.error('Audio play error:', err);
+        // A rejected play() is a real failure: no `playing` event will follow,
+        // so the completion must carry `failed`, not a success.
+        finish('failed', describePlaybackFailure(err, 'play-rejected'));
+      });
+
+      // Isolated: lip sync failure never affects audible playback.
+      startLipSyncSafely(model, audioDataUrl);
+    }, { once: true });
+
+    audio.addEventListener('playing', () => {
+      // Real audible playback evidence: latched true for the WHOLE turn
+      // (never reset by later sentences).
+      markAudioPlayed(turnState);
+      // Tokens intentionally live until frontend-playback-complete. That
+      // keeps a multi-segment response in one continuous speaking state
+      // across tiny queue gaps; interruption/mute clears them immediately.
+      beginSpeaking();
+      // A queued or synthesized future segment must never replace the
+      // subtitle for audio that is currently being spoken.
+      if (subtitleTicket && !stateRef.current.subtitleDismissed) {
+        const subtitle = subtitlePlaybackCoordinator.activateForPlayback(subtitleTicket);
+        if (subtitle !== null) stateRef.current.setSubtitleText(subtitle);
+      }
+    }, { once: true });
+
+    audio.addEventListener('pause', () => {
+      // A mute/voice-off stop is not a failure. Natural end also pauses, but
+      // there `audio.ended` is already true and `ended` reports the outcome.
+      if (!audio.ended && audioManager.shouldSkipPlayback()) {
+        finish('skipped', 'muted-during-playback');
+      }
+    });
+
+    audio.addEventListener('ended', () => {
+      // Watchdog heartbeat: sentence finished; keep the latched face alive
+      // across the TTS gap until the next sentence arrives.
+      responseFaceBus.publish({ faceId: face, activity: 'audio_end' });
+      console.log('Audio playback completed');
+      finish('played');
+    });
+
+    audio.addEventListener('error', () => {
+      console.error('Audio playback error:', audio.error);
+      finish('failed', describeMediaError(audio.error?.code));
+    });
+
+    audio.load();
   });
 
   // Handle backend synthesis completion — claimed by exactly ONE mounted
@@ -358,15 +450,42 @@ export const useAudioTask = () => {
 
     const handleComplete = async () => {
       await audioTaskQueue.waitForCompletion();
-      if (isMounted && backendSynthComplete) {
-        // Exactly ONE authoritative completion: only the instance that actually
-        // performed the release sends frontend-playback-complete back.
-        const released = stopCurrentAudioAndLipSync();
-        if (released) {
-          sendMessage({ type: "frontend-playback-complete" });
-        }
+      if (!isMounted || !backendSynthComplete) return;
+
+      // A delayed synth-complete from the PREVIOUS turn must not stop the
+      // new turn's audio or settle it. Only an identity-less (legacy) frame
+      // is accepted without comparison.
+      if (!playbackIdentityMatches(
+        playbackReport.identity,
+        backendSynthCompleteIdentity,
+      )) {
+        console.warn(
+          'Ignoring stale backend-synth-complete',
+          backendSynthCompleteIdentity,
+          'current turn is',
+          playbackReport.identity,
+        );
         setBackendSynthComplete(false);
+        setBackendSynthCompleteIdentity(null);
+        return;
       }
+
+      // Release the face/lifecycle once (idempotent). The completion frame has
+      // its OWN once-per-turn guard: a failed or interrupted turn still has to
+      // unblock the backend, but it reports that outcome instead of a success.
+      stopCurrentAudioAndLipSync();
+      if (decideCompletionSend(turnState)) {
+        sendMessage(buildPlaybackCompletionFrame(playbackReport, {
+          interrupted: turnState.interrupted,
+          identity: backendSynthCompleteIdentity,
+        }));
+      }
+      // The turn is consumed. A later completion without audio frames (for
+      // example a turn whose frames this client discarded) starts from a
+      // clean identity instead of matching this finished one.
+      playbackReport.identity = null;
+      setBackendSynthComplete(false);
+      setBackendSynthCompleteIdentity(null);
     };
 
     handleComplete();
@@ -375,7 +494,14 @@ export const useAudioTask = () => {
       isMounted = false;
       completionEffectClaimed = false;
     };
-  }, [backendSynthComplete, sendMessage, setBackendSynthComplete, stopCurrentAudioAndLipSync]);
+  }, [
+    backendSynthComplete,
+    backendSynthCompleteIdentity,
+    sendMessage,
+    setBackendSynthComplete,
+    setBackendSynthCompleteIdentity,
+    stopCurrentAudioAndLipSync,
+  ]);
 
   /**
    * Add a new audio task to the queue.

@@ -9,6 +9,7 @@ import {
   useEffect,
 } from 'react';
 import { getActiveConnectionId, logWsDiag } from '@/utils/ws-diagnostics';
+import type { PlaybackIdentity } from '@/utils/audio-playback-outcome';
 
 /**
  * Enum for all possible AI states
@@ -62,6 +63,13 @@ interface AiStateContextType {
   };
   backendSynthComplete: boolean;
   setBackendSynthComplete: (complete: boolean) => void;
+  /**
+   * Identity carried by the latest `backend-synth-complete` frame. Null for
+   * a legacy backend that sends the bare frame; the completion then stays
+   * untagged so that backend can still match it.
+   */
+  backendSynthCompleteIdentity: PlaybackIdentity | null;
+  setBackendSynthCompleteIdentity: (identity: PlaybackIdentity | null) => void;
   /** Epoch ms when the provider's first token arrived; null while still waiting. */
   firstTokenAt: number | null;
   setFirstTokenAt: (at: number | null) => void;
@@ -90,6 +98,8 @@ export const AiStateContext = createContext<AiStateContextType | null>(null);
 export function AiStateProvider({ children }: { children: ReactNode }) {
   const [aiState, setAiStateInternal] = useState<AiState>(initialState);
   const [backendSynthComplete, setBackendSynthComplete] = useState(false);
+  const [backendSynthCompleteIdentity, setBackendSynthCompleteIdentity] =
+    useState<PlaybackIdentity | null>(null);
   const [firstTokenAt, setFirstTokenAt] = useState<number | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   // Mirror of the latest state for use inside the stable setAiState
@@ -164,12 +174,22 @@ export function AiStateProvider({ children }: { children: ReactNode }) {
       setAiState,
       backendSynthComplete,
       setBackendSynthComplete,
+      backendSynthCompleteIdentity,
+      setBackendSynthCompleteIdentity,
       firstTokenAt,
       setFirstTokenAt,
       ...stateChecks,
       resetState,
     }),
-    [aiState, setAiState, backendSynthComplete, firstTokenAt, stateChecks, resetState],
+    [
+      aiState,
+      setAiState,
+      backendSynthComplete,
+      backendSynthCompleteIdentity,
+      firstTokenAt,
+      stateChecks,
+      resetState,
+    ],
   );
 
   return (

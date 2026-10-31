@@ -32,7 +32,9 @@ test('speaking begins from actual audio playback rather than queueing or synthes
 test('multi-segment speaking remains active until the whole queue completes', () => {
   assert.match(audio, /await audioTaskQueue\.waitForCompletion\(\)/);
   assert.match(audio, /stopCurrentAudioAndLipSync\(\)/);
-  assert.match(audio, /audioManager\.stopCurrentAudioAndLipSync\(\);\s*endAllSpeaking\(\)/);
+  // Stopping audio must precede ending the speaking state; an abort of the
+  // in-flight segment in between is allowed (it keeps the queue from wedging).
+  assert.match(audio, /audioManager\.stopCurrentAudioAndLipSync\(\);[\s\S]{0,200}endAllSpeaking\(\)/);
   assert.doesNotMatch(audio, /cleanup[\s\S]{0,180}endSpeaking/);
 });
 

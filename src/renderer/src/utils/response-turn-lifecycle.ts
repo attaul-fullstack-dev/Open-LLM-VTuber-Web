@@ -43,10 +43,20 @@ export interface ResponseTurnState {
   audioPlayed: boolean;
   /** Visible response length so far (scales the text-only perceptual hold). */
   responseChars: number;
+  /** The turn was cut off by an interruption (no success claim allowed). */
+  interrupted: boolean;
+  /** The one `frontend-playback-complete` for this turn was already sent. */
+  completionSent: boolean;
 }
 
 export function createTurnState(): ResponseTurnState {
-  return { releaseHandled: false, audioPlayed: false, responseChars: 0 };
+  return {
+    releaseHandled: false,
+    audioPlayed: false,
+    responseChars: 0,
+    interrupted: false,
+    completionSent: false,
+  };
 }
 
 /**
@@ -55,12 +65,16 @@ export function createTurnState(): ResponseTurnState {
  * the per-turn state; a new turn must never inherit the old turn's audio
  * evidence or release flag.
  */
-export function beginTurnTask(state: ResponseTurnState): void {
-  if (state.releaseHandled) {
+export function beginTurnTask(state: ResponseTurnState): boolean {
+  const startedNewTurn = state.releaseHandled;
+  if (startedNewTurn) {
     state.audioPlayed = false;
     state.responseChars = 0;
+    state.interrupted = false;
+    state.completionSent = false;
   }
   state.releaseHandled = false;
+  return startedNewTurn;
 }
 
 /**
@@ -90,6 +104,7 @@ export function decideTurnFinalize(
   state: ResponseTurnState,
   reason: TurnFinalizeReason,
 ): TurnFinalizeDecision {
+  if (reason === 'interruption') state.interrupted = true;
   if (state.releaseHandled) return { kind: 'already_released' };
   state.releaseHandled = true;
   if (reason === 'playback_complete' && !state.audioPlayed) {
@@ -99,4 +114,15 @@ export function decideTurnFinalize(
     kind: 'release_now',
     releaseReason: reason === 'interruption' ? 'interruption' : 'turn_end',
   };
+}
+
+/**
+ * Exactly ONE completion frame per turn. A duplicate `backend-synth-complete`
+ * (or several mounted hook instances racing the same signal) must never send
+ * a second frame; the first caller wins and every later call is false.
+ */
+export function decideCompletionSend(state: ResponseTurnState): boolean {
+  if (state.completionSent) return false;
+  state.completionSent = true;
+  return true;
 }
