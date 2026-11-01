@@ -12,6 +12,7 @@ export const VOICE_OUTPUT_ENABLED_KEY = 'voiceOutputEnabled';
 // Default is ON for existing users unless a saved setting says otherwise.
 export function loadVoiceOutputEnabled(): boolean {
   try {
+    if (typeof window === 'undefined') return true;
     const item = window.localStorage.getItem(VOICE_OUTPUT_ENABLED_KEY);
     if (item === null) return true;
     return item !== 'false';
@@ -23,6 +24,7 @@ export function loadVoiceOutputEnabled(): boolean {
 
 export function saveVoiceOutputEnabled(enabled: boolean): void {
   try {
+    if (typeof window === 'undefined') return;
     window.localStorage.setItem(VOICE_OUTPUT_ENABLED_KEY, String(enabled));
   } catch (error) {
     console.error('Error saving voice output enabled:', error);

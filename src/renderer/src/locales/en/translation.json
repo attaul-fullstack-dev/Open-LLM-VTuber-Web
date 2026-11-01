@@ -37,7 +37,7 @@
       "useCameraBackground": "Use Camera Background",
       "showSubtitle": "Show Subtitle",
       "voiceOutput": "Voice Output (TTS)",
-      "voiceOutputHelp": "When OFF, Mili answers as text only and no speech audio is generated. This is different from the quick speaker mute.",
+      "voiceOutputHelp": "When OFF, Mili answers as text only and the backend skips TTS audio generation entirely, saving voice credits. The footer speaker button stays synchronized with this setting.",
       "lifeState": "Mili Life State",
       "lifeStateHelp": "When ON, a small floating panel shows Mili's live simulated-life state (read-only). OFF hides the panel only and never stops the world simulation.",
       "backgroundImage": "Background Image",

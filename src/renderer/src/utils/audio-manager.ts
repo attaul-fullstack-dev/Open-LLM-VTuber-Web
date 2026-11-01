@@ -14,7 +14,9 @@ class AudioManager {
 
   setMuted(muted: boolean) {
     this.muted = muted;
-    window.localStorage.setItem('voiceMuted', String(muted));
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('voiceMuted', String(muted));
+    }
     if (muted) {
       this.stopCurrentAudioAndLipSync();
     }

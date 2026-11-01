@@ -46,6 +46,7 @@ import { parseContinuationEvent } from '@/utils/history-continuation';
 import { subtitlePlaybackCoordinator } from '@/utils/subtitle-playback';
 import { readPlaybackIdentity } from '@/utils/audio-playback-outcome';
 import { loadVoiceOutputEnabled } from '@/utils/voice-output-preference';
+import { voiceOutputStore } from '@/utils/voice-output-store';
 import { useLifeState } from '@/context/life-state-context';
 import { toLifeSnapshot } from '@/utils/life-state-sync';
 import { getUserTimezone } from '@/utils/user-timezone';
@@ -839,6 +840,11 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
           console.warn('Received incomplete tool_call_status message');
         }
         break;
+      case 'voice-output-state': {
+        const enabled = Boolean(message.enabled);
+        voiceOutputStore.onBackendConfirmed(enabled);
+        break;
+      }
       default:
         console.warn('Unknown message type:', message.type);
     }
@@ -854,8 +860,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
   // reconnects always re-derive time_context with the current user timezone.
   useEffect(() => {
     if (wsState !== 'OPEN') return;
-    const enabled = loadVoiceOutputEnabled();
-    wsService.sendMessage({ type: 'voice-output-toggle', enabled });
+    voiceOutputStore.syncToBackend(wsService.sendMessage.bind(wsService));
     if (lifeStateEnabledRef.current) {
       wsService.sendMessage({ type: 'fetch-world-state', timezone: getUserTimezone() });
     }

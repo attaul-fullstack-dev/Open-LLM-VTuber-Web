@@ -121,7 +121,7 @@
       "useCameraBackground": "Gunakan kamera sebagai latar",
       "showSubtitle": "Tampilkan subtitle",
       "voiceOutput": "Keluaran Suara (TTS)",
-      "voiceOutputHelp": "Saat OFF, Mili menjawab hanya berupa teks dan tidak ada audio suara yang dibuat. Ini berbeda dari tombol bisukan speaker cepat.",
+      "voiceOutputHelp": "Saat OFF, Mili menjawab berupa teks saja dan backend tidak memproses audio TTS, menghemat kuota suara. Tombol suara di bilah pesan bawah tersinkronisasi langsung dengan setelan ini.",
       "lifeState": "Status Hidup Mili",
       "lifeStateHelp": "Saat ON, panel kecil melayang menampilkan status simulated-life Mili secara langsung (read-only). OFF hanya menyembunyikan panel dan tidak menghentikan simulasi.",
       "backgroundImage": "Gambar latar",

@@ -13,6 +13,7 @@ import { footerStyles } from './footer-styles';
 import { miliTokens } from '@/theme/design-tokens';
 import { getComposerMode } from '@/utils/composer-visibility';
 import { useFooter } from '@/hooks/footer/use-footer';
+import { useVoiceOutput } from '@/hooks/utils/use-voice-output';
 import { audioManager } from '@/utils/audio-manager';
 import { audioTaskQueue } from '@/utils/task-queue';
 import { useAvatarActivityState } from '@/context/avatar-activity-context';
@@ -278,7 +279,8 @@ const ComposerBar = memo(({
         {inputControl}
         {expanded ? null : <Box {...footerStyles.footer.divider} />}
         <IconButton
-          aria-label={soundOn ? 'Mute avatar voice' : 'Enable avatar voice'}
+          aria-label={soundOn ? 'Turn avatar voice off' : 'Enable avatar voice'}
+          title={soundOn ? 'Turn voice off (text-only, saves voice credits)' : 'Enable avatar voice'}
           variant="ghost"
           {...footerStyles.footer.soundButton(soundOn)}
           gridRow={2}
@@ -325,7 +327,8 @@ ComposerBar.displayName = 'ComposerBar';
 // header (chevron toggle, status text, interrupt button) is intentionally
 // not rendered; all behavior hooks stay wired so no logic is lost.
 function Footer({ isCollapsed = false }: FooterProps): JSX.Element {
-  const [soundOn, setSoundOn] = useState(() => !audioManager.isMuted());
+  const { voiceOutputEnabled, setVoiceOutputEnabled } = useVoiceOutput();
+  const soundOn = voiceOutputEnabled;
   const { endAllSpeaking } = useAvatarActivityState();
   const {
     inputValue,
@@ -344,19 +347,12 @@ function Footer({ isCollapsed = false }: FooterProps): JSX.Element {
   } = useFooter();
 
   const handleSoundToggle = () => {
-    const nextSoundOn = !soundOn;
-    audioManager.setMuted(!nextSoundOn);
+    const nextSoundOn = !voiceOutputEnabled;
+    setVoiceOutputEnabled(nextSoundOn);
     if (!nextSoundOn) {
       endAllSpeaking();
-      // The quick mute stops the current element but, unlike the Voice
-      // Output OFF path, did not clear the pending queue. The queued tasks
-      // stay in `activeTasks`, so their playback promises never settle and
-      // `waitForCompletion()` never resolves -- the turn lifecycle wedges
-      // and no `frontend-playback-complete` is ever emitted. Use the same
-      // primitive the interruption path uses.
       audioTaskQueue.clearQueue();
     }
-    setSoundOn(nextSoundOn);
   };
 
   return (
