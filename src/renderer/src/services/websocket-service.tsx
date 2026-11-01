@@ -40,6 +40,15 @@ export interface AudioPayload {
   audio?: string;
   volumes?: number[];
   slice_length?: number;
+  tts_status?: string;
+  tts_error?: {
+    provider?: string;
+    code?: string;
+    category?: string;
+    message?: string;
+    http_status?: number | null;
+    retryable?: boolean;
+  };
   display_text?: DisplayText;
   actions?: Actions;
 }
@@ -85,6 +94,15 @@ export interface MessageEvent {
   audio?: string;
   volumes?: number[];
   slice_length?: number;
+  tts_status?: string;
+  tts_error?: {
+    provider?: string;
+    code?: string;
+    category?: string;
+    message?: string;
+    http_status?: number | null;
+    retryable?: boolean;
+  };
   files?: BackgroundFile[];
   actions?: Actions;
   text?: string;

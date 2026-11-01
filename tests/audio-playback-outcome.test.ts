@@ -345,3 +345,30 @@ test('source contract: Live2D is isolated and completion is outcome-driven', () 
   assert.match(hook, /type: 'frontend-playback-complete'|buildPlaybackCompletionFrame/, 'completion is not removed');
   assert.match(hook, /finish\('failed'/, 'playback failure has an explicit path');
 });
+
+test('TTS failure (e.g. quota_exceeded) records failed outcome, never text_only or played', () => {
+  const report = createAudioPlaybackReport();
+  recordAudioOutcome(report, 'failed', 'quota_exceeded');
+
+  assert.equal(summarizeAudioPlayback(report), 'failed');
+  const frame = buildPlaybackCompletionFrame(report);
+  assert.equal(frame.type, 'frontend-playback-complete');
+  assert.equal(frame.audio_outcome, 'failed');
+  assert.equal(frame.audio_segments, 1);
+  assert.equal(frame.audio_played_segments, 0);
+  assert.equal(frame.audio_failed_segments, 1);
+  assert.equal(frame.audio_failure_reason, 'quota_exceeded');
+});
+
+test('source contract: hook handles ttsStatus failed and notifies voice unavailable', () => {
+  const hook = readFileSync(
+    new URL('../src/renderer/src/hooks/utils/use-audio-task.ts', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(hook, /ttsStatus === 'failed' \|\| ttsError/);
+  assert.match(hook, /notifyVoiceUnavailable\(ttsError\)/);
+  assert.match(hook, /recordAudioOutcome\(playbackReport, 'failed'/);
+  assert.match(hook, /error\.voiceQuotaExceeded/);
+  assert.match(hook, /error\.voiceUnavailableTitle/);
+});

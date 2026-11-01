@@ -57,6 +57,17 @@ interface AudioTaskOptions {
   msgId?: string | null
   /** Delivery attempt of that logical message (may be absent). */
   attempt?: number | null
+  /** Explicit TTS status ('failed', 'skipped', etc.). */
+  ttsStatus?: string | null
+  /** Structured TTS error payload if voice synthesis failed on backend. */
+  ttsError?: {
+    provider?: string
+    code?: string
+    category?: string
+    message?: string
+    http_status?: number | null
+    retryable?: boolean
+  } | null
 }
 
 // Display texts queued for playback but not yet executed (see
@@ -201,6 +212,7 @@ export const useAudioTask = () => {
 
     const {
       audioBase64, displayText, expressions, emotions, forwarded, requestId, msgId, attempt,
+      ttsStatus, ttsError,
     } = options;
     const face = resolveResponseFaceId({ emotions, expressions });
     const identity = readPlaybackIdentity({
@@ -268,6 +280,44 @@ export const useAudioTask = () => {
         duration: 4000,
       });
     };
+
+    const notifyVoiceUnavailable = (ttsErr?: AudioTaskOptions['ttsError']) => {
+      const firstFailure = playbackReport.failed === 0 && playbackReport.timedOut === 0;
+      if (!firstFailure) return;
+
+      const code = ttsErr?.code;
+      const category = ttsErr?.category;
+      let title = t('error.voiceUnavailableTitle');
+      if (!title || title === 'error.voiceUnavailableTitle') {
+        title = 'Voice Unavailable';
+      }
+      let description: string;
+
+      if (code === 'quota_exceeded' || category === 'quota_exceeded') {
+        description = t('error.voiceQuotaExceeded');
+        if (!description || description === 'error.voiceQuotaExceeded') {
+          description = 'ElevenLabs character quota exceeded. Response delivered as text.';
+        }
+      } else if (category === 'authentication') {
+        description = t('error.voiceAuthFailed');
+        if (!description || description === 'error.voiceAuthFailed') {
+          description = 'ElevenLabs voice authentication failed. Please check your API key.';
+        }
+      } else {
+        description = ttsErr?.message || t('error.voiceUnavailable');
+        if (!description || description === 'error.voiceUnavailable') {
+          description = 'Voice synthesis failed. Response delivered as text.';
+        }
+      }
+
+      toaster.create({
+        title,
+        description,
+        type: 'warning',
+        duration: 5000,
+      });
+    };
+
     const reportFailure = (reason: string) => {
       notifyAudioFailure(reason);
       recordAudioOutcome(playbackReport, 'failed', reason);
@@ -275,14 +325,21 @@ export const useAudioTask = () => {
     };
 
     if (!audioBase64) {
-      // Text-only segment: no audio element exists, so the turn must never be
+      // Text-only or failed TTS segment: no audio element exists, so the turn must never be
       // reported as played. The text itself was already appended above.
       responseFaceBus.publish({ faceId: face, activity: 'text' });
       if (subtitleTicket && !isSubtitleDismissed) {
         const subtitle = subtitlePlaybackCoordinator.activateWithoutPlayback(subtitleTicket);
         if (subtitle !== null) updateSubtitle(subtitle);
       }
-      recordAudioOutcome(playbackReport, 'text_only');
+      if (ttsStatus === 'failed' || ttsError) {
+        const reason = ttsError?.code || 'tts_failed';
+        notifyVoiceUnavailable(ttsError);
+        recordAudioOutcome(playbackReport, 'failed', reason);
+        console.warn('TTS voice generation failed on backend:', reason, ttsError);
+      } else {
+        recordAudioOutcome(playbackReport, 'text_only');
+      }
       resolve();
       return;
     }

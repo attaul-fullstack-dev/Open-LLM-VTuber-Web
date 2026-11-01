@@ -445,6 +445,8 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
             requestId: message.request_id ?? null,
             msgId: message.msg_id ?? null,
             attempt: message.attempt ?? null,
+            ttsStatus: message.tts_status ?? null,
+            ttsError: message.tts_error ?? null,
           });
           if (!buffered) {
             discardReason = 'interrupted';
