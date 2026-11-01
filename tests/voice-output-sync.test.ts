@@ -134,3 +134,26 @@ test('7. Rapid toggle sequence OFF -> ON -> OFF settles cleanly', () => {
   assert.equal(sent.length, 3);
   assert.equal(sent[sent.length - 1].enabled, false);
 });
+
+test('8. Stale handshake protection: unprompted initial handshake enabled=true does not overwrite persisted OFF', () => {
+  storage.clear();
+  storage.set(VOICE_OUTPUT_ENABLED_KEY, 'false');
+  const store = new VoiceOutputStore();
+  const sent: any[] = [];
+  const sender: SendMessageFn = (msg) => sent.push(msg);
+
+  // Initial un-synced backend sends stale enabled=true
+  store.onBackendConfirmed(true, sender);
+
+  // Must reject stale handshake: store remains false, localStorage remains false, and toggle(false) re-asserted
+  assert.equal(store.getSnapshot(), false);
+  assert.equal(storage.get(VOICE_OUTPUT_ENABLED_KEY), 'false');
+  assert.equal(audioManager.isVoiceOutputEnabled(), false);
+  assert.equal(audioManager.isMuted(), true);
+  assert.deepEqual(sent, [{ type: 'voice-output-toggle', enabled: false }]);
+
+  // Now backend acknowledges and sends enabled=false
+  store.onBackendConfirmed(false, sender);
+  assert.equal(store.getSnapshot(), false);
+  assert.equal(store.getBackendConfirmedSnapshot(), false);
+});

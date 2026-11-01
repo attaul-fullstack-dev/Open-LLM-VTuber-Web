@@ -20,6 +20,8 @@ export class VoiceOutputStore {
   private enabled: boolean;
   private backendConfirmed: boolean | null = null;
   private listeners: Set<() => void> = new Set();
+  private hasSyncedWithBackend: boolean = false;
+  private lastSendMessageFn: SendMessageFn | null = null;
 
   constructor() {
     this.enabled = loadVoiceOutputEnabled();
@@ -58,6 +60,9 @@ export class VoiceOutputStore {
    * Dispatches change to persistence, audioManager, audioTaskQueue, and WebSocket.
    */
   setVoiceOutputEnabled(enabled: boolean, sendMessage?: SendMessageFn): void {
+    if (sendMessage) {
+      this.lastSendMessageFn = sendMessage;
+    }
     if (this.enabled === enabled && this.backendConfirmed === enabled) {
       return;
     }
@@ -93,7 +98,28 @@ export class VoiceOutputStore {
   /**
    * Handle backend confirmation message {"type": "voice-output-state", "enabled": boolean}
    */
-  onBackendConfirmed(confirmedEnabled: boolean): void {
+  onBackendConfirmed(confirmedEnabled: boolean, sendMessage?: SendMessageFn): void {
+    const sender = sendMessage || this.lastSendMessageFn;
+
+    // Stale Handshake Safeguard:
+    // If the local preference is OFF (!this.enabled) and we have not yet established
+    // a synchronized session on this socket, do NOT allow an unprompted "enabled: true"
+    // from a stale/uninitialized handshake to overwrite the user's OFF preference.
+    if (!this.hasSyncedWithBackend && !this.enabled && confirmedEnabled) {
+      console.warn(
+        '[VoiceOutputStore] Rejecting stale initial backend handshake (enabled=true) while persisted preference is OFF; re-asserting OFF to backend'
+      );
+      if (sender) {
+        try {
+          sender({ type: 'voice-output-toggle', enabled: false });
+        } catch (err) {
+          console.error('[VoiceOutputStore] Failed to re-assert voice-output-toggle:', err);
+        }
+      }
+      return;
+    }
+
+    this.hasSyncedWithBackend = true;
     this.backendConfirmed = confirmedEnabled;
 
     // If backend state contradicts optimistic local state, reconcile
@@ -115,11 +141,17 @@ export class VoiceOutputStore {
    * Re-send current persisted state to backend on WebSocket connect / reconnect.
    */
   syncToBackend(sendMessage: SendMessageFn): void {
+    this.lastSendMessageFn = sendMessage;
+    this.hasSyncedWithBackend = false;
     try {
       sendMessage({ type: 'voice-output-toggle', enabled: this.enabled });
     } catch (err) {
       console.error('[VoiceOutputStore] Failed to sync to backend:', err);
     }
+  }
+
+  resetSyncStatus(): void {
+    this.hasSyncedWithBackend = false;
   }
 }
 

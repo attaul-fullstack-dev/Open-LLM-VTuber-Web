@@ -14,7 +14,6 @@ import { miliTokens } from '@/theme/design-tokens';
 import { getComposerMode } from '@/utils/composer-visibility';
 import { useFooter } from '@/hooks/footer/use-footer';
 import { useVoiceOutput } from '@/hooks/utils/use-voice-output';
-import { audioManager } from '@/utils/audio-manager';
 import { audioTaskQueue } from '@/utils/task-queue';
 import { useAvatarActivityState } from '@/context/avatar-activity-context';
 import { AttachmentEntry } from '@/utils/attachments';

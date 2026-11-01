@@ -45,7 +45,6 @@ import {
 import { parseContinuationEvent } from '@/utils/history-continuation';
 import { subtitlePlaybackCoordinator } from '@/utils/subtitle-playback';
 import { readPlaybackIdentity } from '@/utils/audio-playback-outcome';
-import { loadVoiceOutputEnabled } from '@/utils/voice-output-preference';
 import { voiceOutputStore } from '@/utils/voice-output-store';
 import { useLifeState } from '@/context/life-state-context';
 import { toLifeSnapshot } from '@/utils/life-state-sync';
@@ -841,8 +840,8 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
         }
         break;
       case 'voice-output-state': {
-        const enabled = Boolean(message.enabled);
-        voiceOutputStore.onBackendConfirmed(enabled);
+        const enabled = Boolean((message as any).enabled);
+        voiceOutputStore.onBackendConfirmed(enabled, wsService.sendMessage.bind(wsService));
         break;
       }
       default:
